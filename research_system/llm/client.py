@@ -353,9 +353,14 @@ class LLMClient:
         """
         text = response.content
 
+        def parse_and_validate(json_str: str) -> Optional[Dict[str, Any]]:
+            """Parse JSON and return only if it's a dict."""
+            result = json.loads(json_str)
+            return result if isinstance(result, dict) else None
+
         try:
             # Try direct parse first
-            return json.loads(text)
+            return parse_and_validate(text)
         except json.JSONDecodeError:
             pass
 
@@ -364,7 +369,7 @@ class LLMClient:
             if "```json" in text:
                 start = text.index("```json") + 7
                 end = text.index("```", start)
-                return json.loads(text[start:end].strip())
+                return parse_and_validate(text[start:end].strip())
         except (ValueError, json.JSONDecodeError):
             pass
 
@@ -373,7 +378,7 @@ class LLMClient:
             if "{" in text and "}" in text:
                 start = text.index("{")
                 end = text.rindex("}") + 1
-                return json.loads(text[start:end])
+                return parse_and_validate(text[start:end])
         except (ValueError, json.JSONDecodeError):
             pass
 

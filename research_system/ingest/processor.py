@@ -334,7 +334,7 @@ class IngestProcessor:
                 source_files=[f"text:{source_name}"],
                 summary=metadata.get("summary"),
                 hypothesis=metadata.get("hypothesis"),
-                tags=metadata.get("tags", [])
+                tags=metadata.get("tags") or []
             )
 
             result.entry_id = entry.id
