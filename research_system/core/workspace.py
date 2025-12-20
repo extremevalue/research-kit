@@ -292,8 +292,8 @@ class Workspace:
             if d.is_dir()
         ]) if self.validations_path.exists() else 0
 
-        # Count inbox files
-        inbox_count = len(list(self.inbox_path.glob("*"))) if self.inbox_path.exists() else 0
+        # Count inbox files (recursive)
+        inbox_count = len([f for f in self.inbox_path.rglob("*") if f.is_file()]) if self.inbox_path.exists() else 0
 
         return {
             "path": str(self.path),

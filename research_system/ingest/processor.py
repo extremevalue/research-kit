@@ -116,9 +116,9 @@ class IngestProcessor:
         """
         summary = IngestSummary()
 
-        # Get all files in inbox
+        # Get all files in inbox (recursive)
         inbox_files = [
-            f for f in self.workspace.inbox_path.iterdir()
+            f for f in self.workspace.inbox_path.rglob("*")
             if f.is_file() and not self._should_ignore(f)
         ]
 

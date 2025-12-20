@@ -449,16 +449,16 @@ def cmd_ingest_list(args):
     ws = require_workspace(args.workspace)
     inbox = ws.inbox_path
 
-    files = list(inbox.glob("*"))
+    files = [f for f in inbox.rglob("*") if f.is_file()]
     if not files:
         print("Inbox is empty")
         return 0
 
     print(f"Files in inbox ({len(files)}):")
     for f in sorted(files):
-        if f.is_file():
-            size = f.stat().st_size
-            print(f"  {f.name:<40} {size:>10,} bytes")
+        rel_path = f.relative_to(inbox)
+        size = f.stat().st_size
+        print(f"  {str(rel_path):<40} {size:>10,} bytes")
     return 0
 
 
@@ -522,8 +522,8 @@ def cmd_ingest_process(args):
         return 0 if result.success else 1
 
     else:
-        # Process all files
-        inbox_files = list(ws.inbox_path.glob("*"))
+        # Process all files (recursive)
+        inbox_files = list(ws.inbox_path.rglob("*"))
         inbox_files = [f for f in inbox_files if f.is_file() and not f.name.startswith(".")]
 
         if not inbox_files:
