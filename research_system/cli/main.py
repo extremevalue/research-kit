@@ -485,10 +485,14 @@ def cmd_ingest_process(args):
     # Initialize LLM client
     llm_client = None
     try:
-        from research_system.llm.client import LLMClient
+        from research_system.llm.client import LLMClient, Backend
         llm_client = LLMClient()
         if llm_client.is_offline:
-            print("Note: Running in offline mode (no ANTHROPIC_API_KEY). Extraction will be limited.")
+            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI). Extraction will be limited.")
+        elif llm_client.backend == Backend.CLI:
+            print("Using Claude CLI backend.")
+        elif llm_client.backend == Backend.API:
+            print("Using Anthropic API backend.")
     except Exception as e:
         print(f"Warning: Could not initialize LLM client: {e}")
         print("Running in offline mode.")
@@ -1259,12 +1263,16 @@ def cmd_analyze_run(args):
     # Initialize LLM client
     llm_client = None
     try:
-        from research_system.llm.client import LLMClient
+        from research_system.llm.client import LLMClient, Backend
         llm_client = LLMClient()
         if llm_client.is_offline:
-            print("Note: Running in offline mode (no ANTHROPIC_API_KEY)")
+            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI)")
             print("Persona analysis will return prompts only.")
             print()
+        elif llm_client.backend == Backend.CLI:
+            print("Using Claude CLI backend.")
+        elif llm_client.backend == Backend.API:
+            print("Using Anthropic API backend.")
     except Exception as e:
         print(f"Warning: Could not initialize LLM client: {e}")
         print("Running in offline mode.")

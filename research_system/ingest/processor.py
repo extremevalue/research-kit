@@ -30,7 +30,7 @@ from research_system.llm.client import LLMClient
 class IngestResult:
     """Result of ingesting a single file."""
     filename: str
-    success: bool
+    success: bool = False
     entry_id: Optional[str] = None
     entry_type: Optional[str] = None
     status: Optional[str] = None
