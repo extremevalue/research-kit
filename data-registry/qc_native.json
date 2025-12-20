@@ -1,0 +1,95 @@
+{
+  "description": "Reference list of data available natively in QuantConnect",
+  "last_verified": "2025-12-18",
+  "note": "This is a reference document. Check QC documentation for latest capabilities.",
+
+  "asset_classes": {
+    "us_equities": {
+      "available": true,
+      "coverage": "1998-present",
+      "resolution": ["tick", "second", "minute", "hour", "daily"],
+      "includes": ["price", "volume", "splits", "dividends"],
+      "universe": "Full US exchanges (NYSE, NASDAQ, AMEX)",
+      "data_source": "QuantConnect"
+    },
+    "etfs": {
+      "available": true,
+      "coverage": "Inception to present",
+      "examples": [
+        "SPY", "QQQ", "IWM", "DIA",
+        "XLK", "XLF", "XLV", "XLE", "XLY", "XLI", "XLB", "XLU", "XLP", "XLRE", "XLC",
+        "GLD", "SLV", "TLT", "IEF", "LQD", "HYG",
+        "VTI", "VEA", "VWO", "BND",
+        "TQQQ", "SQQQ", "UPRO", "SPXU"
+      ],
+      "notes": "Most major ETFs available with full history"
+    },
+    "options": {
+      "available": true,
+      "coverage": "2012-present for liquid names",
+      "resolution": ["minute"],
+      "includes": ["price", "greeks", "open_interest", "volume"],
+      "chains": "Full option chains for major ETFs and stocks",
+      "notes": "Greeks calculated using Black-Scholes. Historical options data requires subscription tier."
+    },
+    "futures": {
+      "available": true,
+      "contracts": ["ES", "NQ", "YM", "RTY", "CL", "GC", "SI", "HG", "ZB", "ZN", "ZF", "ZT", "ZC", "ZS", "ZW", "NG"],
+      "coverage": "Varies by contract, generally 2000s+",
+      "resolution": ["tick", "second", "minute", "hour", "daily"],
+      "continuous": true,
+      "notes": "Continuous contracts available with configurable roll rules"
+    },
+    "forex": {
+      "available": true,
+      "pairs": [
+        "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+        "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD"
+      ],
+      "coverage": "2004-present",
+      "resolution": ["tick", "second", "minute", "hour", "daily"],
+      "data_source": "OANDA, FXCM"
+    },
+    "crypto": {
+      "available": true,
+      "exchanges": ["GDAX", "Bitfinex", "Binance", "Kraken"],
+      "pairs": ["BTCUSD", "ETHUSD", "LTCUSD", "XRPUSD"],
+      "coverage": "2015-present (varies by exchange)",
+      "resolution": ["tick", "second", "minute", "hour", "daily"]
+    },
+    "indices": {
+      "available": true,
+      "symbols": ["SPX", "NDX", "VIX", "RUT"],
+      "coverage": "1990s-present",
+      "resolution": ["daily"],
+      "notes": "Index values only, not tradeable directly"
+    }
+  },
+
+  "data_not_available": {
+    "market_breadth": {
+      "description": "NYSE/NASDAQ advance-decline, new highs/lows, A/D ratio",
+      "workaround": "Upload to Object Store from McClellan Financial or other sources"
+    },
+    "order_flow": {
+      "description": "Tick-level order book, footprint, tape data",
+      "workaround": "None - requires specialized data vendor"
+    },
+    "alternative_data": {
+      "description": "Sentiment, satellite, web traffic, etc.",
+      "workaround": "Upload to Object Store if purchased"
+    },
+    "fundamental_data": {
+      "description": "Detailed financials, earnings estimates",
+      "available": "Limited - basic data through MorningStar integration",
+      "notes": "Check QC docs for current Morningstar availability"
+    }
+  },
+
+  "object_store": {
+    "description": "Custom data can be uploaded to QC Object Store for cloud backtesting",
+    "format": "CSV with date column",
+    "max_size": "Depends on subscription tier",
+    "access": "self.ObjectStore in algorithm"
+  }
+}

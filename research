@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""
+Research Validation System CLI
+
+Usage: research [--workspace PATH] <command> [args]
+
+Run 'research --help' for more information.
+"""
+
+import sys
+from pathlib import Path
+
+# Add package to path if running directly
+pkg_dir = Path(__file__).parent / "research_system"
+if pkg_dir.exists():
+    sys.path.insert(0, str(Path(__file__).parent))
+
+from research_system.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())

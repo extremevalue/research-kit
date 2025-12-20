@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://research-system/schemas/backtest-result.schema.json",
+  "title": "Backtest Result",
+  "description": "Schema for QuantConnect backtest results",
+  "type": "object",
+  "required": ["backtest_id", "component_id", "test_type", "period", "metrics", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "backtest_id": {
+      "type": "string",
+      "description": "QuantConnect backtest ID"
+    },
+    "component_id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]{3}$"
+    },
+    "test_type": {
+      "type": "string",
+      "enum": ["in_sample", "out_of_sample", "robustness"],
+      "description": "Type of test"
+    },
+    "test_variant": {
+      "type": "string",
+      "description": "Variant name (e.g., 'baseline', 'entry_filter', 'both')"
+    },
+    "period": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date" },
+        "end": { "type": "string", "format": "date" }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Parameters used in this backtest"
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["cagr", "sharpe", "max_drawdown"],
+      "properties": {
+        "cagr": {
+          "type": "number",
+          "description": "Compound Annual Growth Rate (%)"
+        },
+        "sharpe": {
+          "type": "number",
+          "description": "Sharpe Ratio"
+        },
+        "sortino": {
+          "type": "number",
+          "description": "Sortino Ratio"
+        },
+        "alpha": {
+          "type": "number",
+          "description": "Alpha vs benchmark (%)"
+        },
+        "beta": {
+          "type": "number",
+          "description": "Beta vs benchmark"
+        },
+        "max_drawdown": {
+          "type": "number",
+          "description": "Maximum Drawdown (%)"
+        },
+        "total_trades": {
+          "type": "integer",
+          "description": "Total number of trades"
+        },
+        "win_rate": {
+          "type": "number",
+          "description": "Win rate (0-1)"
+        },
+        "profit_loss_ratio": {
+          "type": "number",
+          "description": "Average win / average loss"
+        },
+        "avg_trade_duration": {
+          "type": "string",
+          "description": "Average holding period"
+        },
+        "exposure": {
+          "type": "number",
+          "description": "Average market exposure (0-1)"
+        }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "properties": {
+        "symbol": { "type": "string" },
+        "cagr": { "type": "number" },
+        "sharpe": { "type": "number" },
+        "max_drawdown": { "type": "number" }
+      }
+    },
+    "improvement": {
+      "type": "object",
+      "properties": {
+        "alpha_delta": { "type": "number" },
+        "sharpe_delta": { "type": "number" },
+        "drawdown_delta": { "type": "number" }
+      },
+      "description": "Improvement over baseline"
+    },
+    "sanity_flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "flag": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "qc_project_id": {
+      "type": "string",
+      "description": "QuantConnect project ID"
+    },
+    "algorithm_file": {
+      "type": "string",
+      "description": "Path to algorithm file"
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://research-system/schemas/persona-output.schema.json",
+  "title": "Persona Output",
+  "description": "Schema for structured output from persona agents",
+  "type": "object",
+  "required": ["persona", "component_id", "timestamp", "analysis"],
+  "additionalProperties": false,
+  "properties": {
+    "persona": {
+      "type": "string",
+      "enum": ["momentum-trader", "risk-manager", "quant-researcher", "contrarian", "report-synthesizer"],
+      "description": "Which persona generated this output"
+    },
+    "component_id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]{3}$",
+      "description": "ID of the component being analyzed"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "analysis": {
+      "type": "object",
+      "required": ["summary", "key_observations"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "One-paragraph summary from this perspective"
+        },
+        "key_observations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Main observations from this perspective"
+        },
+        "strengths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What looks good from this perspective"
+        },
+        "concerns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What raises flags from this perspective"
+        },
+        "suggested_combinations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "with_component": { "type": "string" },
+              "rationale": { "type": "string" },
+              "expected_benefit": { "type": "string" }
+            }
+          },
+          "description": "Suggested combinations with other components"
+        },
+        "regime_notes": {
+          "type": "string",
+          "description": "When/where this might work best"
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["STRONG_YES", "LEAN_YES", "NEUTRAL", "LEAN_NO", "STRONG_NO"],
+      "description": "Overall assessment from this perspective"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence in this assessment (0-1)"
+    }
+  }
+}

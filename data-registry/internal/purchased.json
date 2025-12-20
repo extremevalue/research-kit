@@ -1,0 +1,34 @@
+{
+  "description": "Paid data sources - NEVER DELETE",
+  "last_updated": "2025-12-18",
+  "note": "This data was purchased. Preserve all files.",
+
+  "datasets": [
+    {
+      "id": "mcclellan_breadth",
+      "name": "McClellan Financial Publications Breadth Data",
+      "vendor": "McClellan Financial Publications",
+      "purchase_date": "2025-12-15",
+      "cost": "Subscription",
+      "local_path": "_support/data/purchased/mcclellan/",
+      "files": [
+        {
+          "name": "mcclellan_osc.csv",
+          "description": "McClellan Oscillator and Summation Index",
+          "columns": ["date", "nyse_adv", "nyse_dec", "mcclellan_osc", "mcclellan_sum"],
+          "coverage": "1960-01-04 to 2024-12-31"
+        },
+        {
+          "name": "new_high_low.csv",
+          "description": "NYSE and NASDAQ New Highs and Lows",
+          "columns": ["date", "nyse_new_highs", "nyse_new_lows", "nasdaq_new_highs", "nasdaq_new_lows"],
+          "coverage": "1980-01-02 to 2024-12-31"
+        }
+      ],
+      "qc_uploaded": true,
+      "qc_keys": ["mcclellan/mcclellan_osc.csv", "breadth/new_high_low.csv"],
+      "usage_notes": "Official NYSE breadth data. More accurate than proxy calculations.",
+      "enables_components": ["IND-002", "IND-005", "IND-007", "IND-008", "IND-016", "IND-018"]
+    }
+  ]
+}

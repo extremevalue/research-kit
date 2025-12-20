@@ -1,0 +1,64 @@
+{
+  "description": "Free data that has been validated for quality",
+  "last_updated": "2025-12-18",
+  "note": "Data from free sources that we've verified and cleaned.",
+
+  "datasets": [
+    {
+      "id": "central_bank_rates",
+      "name": "Central Bank Rate Decisions (Comprehensive)",
+      "local_path": "_support/data/curated/central-bank-rates/central_bank_rates_comprehensive_20250813.csv",
+      "source": "Kaggle",
+      "source_url": "https://www.kaggle.com/datasets/...",
+      "download_date": "2025-08-13",
+      "coverage": {
+        "start_date": "1954-08-01",
+        "end_date": "2025-08-13",
+        "events": 2730
+      },
+      "columns": ["Date", "Rate", "Previous_Rate", "Change_Amount", "Direction", "Central_Bank", "Country"],
+      "central_banks": [
+        "Federal Reserve (803 events)",
+        "Bank of Mexico (461)",
+        "Central Bank of Brazil (276)",
+        "Bank of England (257)",
+        "Bank of Korea (250)",
+        "Norges Bank (217)",
+        "Bank of Canada (161)",
+        "Reserve Bank of Australia (115)",
+        "Reserve Bank of India (73)",
+        "European Central Bank (65)",
+        "Swiss National Bank (21)",
+        "People's Bank of China (19)",
+        "Reserve Bank of New Zealand (9)",
+        "Bank of Japan (3)"
+      ],
+      "validation_status": "Used in STRAT-104 (FALSIFIED)",
+      "qc_uploaded": true,
+      "qc_key": "central_bank_rates.csv",
+      "usage_notes": "Event data. Filter by Central_Bank column for specific country analysis."
+    },
+    {
+      "id": "sp500_constituents",
+      "name": "S&P 500 Historical Constituents",
+      "local_path": "_support/data/curated/sp500-constituents/",
+      "source": "Various (compiled)",
+      "coverage": "Historical constituent lists for survivorship-bias-free testing",
+      "qc_uploaded": false,
+      "usage_notes": "Use to avoid survivorship bias when testing on S&P 500 universe."
+    },
+    {
+      "id": "vix_history",
+      "name": "VIX Historical Data",
+      "local_path": "_support/data/pricing/kaggle-datasets/VIX_History.csv",
+      "source": "CBOE via Kaggle",
+      "coverage": {
+        "start_date": "1990-01-02",
+        "end_date": "present"
+      },
+      "columns": ["DATE", "OPEN", "HIGH", "LOW", "CLOSE"],
+      "qc_uploaded": false,
+      "notes": "VIX available natively in QC as index. This is backup/local reference."
+    }
+  ]
+}

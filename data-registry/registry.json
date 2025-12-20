@@ -1,0 +1,220 @@
+{
+  "description": "Master registry of all data sources with availability hierarchy",
+  "last_updated": "2025-12-18",
+  "version": "1.0.0",
+
+  "hierarchy_order": [
+    "qc_native",
+    "qc_object_store",
+    "internal_purchased",
+    "internal_curated",
+    "internal_experimental"
+  ],
+
+  "data_sources": [
+    {
+      "id": "spy_prices",
+      "name": "SPY ETF Price Data",
+      "type": "price_data",
+      "availability": {
+        "qc_native": {
+          "available": true,
+          "symbol": "SPY",
+          "resolution": ["tick", "second", "minute", "hour", "daily"],
+          "coverage": "1993-01-29 to present"
+        },
+        "qc_object_store": {"available": false},
+        "internal": {"available": false}
+      },
+      "usage_notes": "Primary benchmark. Use QC native data."
+    },
+    {
+      "id": "qqq_prices",
+      "name": "QQQ ETF Price Data",
+      "type": "price_data",
+      "availability": {
+        "qc_native": {
+          "available": true,
+          "symbol": "QQQ",
+          "resolution": ["tick", "second", "minute", "hour", "daily"],
+          "coverage": "1999-03-10 to present"
+        },
+        "qc_object_store": {"available": false},
+        "internal": {"available": false}
+      },
+      "usage_notes": "NASDAQ-100 benchmark. Use QC native data."
+    },
+    {
+      "id": "sector_etfs",
+      "name": "Sector ETF Price Data",
+      "type": "price_data",
+      "availability": {
+        "qc_native": {
+          "available": true,
+          "symbols": ["XLK", "XLF", "XLV", "XLE", "XLY", "XLI", "XLB", "XLU", "XLP", "XLRE", "XLC"],
+          "resolution": ["tick", "second", "minute", "hour", "daily"],
+          "coverage": "1998-12-22 to present (varies by sector)"
+        },
+        "qc_object_store": {"available": false},
+        "internal": {"available": false}
+      },
+      "usage_notes": "For sector rotation strategies. Use QC native data."
+    },
+    {
+      "id": "vix_index",
+      "name": "VIX Volatility Index",
+      "type": "price_data",
+      "availability": {
+        "qc_native": {
+          "available": true,
+          "symbol": "VIX",
+          "resolution": ["daily"],
+          "coverage": "1990-01-02 to present"
+        },
+        "qc_object_store": {"available": false},
+        "internal": {
+          "available": true,
+          "path": "_support/data/pricing/kaggle-datasets/VIX_History.csv",
+          "tier": "curated"
+        }
+      },
+      "usage_notes": "Use QC native for backtests. Internal file is backup."
+    },
+    {
+      "id": "mcclellan_oscillator",
+      "name": "McClellan Oscillator (Official NYSE)",
+      "type": "breadth_indicator",
+      "availability": {
+        "qc_native": false,
+        "qc_object_store": {
+          "available": true,
+          "key": "mcclellan/mcclellan_osc.csv",
+          "uploaded_at": "2025-12-15"
+        },
+        "internal": {
+          "available": true,
+          "path": "_support/data/purchased/mcclellan/mcclellan_osc.csv",
+          "tier": "purchased"
+        }
+      },
+      "coverage": {
+        "start_date": "1960-01-04",
+        "end_date": "2024-12-31",
+        "frequency": "daily"
+      },
+      "columns": ["date", "nyse_adv", "nyse_dec", "mcclellan_osc", "mcclellan_sum"],
+      "column_indices": {
+        "date": 0,
+        "mcclellan_osc": 3,
+        "mcclellan_sum": 4
+      },
+      "usage_notes": "CRITICAL: Use T-1 data (days_back=1) to avoid lookahead bias. Values range -200 to +200.",
+      "validation_rules": {
+        "expected_range": [-200, 200],
+        "typical_values": "oscillates around 0"
+      },
+      "enables_components": ["IND-005", "IND-018"]
+    },
+    {
+      "id": "nyse_nasdaq_breadth",
+      "name": "NYSE/NASDAQ New Highs and Lows",
+      "type": "breadth_indicator",
+      "availability": {
+        "qc_native": false,
+        "qc_object_store": {
+          "available": true,
+          "key": "breadth/new_high_low.csv",
+          "uploaded_at": "2025-12-15"
+        },
+        "internal": {
+          "available": true,
+          "path": "_support/data/purchased/mcclellan/new_high_low.csv",
+          "tier": "purchased"
+        }
+      },
+      "coverage": {
+        "start_date": "1980-01-02",
+        "end_date": "2024-12-31",
+        "frequency": "daily"
+      },
+      "columns": ["date", "nyse_new_highs", "nyse_new_lows", "nasdaq_new_highs", "nasdaq_new_lows"],
+      "column_indices": {
+        "date": 0,
+        "nasdaq_new_highs": 3,
+        "nasdaq_new_lows": 4
+      },
+      "usage_notes": "Use for BC2 indicator (9-day WMA of NASDAQ NH-NL). Use T-1 data.",
+      "enables_components": ["IND-002", "IND-012"]
+    },
+    {
+      "id": "central_bank_rates",
+      "name": "Central Bank Rate Decisions",
+      "type": "event_data",
+      "availability": {
+        "qc_native": false,
+        "qc_object_store": {
+          "available": true,
+          "key": "central_bank_rates.csv",
+          "uploaded_at": "2025-12-16"
+        },
+        "internal": {
+          "available": true,
+          "path": "_support/data/curated/central-bank-rates/central_bank_rates_comprehensive_20250813.csv",
+          "tier": "curated"
+        }
+      },
+      "coverage": {
+        "start_date": "1954-08-01",
+        "end_date": "2025-08-13",
+        "events": 2730
+      },
+      "columns": ["Date", "Rate", "Previous_Rate", "Change_Amount", "Direction", "Central_Bank", "Country"],
+      "usage_notes": "Event data. Filter by Central_Bank column for specific country.",
+      "enables_components": ["STRAT-105"]
+    },
+    {
+      "id": "options_data",
+      "name": "Options Chains",
+      "type": "price_data",
+      "availability": {
+        "qc_native": {
+          "available": true,
+          "coverage": "2012-present for liquid names",
+          "resolution": ["minute"],
+          "includes": ["price", "greeks", "open_interest", "volume"],
+          "notes": "Available for major ETFs (SPY, QQQ, IWM) and liquid stocks"
+        },
+        "qc_object_store": {"available": false},
+        "internal": {"available": false}
+      },
+      "usage_notes": "Options data IS available in QC. Check QC docs for specific symbol coverage."
+    },
+    {
+      "id": "futures_data",
+      "name": "Futures Contracts",
+      "type": "price_data",
+      "availability": {
+        "qc_native": {
+          "available": true,
+          "contracts": ["ES", "NQ", "CL", "GC", "ZB", "ZN"],
+          "resolution": ["tick", "minute", "hour", "daily"],
+          "coverage": "Varies, generally 2000s+"
+        },
+        "qc_object_store": {"available": false},
+        "internal": {"available": false}
+      },
+      "usage_notes": "Continuous contracts available with configurable roll rules."
+    },
+    {
+      "id": "tick_order_flow",
+      "name": "Tick-Level Order Flow Data",
+      "type": "order_flow",
+      "availability": {
+        "qc_native": false,
+        "qc_object_store": {"available": false},
+        "internal": {"available": false}
+      },
+      "usage_notes": "NOT AVAILABLE. Required for IND-021 (Volume Absorption). No workaround currently."
+    }
+  ]
+}

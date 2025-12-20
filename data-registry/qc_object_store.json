@@ -1,0 +1,78 @@
+{
+  "description": "Data uploaded to QuantConnect Object Store for cloud backtesting",
+  "last_updated": "2025-12-18",
+
+  "uploads": [
+    {
+      "key": "mcclellan/mcclellan_osc.csv",
+      "name": "McClellan Oscillator (Official)",
+      "local_source": "_support/data/purchased/mcclellan/mcclellan_osc.csv",
+      "uploaded_at": "2025-12-15",
+      "coverage": {
+        "start_date": "1960-01-04",
+        "end_date": "2024-12-31",
+        "frequency": "daily"
+      },
+      "columns": ["date", "nyse_adv", "nyse_dec", "mcclellan_osc", "mcclellan_sum"],
+      "column_indices": {
+        "date": 0,
+        "nyse_adv": 1,
+        "nyse_dec": 2,
+        "mcclellan_osc": 3,
+        "mcclellan_sum": 4
+      },
+      "usage_notes": "Use T-1 data (days_back=1) to avoid lookahead bias. Values range -200 to +200.",
+      "source": "McClellan Financial Publications (purchased)"
+    },
+    {
+      "key": "breadth/new_high_low.csv",
+      "name": "NYSE/NASDAQ New Highs and Lows",
+      "local_source": "_support/data/purchased/mcclellan/new_high_low.csv",
+      "uploaded_at": "2025-12-15",
+      "coverage": {
+        "start_date": "1980-01-02",
+        "end_date": "2024-12-31",
+        "frequency": "daily"
+      },
+      "columns": ["date", "nyse_new_highs", "nyse_new_lows", "nasdaq_new_highs", "nasdaq_new_lows"],
+      "column_indices": {
+        "date": 0,
+        "nyse_new_highs": 1,
+        "nyse_new_lows": 2,
+        "nasdaq_new_highs": 3,
+        "nasdaq_new_lows": 4
+      },
+      "usage_notes": "Used for BC2 indicator (9-day WMA of NASDAQ NH-NL). Use T-1 data.",
+      "source": "McClellan Financial Publications (purchased)"
+    },
+    {
+      "key": "central_bank_rates.csv",
+      "name": "Central Bank Rate Decisions",
+      "local_source": "_support/data/curated/central-bank-rates/central_bank_rates_comprehensive_20250813.csv",
+      "uploaded_at": "2025-12-16",
+      "coverage": {
+        "start_date": "1954-08-01",
+        "end_date": "2025-08-13",
+        "frequency": "event"
+      },
+      "columns": ["Date", "Rate", "Previous_Rate", "Change_Amount", "Direction", "Central_Bank", "Country"],
+      "column_indices": {
+        "date": 0,
+        "rate": 1,
+        "previous_rate": 2,
+        "change_amount": 3,
+        "direction": 4,
+        "central_bank": 5,
+        "country": 6
+      },
+      "usage_notes": "Event data - filter by Central_Bank for specific country. 2,730 total events.",
+      "source": "Kaggle (curated)"
+    }
+  ],
+
+  "upload_instructions": {
+    "cli_command": "lean cloud object-store set <key> <local_path>",
+    "algorithm_access": "self.ObjectStore.Read('<key>')",
+    "notes": "Files persist across backtests. Update this registry when uploading new data."
+  }
+}

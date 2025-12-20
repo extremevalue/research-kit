@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "name": "Research Validation System",
+  "description": "Deterministic, reproducible research validation for trading strategies and indicators",
+
+  "paths": {
+    "catalog": "./catalog",
+    "validations": "./validations",
+    "data_registry": "./data-registry",
+    "archive": "./archive",
+    "inbox": "./inbox"
+  },
+
+  "quantconnect": {
+    "project_prefix": "rv_",
+    "default_cash": 100000,
+    "transaction_costs": {
+      "spy_qqq": 0.0005,
+      "sector_etfs": 0.001,
+      "small_caps": 0.0015,
+      "stocks": 0.002
+    }
+  },
+
+  "validation": {
+    "is_period_years": 15,
+    "oos_reserve_pct": 0.30,
+    "min_signals": 100,
+    "statistical": {
+      "p_value_threshold": 0.01,
+      "bonferroni_correction": true,
+      "min_alpha_pct": 1.0,
+      "min_sharpe_improvement": 0.10,
+      "effect_size_threshold": 0.2
+    },
+    "sanity_checks": {
+      "max_sharpe_before_review": 2.0,
+      "max_alpha_before_review": 5.0,
+      "max_cagr_with_low_dd": 15.0,
+      "min_dd_for_high_cagr": 5.0
+    }
+  },
+
+  "data_hierarchy": [
+    "qc_native",
+    "qc_object_store",
+    "internal_purchased",
+    "internal_curated",
+    "internal_experimental"
+  ],
+
+  "personas": [
+    "momentum-trader",
+    "risk-manager",
+    "quant-researcher",
+    "contrarian",
+    "report-synthesizer"
+  ],
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "./logs/research-system.log"
+  }
+}

@@ -1,0 +1,3 @@
+# Core dependencies
+jsonschema>=4.0.0
+anthropic>=0.30.0

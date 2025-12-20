@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://research-system/schemas/hypothesis.schema.json",
+  "title": "Hypothesis",
+  "description": "Schema for testable research hypotheses",
+  "type": "object",
+  "required": ["component_id", "statement", "falsifiable_test", "data_requirements", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "component_id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]{3}$",
+      "description": "ID of the catalog entry this hypothesis tests"
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Clear, specific hypothesis statement"
+    },
+    "mechanism": {
+      "type": "string",
+      "description": "Why this might work (theoretical basis)"
+    },
+    "falsifiable_test": {
+      "type": "string",
+      "description": "How this hypothesis can be disproven"
+    },
+    "success_criteria": {
+      "type": "object",
+      "required": ["min_alpha", "min_sharpe_improvement"],
+      "properties": {
+        "min_alpha": {
+          "type": "number",
+          "description": "Minimum alpha percentage required"
+        },
+        "min_sharpe_improvement": {
+          "type": "number",
+          "description": "Minimum Sharpe improvement over baseline"
+        },
+        "max_drawdown": {
+          "type": "number",
+          "description": "Maximum acceptable drawdown"
+        },
+        "min_signals": {
+          "type": "integer",
+          "description": "Minimum number of trading signals required"
+        }
+      }
+    },
+    "data_requirements": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Data source IDs from registry"
+    },
+    "base_strategy": {
+      "type": "string",
+      "enum": ["BUY_AND_HOLD", "SMA200_MOMENTUM", "RSI_MEAN_REVERSION", "CUSTOM"],
+      "description": "Baseline strategy to compare against"
+    },
+    "test_role": {
+      "type": "string",
+      "enum": ["standalone", "entry_filter", "exit_filter", "both", "combination"],
+      "description": "How this component will be tested"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Parameters to test (locked before IS testing)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewed_by": {
+      "type": "string",
+      "description": "Persona that reviewed this hypothesis"
+    },
+    "review_notes": {
+      "type": "string",
+      "description": "Notes from hypothesis review"
+    }
+  }
+}
