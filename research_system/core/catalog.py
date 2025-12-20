@@ -367,7 +367,8 @@ class Catalog:
         self,
         entry_id: str,
         new_status: str,
-        validation_ref: Optional[str] = None
+        validation_ref: Optional[str] = None,
+        blocked_reason: Optional[str] = None
     ) -> CatalogEntry:
         """
         Update the status of an entry.
@@ -386,6 +387,9 @@ class Catalog:
 
         if validation_ref:
             entry_data["validation_ref"] = validation_ref
+
+        if blocked_reason:
+            entry_data["blocked_reason"] = blocked_reason
 
         # Write
         entry_file = self.entries_path / f"{entry_id}.json"
