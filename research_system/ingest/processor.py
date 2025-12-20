@@ -166,7 +166,7 @@ class IngestProcessor:
         # Stage 2: Deterministic Processing
 
         # Check data requirements
-        data_reqs = metadata.get("data_requirements", [])
+        data_reqs = metadata.get("data_requirements") or []
         missing_data = self._check_data_requirements(data_reqs)
 
         if missing_data:
@@ -251,7 +251,7 @@ class IngestProcessor:
             source_files=[str(archive_path.relative_to(self.workspace.path))],
             summary=metadata.get("summary"),
             hypothesis=metadata.get("hypothesis"),
-            tags=metadata.get("tags", [])
+            tags=metadata.get("tags") or []
         )
 
         # If blocked, add blocked reason
@@ -309,7 +309,7 @@ class IngestProcessor:
         result.entry_type = metadata.get("type", "idea")
 
         # Stage 2: Deterministic Processing
-        data_reqs = metadata.get("data_requirements", [])
+        data_reqs = metadata.get("data_requirements") or []
         missing_data = self._check_data_requirements(data_reqs)
 
         if missing_data:
