@@ -537,21 +537,23 @@ def cmd_ingest_process(args):
         summary = processor.process_all(dry_run=args.dry_run)
 
         for i, result in enumerate(summary.results, 1):
+            # Show relative path if different from filename (i.e., file is in subdirectory)
+            display_name = result.relative_path if result.relative_path else result.filename
             if result.success:
                 status_info = f" ({result.status})"
                 if result.blocked_data:
                     status_info = f" (BLOCKED: {', '.join(result.blocked_data)})"
-                print(f"  [{i}/{summary.total_files}] {result.filename}")
+                print(f"  [{i}/{summary.total_files}] {display_name}")
                 print(f"      -> {result.entry_id}{status_info}")
             elif result.skipped_reason:
-                print(f"  [{i}/{summary.total_files}] {result.filename}")
+                print(f"  [{i}/{summary.total_files}] {display_name}")
                 print(f"      -> SKIPPED: {result.skipped_reason}")
             else:
-                print(f"  [{i}/{summary.total_files}] {result.filename}")
+                print(f"  [{i}/{summary.total_files}] {display_name}")
                 print(f"      -> ERROR: {result.error}")
 
         print()
-        print(f"Complete: {summary.processed} entries created, {summary.skipped} skipped, {summary.errors} errors")
+        print(f"Complete: {summary.processed} entries created, {summary.skipped} skipped, {summary.duplicates} duplicates, {summary.errors} errors")
         if summary.blocked > 0:
             print(f"  ({summary.blocked} entries BLOCKED due to missing data)")
 

@@ -46,7 +46,7 @@ class WorkspaceConfig:
 
     # Paths (relative to workspace)
     inbox_dir: str = "inbox"
-    archive_dir: str = "archive"
+    reviewed_dir: str = "reviewed"  # Processed files that didn't create entries
     catalog_dir: str = "catalog"
     data_registry_dir: str = "data-registry"
     validations_dir: str = "validations"
@@ -64,17 +64,20 @@ class Workspace:
     Manages a user's research workspace.
 
     The workspace contains all user data separate from the application:
-    - catalog/: Research entries
+    - inbox/: Files to ingest
+    - catalog/: Research entries and their source files
+      - entries/: Individual entry JSON files
+      - sources/: Original files that created catalog entries
+    - reviewed/: Processed files that didn't create entries (purgeable)
     - validations/: Test results
     - data-registry/: Data source definitions
-    - inbox/: Files to ingest
-    - archive/: Ingested files
     """
 
     WORKSPACE_DIRS = [
         "inbox",
-        "archive",
+        "reviewed",
         "catalog/entries",
+        "catalog/sources",
         "data-registry/sources",
         "validations",
         "combinations",
@@ -148,7 +151,7 @@ class Workspace:
                 "min_sharpe_improvement": config.min_sharpe_improvement,
                 "min_alpha_threshold": config.min_alpha_threshold,
                 "inbox_dir": config.inbox_dir,
-                "archive_dir": config.archive_dir,
+                "reviewed_dir": config.reviewed_dir,
                 "catalog_dir": config.catalog_dir,
                 "data_registry_dir": config.data_registry_dir,
                 "validations_dir": config.validations_dir,
@@ -236,8 +239,9 @@ class Workspace:
         return self.path / self.config.inbox_dir
 
     @property
-    def archive_path(self) -> Path:
-        return self.path / self.config.archive_dir
+    def reviewed_path(self) -> Path:
+        """Path for processed files that didn't create entries (purgeable)."""
+        return self.path / self.config.reviewed_dir
 
     @property
     def catalog_path(self) -> Path:
@@ -246,6 +250,11 @@ class Workspace:
     @property
     def entries_path(self) -> Path:
         return self.catalog_path / "entries"
+
+    @property
+    def sources_path(self) -> Path:
+        """Path for source files that created catalog entries."""
+        return self.catalog_path / "sources"
 
     @property
     def data_registry_path(self) -> Path:

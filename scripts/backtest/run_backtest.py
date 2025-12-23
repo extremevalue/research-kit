@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.logging_config import get_logger
 from utils.qc_client import QCClient
-from data.check_availability import check_data_requirements, DataRegistry
+from ..data.check_availability import check_data_requirements, DataRegistry
 
 logger = get_logger("run-backtest")
 

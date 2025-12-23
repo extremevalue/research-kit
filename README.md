@@ -70,16 +70,43 @@ research init
 This creates:
 ```
 ~/my-research/
-├── inbox/          # Drop files here to process
-├── archive/        # Processed source files
-├── catalog/        # Your research entries
-├── data-registry/  # Your data source definitions
-├── validations/    # Test results
-├── combinations/   # Generated combinations
-└── config.json     # Your settings
+├── inbox/              # Drop files here to process
+├── reviewed/           # Processed files that didn't create entries (purgeable)
+├── catalog/
+│   ├── entries/        # Catalog entry metadata (JSON)
+│   └── sources/        # Original files that created entries
+├── data-registry/      # Your data source definitions
+├── validations/        # Test results
+├── combinations/       # Generated combinations
+└── config.json         # Your settings
 ```
 
-### 3. Basic Workflow
+### 3. Ingest Research Materials
+
+Drop files into your `inbox/` folder, then process them:
+
+```bash
+# Copy research files to inbox
+cp ~/Downloads/strategy_paper.pdf ~/my-research/inbox/
+cp -r ~/research/papers/ ~/my-research/inbox/
+
+# Process all files in inbox
+research ingest process
+
+# Or preview what would happen
+research ingest process --dry-run
+
+# List inbox contents
+research ingest list
+```
+
+**What happens during ingest:**
+1. Each file is hashed (detects duplicates)
+2. LLM extracts metadata (type, name, summary, data requirements)
+3. Catalog entry is created
+4. File moves to `catalog/sources/` (if entry created) or `reviewed/` (if skipped)
+
+### 4. Work with Your Catalog
 
 ```bash
 # See what's in your catalog
@@ -88,6 +115,16 @@ research catalog list
 # See catalog statistics
 research catalog stats
 
+# Search entries
+research catalog search "momentum"
+
+# Show entry details
+research catalog show IND-002
+```
+
+### 5. Validate Entries
+
+```bash
 # Start validating an entry
 research validate start IND-002
 
@@ -110,6 +147,27 @@ research init                            # Default: ~/.research-workspace
 research init --name "Trading Research"  # Custom name
 research init --force                    # Overwrite existing
 ```
+
+### `research ingest <action>`
+
+Process inbox files into catalog entries.
+
+```bash
+research ingest list                     # List inbox contents
+research ingest process                  # Process all inbox files
+research ingest process --dry-run        # Preview without changes
+research ingest process --file paper.pdf # Process specific file
+```
+
+**Features:**
+- Recursive scanning of inbox subdirectories
+- Content hashing to detect duplicates
+- Preserves subdirectory structure in destination
+- Automatic categorization (indicator, strategy, idea, etc.)
+
+**File destinations:**
+- **catalog/sources/** - Files that created catalog entries
+- **reviewed/** - Processed but skipped files (purgeable)
 
 ### `research catalog <action>`
 
@@ -285,20 +343,25 @@ The workspace `config.json` contains your settings:
 
 ```
 ~/my-research/
-├── config.json           # Your settings
-├── inbox/                # Drop files here to process
-├── archive/              # Processed source files
+├── config.json               # Your settings
+├── inbox/                    # Drop files here to process
+│   └── papers/               # Subdirectories preserved
+├── reviewed/                 # Processed but not cataloged (purgeable)
+│   └── papers/               # Subdirectory structure preserved
 ├── catalog/
-│   ├── entries/          # One JSON file per entry
+│   ├── index.json            # Quick-lookup index
+│   ├── entries/              # One JSON file per entry
 │   │   ├── IND-001.json
 │   │   ├── IND-002.json
 │   │   └── STRAT-001.json
-│   └── index.json        # Quick-lookup index
+│   └── sources/              # Original files that created entries
+│       └── papers/           # Subdirectory structure preserved
+│           └── 20251223_a1b2c3d4_strategy.pdf
 ├── data-registry/
-│   ├── registry.json     # Data source definitions
-│   └── sources/          # Local data files
+│   ├── registry.json         # Data source definitions
+│   └── sources/              # Local data files
 ├── validations/
-│   └── IND-002/          # One folder per validation
+│   └── IND-002/              # One folder per validation
 │       ├── metadata.json
 │       ├── hypothesis.json
 │       ├── data_audit.json
@@ -306,8 +369,13 @@ The workspace `config.json` contains your settings:
 │       ├── oos_test/
 │       └── determination.json
 └── combinations/
-    └── matrix.json       # Generated combinations
+    └── matrix.json           # Generated combinations
 ```
+
+**File naming in sources/ and reviewed/:**
+- Format: `{timestamp}_{hash8}_{original_name}`
+- Example: `20251223_a1b2c3d4_strategy.pdf`
+- Timestamp ensures uniqueness, hash detects duplicates
 
 ## Design Principles
 

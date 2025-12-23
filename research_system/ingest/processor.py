@@ -10,12 +10,15 @@ Stage 2: Deterministic Processing (Python)
     - Validates extracted metadata against schema
     - Checks data requirements against registry
     - Sets status: UNTESTED (all data available) or BLOCKED (missing data)
-    - Generates entry ID, writes to catalog, archives source file
+    - Generates entry ID, writes to catalog
+    - Moves source file to catalog/sources/ (if entry created) or reviewed/ (if skipped)
 """
 
+import hashlib
+import json
 import shutil
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -30,6 +33,7 @@ from research_system.llm.client import LLMClient
 class IngestResult:
     """Result of ingesting a single file."""
     filename: str
+    relative_path: str = ""  # Path relative to inbox
     success: bool = False
     entry_id: Optional[str] = None
     entry_type: Optional[str] = None
@@ -37,11 +41,14 @@ class IngestResult:
     error: Optional[str] = None
     skipped_reason: Optional[str] = None
     blocked_data: List[str] = field(default_factory=list)
+    content_hash: Optional[str] = None  # SHA-256 hash of file content
+    destination: Optional[str] = None  # Where file was moved (sources/ or reviewed/)
     dry_run: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "filename": self.filename,
+            "relative_path": self.relative_path,
             "success": self.success,
             "entry_id": self.entry_id,
             "entry_type": self.entry_type,
@@ -49,6 +56,8 @@ class IngestResult:
             "error": self.error,
             "skipped_reason": self.skipped_reason,
             "blocked_data": self.blocked_data,
+            "content_hash": self.content_hash,
+            "destination": self.destination,
             "dry_run": self.dry_run
         }
 
@@ -59,6 +68,7 @@ class IngestSummary:
     total_files: int = 0
     processed: int = 0
     skipped: int = 0
+    duplicates: int = 0  # Files with same content as already processed
     errors: int = 0
     blocked: int = 0
     results: List[IngestResult] = field(default_factory=list)
@@ -68,6 +78,7 @@ class IngestSummary:
             "total_files": self.total_files,
             "processed": self.processed,
             "skipped": self.skipped,
+            "duplicates": self.duplicates,
             "errors": self.errors,
             "blocked": self.blocked,
             "results": [r.to_dict() for r in self.results]
@@ -81,10 +92,18 @@ class IngestProcessor:
     Two-stage pipeline:
     1. LLM extraction using Claude Haiku
     2. Deterministic processing (validation, data check, catalog write)
+
+    Features:
+    - Content hashing to detect duplicate files
+    - Preserves subdirectory structure from inbox
+    - Moves files to catalog/sources/ (if entry created) or reviewed/ (if skipped)
     """
 
     # Files to ignore in inbox
     IGNORE_PATTERNS = [".DS_Store", ".gitkeep", "*.tmp", "*.log"]
+
+    # Hash index file for tracking processed content
+    HASH_INDEX_FILE = "processed_hashes.json"
 
     def __init__(
         self,
@@ -103,6 +122,54 @@ class IngestProcessor:
         self.catalog = Catalog(workspace.catalog_path)
         self.registry = DataRegistry(workspace.data_registry_path)
         self.extractor = MetadataExtractor(llm_client)
+        self._processed_hashes: Optional[Dict[str, str]] = None  # hash -> entry_id
+
+    def _get_hash_index_path(self) -> Path:
+        """Get path to the hash index file."""
+        return self.workspace.work_path / self.HASH_INDEX_FILE
+
+    def _load_processed_hashes(self) -> Dict[str, str]:
+        """Load the index of already processed content hashes."""
+        if self._processed_hashes is not None:
+            return self._processed_hashes
+
+        hash_file = self._get_hash_index_path()
+        if hash_file.exists():
+            try:
+                with open(hash_file, 'r') as f:
+                    self._processed_hashes = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                self._processed_hashes = {}
+        else:
+            self._processed_hashes = {}
+
+        return self._processed_hashes
+
+    def _save_processed_hash(self, content_hash: str, entry_id: str):
+        """Save a new hash to the index."""
+        hashes = self._load_processed_hashes()
+        hashes[content_hash] = entry_id
+
+        hash_file = self._get_hash_index_path()
+        hash_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(hash_file, 'w') as f:
+            json.dump(hashes, f, indent=2)
+
+    @staticmethod
+    def compute_file_hash(file_path: Path) -> str:
+        """Compute SHA-256 hash of file content."""
+        sha256 = hashlib.sha256()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+
+    def _get_relative_path(self, file_path: Path) -> str:
+        """Get path relative to inbox, preserving subdirectory structure."""
+        try:
+            return str(file_path.relative_to(self.workspace.inbox_path))
+        except ValueError:
+            return file_path.name
 
     def process_all(self, dry_run: bool = False) -> IngestSummary:
         """
@@ -116,7 +183,7 @@ class IngestProcessor:
         """
         summary = IngestSummary()
 
-        # Get all files in inbox (recursive)
+        # Get all files in inbox (recursive), tracking by full path
         inbox_files = [
             f for f in self.workspace.inbox_path.rglob("*")
             if f.is_file() and not self._should_ignore(f)
@@ -124,11 +191,16 @@ class IngestProcessor:
 
         summary.total_files = len(inbox_files)
 
+        # Load known hashes to detect duplicates
+        known_hashes = self._load_processed_hashes()
+
         for file_path in sorted(inbox_files):
-            result = self.process_file(file_path, dry_run)
+            result = self.process_file(file_path, dry_run, known_hashes)
             summary.results.append(result)
 
-            if result.success:
+            if result.skipped_reason and "duplicate" in result.skipped_reason.lower():
+                summary.duplicates += 1
+            elif result.success:
                 summary.processed += 1
                 if result.status == "BLOCKED":
                     summary.blocked += 1
@@ -139,18 +211,51 @@ class IngestProcessor:
 
         return summary
 
-    def process_file(self, file_path: Path, dry_run: bool = False) -> IngestResult:
+    def process_file(
+        self,
+        file_path: Path,
+        dry_run: bool = False,
+        known_hashes: Optional[Dict[str, str]] = None
+    ) -> IngestResult:
         """
         Process a single file through the two-stage pipeline.
 
         Args:
             file_path: Path to the file to process
             dry_run: If True, don't make any changes
+            known_hashes: Optional dict of content_hash -> entry_id for duplicate detection
 
         Returns:
             IngestResult with processing outcome
         """
-        result = IngestResult(filename=file_path.name, dry_run=dry_run)
+        relative_path = self._get_relative_path(file_path)
+        result = IngestResult(
+            filename=file_path.name,
+            relative_path=relative_path,
+            dry_run=dry_run
+        )
+
+        # Compute content hash for duplicate detection
+        try:
+            content_hash = self.compute_file_hash(file_path)
+            result.content_hash = content_hash
+        except IOError as e:
+            result.success = False
+            result.error = f"Cannot read file: {e}"
+            return result
+
+        # Check for duplicate content
+        if known_hashes is None:
+            known_hashes = self._load_processed_hashes()
+
+        if content_hash in known_hashes:
+            existing_entry = known_hashes[content_hash]
+            result.skipped_reason = f"Duplicate content (same as {existing_entry})"
+            # Move duplicate to reviewed/
+            if not dry_run:
+                self._move_to_reviewed(file_path, content_hash)
+                result.destination = "reviewed"
+            return result
 
         # Stage 1: LLM Extraction
         extraction = self.extractor.extract(file_path)
@@ -158,6 +263,10 @@ class IngestProcessor:
         if not extraction.success:
             result.success = False
             result.skipped_reason = extraction.error or "Extraction failed"
+            # Move failed extractions to reviewed/
+            if not dry_run:
+                self._move_to_reviewed(file_path, content_hash)
+                result.destination = "reviewed"
             return result
 
         metadata = extraction.metadata
@@ -182,12 +291,16 @@ class IngestProcessor:
 
         # Create catalog entry
         try:
-            entry = self._create_catalog_entry(metadata, file_path, result.status, missing_data)
+            entry = self._create_catalog_entry(metadata, file_path, result.status, missing_data, content_hash)
             result.entry_id = entry.id
             result.success = True
 
-            # Archive source file
-            self._archive_file(file_path)
+            # Move source file to catalog/sources/
+            self._move_to_sources(file_path, content_hash)
+            result.destination = "catalog/sources"
+
+            # Record hash for future duplicate detection
+            self._save_processed_hash(content_hash, entry.id)
 
         except Exception as e:
             result.success = False
@@ -235,20 +348,32 @@ class IngestProcessor:
         metadata: Dict[str, Any],
         source_file: Path,
         status: str,
-        missing_data: List[str]
+        missing_data: List[str],
+        content_hash: str
     ):
         """Create catalog entry from extracted metadata."""
         # Build entry data
         entry_type = metadata.get("type", "idea")
         name = metadata.get("name", source_file.stem)[:100]  # Limit name length
 
-        # Prepare source info
-        archive_path = self.workspace.archive_path / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{source_file.name}"
+        # Prepare source info - will be in catalog/sources/ with preserved subdirs
+        relative_path = self._get_relative_path(source_file)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        hash_prefix = content_hash[:8]
+
+        # Preserve subdirectory structure
+        if "/" in relative_path or "\\" in relative_path:
+            subdir = str(Path(relative_path).parent)
+            filename = f"{timestamp}_{hash_prefix}_{source_file.name}"
+            sources_path = self.workspace.sources_path / subdir / filename
+        else:
+            filename = f"{timestamp}_{hash_prefix}_{source_file.name}"
+            sources_path = self.workspace.sources_path / filename
 
         entry = self.catalog.add(
             entry_type=entry_type,
             name=name,
-            source_files=[str(archive_path.relative_to(self.workspace.path))],
+            source_files=[str(sources_path.relative_to(self.workspace.path))],
             summary=metadata.get("summary"),
             hypothesis=metadata.get("hypothesis"),
             tags=metadata.get("tags") or []
@@ -264,17 +389,47 @@ class IngestProcessor:
 
         return entry
 
-    def _archive_file(self, file_path: Path):
-        """Move file to archive with timestamp."""
+    def _move_to_sources(self, file_path: Path, content_hash: str):
+        """Move file to catalog/sources/ with preserved subdirectory structure."""
+        relative_path = self._get_relative_path(file_path)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        archive_name = f"{timestamp}_{file_path.name}"
-        archive_path = self.workspace.archive_path / archive_name
+        hash_prefix = content_hash[:8]
 
-        # Ensure archive directory exists
-        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        # Preserve subdirectory structure
+        if "/" in relative_path or "\\" in relative_path:
+            subdir = str(Path(relative_path).parent)
+            filename = f"{timestamp}_{hash_prefix}_{file_path.name}"
+            dest_path = self.workspace.sources_path / subdir / filename
+        else:
+            filename = f"{timestamp}_{hash_prefix}_{file_path.name}"
+            dest_path = self.workspace.sources_path / filename
+
+        # Ensure directory exists
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Move file
-        shutil.move(str(file_path), str(archive_path))
+        shutil.move(str(file_path), str(dest_path))
+
+    def _move_to_reviewed(self, file_path: Path, content_hash: str):
+        """Move file to reviewed/ with preserved subdirectory structure."""
+        relative_path = self._get_relative_path(file_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        hash_prefix = content_hash[:8]
+
+        # Preserve subdirectory structure
+        if "/" in relative_path or "\\" in relative_path:
+            subdir = str(Path(relative_path).parent)
+            filename = f"{timestamp}_{hash_prefix}_{file_path.name}"
+            dest_path = self.workspace.reviewed_path / subdir / filename
+        else:
+            filename = f"{timestamp}_{hash_prefix}_{file_path.name}"
+            dest_path = self.workspace.reviewed_path / filename
+
+        # Ensure directory exists
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Move file
+        shutil.move(str(file_path), str(dest_path))
 
     def process_text(
         self,
