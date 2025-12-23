@@ -22,11 +22,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, date
 from enum import Enum
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from utils.logging_config import get_logger, LogContext
-from ..data.check_availability import check_data_requirements, DataRegistry, validate_column_access
+from scripts.utils.logging_config import get_logger, LogContext
+from scripts.data.check_availability import check_data_requirements, DataRegistry, validate_column_access
 
 logger = get_logger("data-audit")
 

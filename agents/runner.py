@@ -19,10 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from string import Template
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-from utils.logging_config import get_logger
+from scripts.utils.logging_config import get_logger
 
 logger = get_logger("persona-runner")
 

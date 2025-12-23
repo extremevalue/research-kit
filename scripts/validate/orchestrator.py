@@ -29,11 +29,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from utils.logging_config import get_logger, LogContext
-from utils.schema_validator import validate_hypothesis
+from scripts.utils.logging_config import get_logger, LogContext
+from scripts.utils.schema_validator import validate_hypothesis
 
 logger = get_logger("orchestrator")
 
@@ -323,7 +320,7 @@ class ValidationOrchestrator:
                 hypothesis = json.load(f)
 
             # Import and run audit
-            from validate.data_audit import audit_data_requirements, save_audit_result
+            from scripts.validate.data_audit import audit_data_requirements, save_audit_result
 
             audit_result = audit_data_requirements(self.component_id, hypothesis)
             save_audit_result(audit_result, self.validation_dir)
@@ -370,7 +367,7 @@ class ValidationOrchestrator:
             self.require_state(ValidationState.DATA_AUDIT)
 
             # Run sanity checks
-            from validate.sanity_checks import check_backtest_sanity, save_sanity_result
+            from scripts.validate.sanity_checks import check_backtest_sanity, save_sanity_result
 
             sanity_result = check_backtest_sanity(
                 self.component_id,
@@ -459,7 +456,7 @@ class ValidationOrchestrator:
                 is_data = json.load(f)
 
             # Import and run analysis
-            from validate.statistical_analysis import analyze_significance, save_statistical_result
+            from scripts.validate.statistical_analysis import analyze_significance, save_statistical_result
 
             test_results = [{"name": "is_test", "results": is_data["backtest_results"]}]
             baseline = is_data.get("baseline_results")
@@ -502,7 +499,7 @@ class ValidationOrchestrator:
             self.require_state(ValidationState.STATISTICAL)
 
             # Import and run regime analysis
-            from validate.regime_analysis import analyze_regimes, save_regime_result
+            from scripts.validate.regime_analysis import analyze_regimes, save_regime_result
 
             # Load IS results
             is_results_file = self.validation_dir / "is_test" / "results.json"
@@ -554,7 +551,7 @@ class ValidationOrchestrator:
                 )
 
             # Run sanity checks
-            from validate.sanity_checks import check_backtest_sanity, save_sanity_result
+            from scripts.validate.sanity_checks import check_backtest_sanity, save_sanity_result
 
             sanity_result = check_backtest_sanity(
                 self.component_id,

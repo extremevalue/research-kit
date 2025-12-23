@@ -21,10 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from utils.logging_config import get_logger
+from scripts.utils.logging_config import get_logger
 
 logger = get_logger("statistical-analysis")
 

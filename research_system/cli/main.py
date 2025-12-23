@@ -790,9 +790,7 @@ def cmd_validate_start(args):
         return 1
 
     # Import and initialize orchestrator
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from validate.orchestrator import ValidationOrchestrator
+    from scripts.validate.orchestrator import ValidationOrchestrator
 
     val_dir = ws.validations_path / args.id
     orchestrator = ValidationOrchestrator(args.id, validation_dir=val_dir)
@@ -843,9 +841,7 @@ def cmd_validate_audit(args):
     """Run data audit."""
     ws = require_workspace(args.workspace)
 
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     val_dir = ws.validations_path / args.id
     if not val_dir.exists():
@@ -879,9 +875,7 @@ def cmd_validate_run(args):
     """Run next validation step."""
     ws = require_workspace(args.workspace)
 
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     val_dir = ws.validations_path / args.id
     if not val_dir.exists():
@@ -1004,9 +998,7 @@ def cmd_validate_hypothesis(args):
     """Submit hypothesis for validation."""
     ws = require_workspace(args.workspace)
 
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     # Load hypothesis file
     hypothesis_file = Path(args.file)
@@ -1046,9 +1038,7 @@ def cmd_validate_submit_is(args):
     """Submit in-sample backtest results."""
     ws = require_workspace(args.workspace)
 
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     # Load results file
     results_file = Path(args.file)
@@ -1108,9 +1098,7 @@ def cmd_validate_submit_oos(args):
     """Submit out-of-sample results (ONE SHOT)."""
     ws = require_workspace(args.workspace)
 
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
-    from validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     if not args.confirm:
         print("WARNING: OOS testing is ONE SHOT - no retries allowed!")
@@ -1279,9 +1267,7 @@ def cmd_analyze_run(args):
         print(f"Warning: Could not initialize LLM client: {e}")
         print("Running in offline mode.")
 
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "agents"))
-    from runner import PersonaRunner, run_persona_analysis, save_analysis_result
+    from agents.runner import PersonaRunner, run_persona_analysis, save_analysis_result
 
     if args.persona:
         # Run single persona
