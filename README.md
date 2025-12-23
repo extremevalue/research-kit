@@ -16,6 +16,7 @@ This tool helps you:
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [Lean CLI](https://www.lean.io/docs/lean-cli/installation) (optional) - credentials auto-detected for QC integration
 
 ## Quick Start
 
@@ -338,6 +339,15 @@ The workspace `config.json` contains your settings:
   "min_alpha_threshold": 0.01
 }
 ```
+
+### QuantConnect Credentials
+
+QC credentials are resolved in this order:
+
+1. **Workspace config** - If `qc_user_id` and `qc_api_token` are set in `config.json`, those are used
+2. **Lean CLI** - Falls back to `~/.lean/credentials` if available (auto-detected)
+
+If you have Lean CLI configured, you don't need to duplicate credentials in your workspace config.
 
 ## Workspace Structure
 

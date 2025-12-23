@@ -24,6 +24,55 @@ DEFAULT_WORKSPACE = Path.home() / ".research-workspace"
 # Environment variable for workspace
 WORKSPACE_ENV_VAR = "RESEARCH_WORKSPACE"
 
+# Lean CLI credentials location
+LEAN_CREDENTIALS_PATH = Path.home() / ".lean" / "credentials"
+
+
+@dataclass
+class QCCredentials:
+    """QuantConnect API credentials."""
+    user_id: str
+    api_token: str
+    organization_id: Optional[str] = None
+    source: str = "unknown"  # "config", "lean_cli", or "unknown"
+
+
+def _load_lean_cli_credentials() -> Optional[QCCredentials]:
+    """
+    Load QuantConnect credentials from Lean CLI config.
+
+    The Lean CLI stores credentials at ~/.lean/credentials in JSON format:
+    {
+        "user-id": "123456",
+        "api-token": "abc123...",
+        "organization-id": "789" (optional)
+    }
+
+    Returns:
+        QCCredentials if found, None otherwise
+    """
+    if not LEAN_CREDENTIALS_PATH.exists():
+        return None
+
+    try:
+        with open(LEAN_CREDENTIALS_PATH, 'r') as f:
+            data = json.load(f)
+
+        user_id = data.get("user-id", "")
+        api_token = data.get("api-token", "")
+
+        if not user_id or not api_token:
+            return None
+
+        return QCCredentials(
+            user_id=str(user_id),
+            api_token=api_token,
+            organization_id=data.get("organization-id"),
+            source="lean_cli"
+        )
+    except (json.JSONDecodeError, IOError):
+        return None
+
 
 @dataclass
 class WorkspaceConfig:
@@ -312,6 +361,30 @@ class Workspace:
             "validations": validation_count,
             "inbox_files": inbox_count,
         }
+
+    def get_qc_credentials(self) -> Optional[QCCredentials]:
+        """
+        Get QuantConnect API credentials with fallback resolution.
+
+        Resolution order:
+        1. Workspace config (qc_user_id, qc_api_token, qc_organization)
+        2. Lean CLI credentials (~/.lean/credentials)
+
+        Returns:
+            QCCredentials if found, None otherwise
+        """
+        # First try workspace config
+        config = self.config
+        if config.qc_user_id and config.qc_api_token:
+            return QCCredentials(
+                user_id=config.qc_user_id,
+                api_token=config.qc_api_token,
+                organization_id=config.qc_organization_id,
+                source="config"
+            )
+
+        # Fall back to Lean CLI credentials
+        return _load_lean_cli_credentials()
 
 
 def get_workspace(path: Optional[str] = None) -> Workspace:
