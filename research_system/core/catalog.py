@@ -322,6 +322,12 @@ class Catalog:
                 raise ValueError(f"Entry {entry_id} already exists")
         else:
             entry_id = self.get_next_id(entry_type)
+            # Safety check: verify generated ID doesn't already exist
+            # This handles edge cases like manual entries or race conditions
+            prefix = self.TYPE_PREFIXES[entry_type]
+            while self.exists(entry_id):
+                num = int(entry_id.split("-")[1]) + 1
+                entry_id = f"{prefix}-{num:03d}"
 
         now = datetime.utcnow().isoformat() + "Z"
 

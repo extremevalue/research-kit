@@ -120,6 +120,17 @@ def add_catalog_entry(
             raise ValueError(f"Entry {entry_id} already exists")
     else:
         entry_id = get_next_id(entry_type)
+        # Safety check: verify generated ID doesn't already exist
+        type_prefixes = {
+            "indicator": "IND", "strategy": "STRAT", "idea": "IDEA",
+            "learning": "LEARN", "tool": "TOOL", "data": "DATA"
+        }
+        prefix = type_prefixes[entry_type]
+        entry_file = ENTRIES_DIR / f"{entry_id}.json"
+        while entry_file.exists():
+            num = int(entry_id.split("-")[1]) + 1
+            entry_id = f"{prefix}-{num:03d}"
+            entry_file = ENTRIES_DIR / f"{entry_id}.json"
 
     now = datetime.utcnow().isoformat() + "Z"
 
