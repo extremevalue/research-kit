@@ -97,10 +97,26 @@ class IngestProcessor:
     - Content hashing to detect duplicate files
     - Preserves subdirectory structure from inbox
     - Moves files to catalog/sources/ (if entry created) or reviewed/ (if skipped)
+    - Auto-recognition of QuantConnect Native data sources
     """
 
     # Files to ignore in inbox
     IGNORE_PATTERNS = [".DS_Store", ".gitkeep", "*.tmp", "*.log"]
+
+    # Patterns that indicate standard market data available in QuantConnect
+    # These don't need explicit registry entries - QC has comprehensive coverage
+    # for equities, ETFs, futures, options, crypto, forex, etc.
+    QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv"}
+
+    # Special data sources that are always available in QuantConnect
+    QC_NATIVE_SPECIAL = {
+        "risk_free_rate",      # Available via RiskFreeInterestRateModel
+        "treasury_yields",     # Available via FRED data
+        "options_data",        # QC has comprehensive options data
+        "futures_data",        # QC has comprehensive futures data
+        "forex_data",          # QC has forex data
+        "crypto_data",         # QC has crypto data
+    }
 
     # Hash index file for tracking processed content
     HASH_INDEX_FILE = "processed_hashes.json"
@@ -321,9 +337,48 @@ class IngestProcessor:
 
         return False
 
+    def _is_qc_native_data(self, req: str) -> bool:
+        """
+        Check if a data requirement is available as QC Native data.
+
+        QuantConnect provides comprehensive market data coverage including:
+        - All US equities and ETFs
+        - International equities
+        - Futures, options, forex, crypto
+
+        Rather than maintaining a whitelist, we assume standard market data
+        patterns ({ticker}_prices, {ticker}_data) are available. The registry
+        is only needed for specialized/custom data sources.
+
+        Args:
+            req: Normalized data requirement ID (lowercase, underscores)
+
+        Returns:
+            True if likely available as QC Native data
+        """
+        # Check special data sources first
+        if req in self.QC_NATIVE_SPECIAL:
+            return True
+
+        # Check for standard market data patterns: {ticker}_prices, {ticker}_data, etc.
+        # Any ticker followed by a standard suffix is assumed available in QC
+        for suffix in self.QC_STANDARD_DATA_SUFFIXES:
+            if req.endswith(suffix):
+                ticker = req[:-len(suffix)]
+                # Basic validation: ticker should be 1-6 alphanumeric chars
+                # (covers stocks, ETFs, futures symbols, crypto pairs, etc.)
+                if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
+                    return True
+
+        return False
+
     def _check_data_requirements(self, data_reqs: List[str]) -> List[str]:
         """
         Check which data requirements are not available.
+
+        Checks in order:
+        1. Explicit registry entries
+        2. Auto-recognized QC Native symbols (e.g., spy_prices, gld_prices)
 
         Returns list of missing data source IDs.
         """
@@ -336,10 +391,17 @@ class IngestProcessor:
             # Normalize ID
             req = req.lower().replace("-", "_").replace(" ", "_")
 
-            # Check registry
+            # Check registry first
             source = self.registry.get(req)
-            if source is None or not source.is_available():
-                missing.append(req)
+            if source is not None and source.is_available():
+                continue
+
+            # Check if it's a recognized QC Native data source
+            if self._is_qc_native_data(req):
+                continue
+
+            # Not found in registry and not recognized as QC Native
+            missing.append(req)
 
         return missing
 
