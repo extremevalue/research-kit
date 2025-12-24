@@ -38,6 +38,14 @@ class DataSource:
     coverage: Optional[Dict[str, Any]]
     columns: Optional[List[str]]
     usage_notes: Optional[str]
+    is_auto_recognized: bool = False  # True if auto-recognized from QC Native pattern
+
+    def is_qc_native(self) -> bool:
+        """Check if this source is QC Native data."""
+        qc_native = self.availability.get("qc_native", {})
+        if isinstance(qc_native, dict):
+            return qc_native.get("available", False)
+        return qc_native is True
 
     def is_available(self) -> bool:
         """Check if data is available in any tier."""
@@ -102,6 +110,9 @@ class DataRegistry:
     3. Internal Purchased - Paid data (never delete)
     4. Internal Curated - Validated free data
     5. Internal Experimental - Unverified data
+
+    Additionally, the registry auto-recognizes standard QuantConnect market data
+    patterns (e.g., spy_prices, aapl_data) without requiring explicit registry entries.
     """
 
     HIERARCHY_ORDER = [
@@ -111,6 +122,20 @@ class DataRegistry:
         "internal_curated",
         "internal_experimental"
     ]
+
+    # Patterns that indicate standard market data available in QuantConnect
+    # These don't need explicit registry entries - QC has comprehensive coverage
+    QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv"}
+
+    # Special data sources always available in QuantConnect
+    QC_NATIVE_SPECIAL = {
+        "risk_free_rate",      # Available via RiskFreeInterestRateModel
+        "treasury_yields",     # Available via FRED data
+        "options_data",        # QC has comprehensive options data
+        "futures_data",        # QC has comprehensive futures data
+        "forex_data",          # QC has forex data
+        "crypto_data",         # QC has crypto data
+    }
 
     def __init__(self, registry_path: Path):
         """
@@ -127,6 +152,78 @@ class DataRegistry:
         """Ensure registry directories exist."""
         self.registry_path.mkdir(parents=True, exist_ok=True)
         self.sources_path.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def is_qc_native_pattern(cls, source_id: str) -> bool:
+        """
+        Check if a source ID matches a QC Native data pattern.
+
+        QuantConnect provides comprehensive market data coverage including:
+        - All US equities and ETFs
+        - International equities
+        - Futures, options, forex, crypto
+
+        Args:
+            source_id: Data source ID (will be normalized)
+
+        Returns:
+            True if likely available as QC Native data
+        """
+        # Normalize
+        source_id = source_id.lower().replace("-", "_").replace(" ", "_")
+
+        # Check special data sources
+        if source_id in cls.QC_NATIVE_SPECIAL:
+            return True
+
+        # Check for standard market data patterns
+        for suffix in cls.QC_STANDARD_DATA_SUFFIXES:
+            if source_id.endswith(suffix):
+                ticker = source_id[:-len(suffix)]
+                # Basic validation: ticker should be 1-6 alphanumeric chars
+                if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
+                    return True
+
+        return False
+
+    @classmethod
+    def create_qc_native_source(cls, source_id: str) -> DataSource:
+        """
+        Create a synthetic DataSource for auto-recognized QC Native data.
+
+        Args:
+            source_id: Normalized data source ID
+
+        Returns:
+            DataSource representing the QC Native data
+        """
+        # Extract ticker from pattern
+        ticker = source_id.upper()
+        for suffix in cls.QC_STANDARD_DATA_SUFFIXES:
+            if source_id.endswith(suffix):
+                ticker = source_id[:-len(suffix)].upper()
+                break
+
+        return DataSource(
+            id=source_id,
+            name=f"{ticker} Price Data",
+            data_type="price_data",
+            description=f"Standard QuantConnect market data for {ticker}",
+            availability={
+                "qc_native": {
+                    "available": True,
+                    "symbol": ticker,
+                    "resolution": ["tick", "second", "minute", "hour", "daily"],
+                }
+            },
+            coverage={
+                "start_date": "1998-01-01",  # Conservative estimate for most securities
+                "end_date": "present",
+            },
+            columns=["open", "high", "low", "close", "volume"],
+            usage_notes=f"Standard QC data - use self.AddEquity(\"{ticker}\", Resolution.Daily)",
+            is_auto_recognized=True
+        )
 
     def _load_registry(self) -> Dict[str, Any]:
         """Load the registry file."""
@@ -180,11 +277,26 @@ class DataRegistry:
         return sources
 
     def get(self, source_id: str) -> Optional[DataSource]:
-        """Get a specific data source by ID."""
+        """
+        Get a specific data source by ID.
+
+        First checks the explicit registry, then falls back to QC Native
+        pattern recognition for standard market data.
+
+        Args:
+            source_id: Data source ID (will be normalized for QC Native check)
+
+        Returns:
+            DataSource if found or recognized, None otherwise
+        """
+        # Normalize for comparison
+        normalized_id = source_id.lower().replace("-", "_").replace(" ", "_")
+
+        # First check explicit registry
         registry = self._load_registry()
 
         for source_data in registry.get("data_sources", []):
-            if source_data["id"] == source_id:
+            if source_data["id"] == source_id or source_data["id"] == normalized_id:
                 return DataSource(
                     id=source_data["id"],
                     name=source_data.get("name", source_data["id"]),
@@ -193,8 +305,13 @@ class DataRegistry:
                     availability=source_data.get("availability", {}),
                     coverage=source_data.get("coverage"),
                     columns=source_data.get("columns"),
-                    usage_notes=source_data.get("usage_notes")
+                    usage_notes=source_data.get("usage_notes"),
+                    is_auto_recognized=False
                 )
+
+        # Fall back to QC Native pattern recognition
+        if self.is_qc_native_pattern(normalized_id):
+            return self.create_qc_native_source(normalized_id)
 
         return None
 

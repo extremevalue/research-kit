@@ -64,59 +64,27 @@ class DataCheckResult:
         }
 
 
-# Patterns that indicate standard market data available in QuantConnect
-# These don't need explicit registry entries - QC has comprehensive coverage
-# for equities, ETFs, futures, options, crypto, forex, etc.
-QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv"}
+# Import centralized QC Native pattern recognition from core DataRegistry
+from research_system.core.data_registry import DataRegistry as CoreDataRegistry
 
-# Special data sources that are always available in QuantConnect
-QC_NATIVE_SPECIAL = {
-    "risk_free_rate",      # Available via RiskFreeInterestRateModel
-    "treasury_yields",     # Available via FRED data
-    "options_data",        # QC has comprehensive options data
-    "futures_data",        # QC has comprehensive futures data
-    "forex_data",          # QC has forex data
-    "crypto_data",         # QC has crypto data
-}
+# Re-export for backwards compatibility
+QC_STANDARD_DATA_SUFFIXES = CoreDataRegistry.QC_STANDARD_DATA_SUFFIXES
+QC_NATIVE_SPECIAL = CoreDataRegistry.QC_NATIVE_SPECIAL
 
 
 def is_qc_native_data(data_id: str) -> bool:
     """
     Check if a data requirement is available as QC Native data.
 
-    QuantConnect provides comprehensive market data coverage including:
-    - All US equities and ETFs
-    - International equities
-    - Futures, options, forex, crypto
-
-    Rather than maintaining a whitelist, we assume standard market data
-    patterns ({ticker}_prices, {ticker}_data) are available. The registry
-    is only needed for specialized/custom data sources.
+    Delegates to centralized DataRegistry.is_qc_native_pattern().
 
     Args:
-        data_id: Data source ID (should be lowercase with underscores)
+        data_id: Data source ID
 
     Returns:
         True if likely available as QC Native data
     """
-    # Normalize
-    data_id = data_id.lower().replace("-", "_").replace(" ", "_")
-
-    # Check special data sources first
-    if data_id in QC_NATIVE_SPECIAL:
-        return True
-
-    # Check for standard market data patterns: {ticker}_prices, {ticker}_data, etc.
-    # Any ticker followed by a standard suffix is assumed available in QC
-    for suffix in QC_STANDARD_DATA_SUFFIXES:
-        if data_id.endswith(suffix):
-            ticker = data_id[:-len(suffix)]
-            # Basic validation: ticker should be 1-6 alphanumeric chars
-            # (covers stocks, ETFs, futures symbols, crypto pairs, etc.)
-            if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
-                return True
-
-    return False
+    return CoreDataRegistry.is_qc_native_pattern(data_id)
 
 
 class DataRegistry:

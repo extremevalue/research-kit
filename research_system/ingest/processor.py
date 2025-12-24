@@ -103,21 +103,6 @@ class IngestProcessor:
     # Files to ignore in inbox
     IGNORE_PATTERNS = [".DS_Store", ".gitkeep", "*.tmp", "*.log"]
 
-    # Patterns that indicate standard market data available in QuantConnect
-    # These don't need explicit registry entries - QC has comprehensive coverage
-    # for equities, ETFs, futures, options, crypto, forex, etc.
-    QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv"}
-
-    # Special data sources that are always available in QuantConnect
-    QC_NATIVE_SPECIAL = {
-        "risk_free_rate",      # Available via RiskFreeInterestRateModel
-        "treasury_yields",     # Available via FRED data
-        "options_data",        # QC has comprehensive options data
-        "futures_data",        # QC has comprehensive futures data
-        "forex_data",          # QC has forex data
-        "crypto_data",         # QC has crypto data
-    }
-
     # Hash index file for tracking processed content
     HASH_INDEX_FILE = "processed_hashes.json"
 
@@ -341,14 +326,8 @@ class IngestProcessor:
         """
         Check if a data requirement is available as QC Native data.
 
-        QuantConnect provides comprehensive market data coverage including:
-        - All US equities and ETFs
-        - International equities
-        - Futures, options, forex, crypto
-
-        Rather than maintaining a whitelist, we assume standard market data
-        patterns ({ticker}_prices, {ticker}_data) are available. The registry
-        is only needed for specialized/custom data sources.
+        Delegates to DataRegistry.is_qc_native_pattern() for centralized
+        pattern recognition.
 
         Args:
             req: Normalized data requirement ID (lowercase, underscores)
@@ -356,21 +335,8 @@ class IngestProcessor:
         Returns:
             True if likely available as QC Native data
         """
-        # Check special data sources first
-        if req in self.QC_NATIVE_SPECIAL:
-            return True
-
-        # Check for standard market data patterns: {ticker}_prices, {ticker}_data, etc.
-        # Any ticker followed by a standard suffix is assumed available in QC
-        for suffix in self.QC_STANDARD_DATA_SUFFIXES:
-            if req.endswith(suffix):
-                ticker = req[:-len(suffix)]
-                # Basic validation: ticker should be 1-6 alphanumeric chars
-                # (covers stocks, ETFs, futures symbols, crypto pairs, etc.)
-                if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
-                    return True
-
-        return False
+        from research_system.core.data_registry import DataRegistry
+        return DataRegistry.is_qc_native_pattern(req)
 
     def _check_data_requirements(self, data_reqs: List[str]) -> List[str]:
         """

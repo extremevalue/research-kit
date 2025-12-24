@@ -34,7 +34,6 @@ from research_system.core.workspace import (
 )
 from research_system.core.catalog import Catalog
 from research_system.core.data_registry import DataRegistry
-from research_system.ingest.processor import IngestProcessor
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -1186,28 +1185,17 @@ def cmd_validate_check(args):
     print(f"Checking data requirements for {args.id}...")
     print()
 
-    # Create a temporary processor to use its QC Native recognition
-    processor = IngestProcessor(ws, llm_client=None)
-
     missing = []
     for req in data_reqs:
-        # Normalize ID
-        normalized_req = req.lower().replace("-", "_").replace(" ", "_")
-
-        # Check registry first
-        source = registry.get(normalized_req)
+        # registry.get() now handles both explicit entries and QC Native patterns
+        source = registry.get(req)
         if source is not None and source.is_available():
-            print(f"  {req}: available ({source.best_source().source_tier})")
-            continue
-
-        # Check if it's a recognized QC Native pattern
-        if processor._is_qc_native_data(normalized_req):
-            print(f"  {req}: available (qc_native auto-recognized)")
-            continue
-
-        # Not available
-        missing.append(req)
-        print(f"  {req}: NOT AVAILABLE")
+            tier = source.best_source().source_tier
+            auto = " (auto-recognized)" if source.is_auto_recognized else ""
+            print(f"  {req}: available ({tier}){auto}")
+        else:
+            missing.append(req)
+            print(f"  {req}: NOT AVAILABLE")
 
     print()
 
