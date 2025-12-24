@@ -224,7 +224,7 @@ class LLMClient:
                 self._cli_path,
                 "--print",           # Output response only, no interactive mode
                 "--model", cli_model,
-                "--max-turns", "1",  # Single turn, no conversation
+                "--max-turns", "3",  # Allow multiple turns for complex analysis
             ]
 
             # Run claude CLI with prompt on stdin
