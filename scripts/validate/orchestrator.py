@@ -417,6 +417,19 @@ class ValidationOrchestrator:
                         f"Sharpe improvement {sharpe - baseline_sharpe:.2f} < 0.10 minimum"
                     )
 
+            # Always transition to IS_TESTING first (records that testing was attempted)
+            # Then transition to FAILED if thresholds not met
+            self._transition_state(
+                ValidationState.IS_TESTING,
+                passed=passed,
+                details={
+                    "alpha": alpha,
+                    "sharpe": sharpe,
+                    "sanity_flags": len(sanity_result.flags),
+                    "threshold_check": "passed" if passed else "failed"
+                }
+            )
+
             if not passed:
                 self._transition_state(
                     ValidationState.FAILED,
@@ -426,16 +439,6 @@ class ValidationOrchestrator:
                 )
                 logger.warning(f"IS testing failed: {failure_reasons}")
                 return False
-
-            self._transition_state(
-                ValidationState.IS_TESTING,
-                passed=True,
-                details={
-                    "alpha": alpha,
-                    "sharpe": sharpe,
-                    "sanity_flags": len(sanity_result.flags)
-                }
-            )
 
             logger.info(f"IS testing complete: alpha={alpha:.2%}, sharpe={sharpe:.2f}")
             return True
