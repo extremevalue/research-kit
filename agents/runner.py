@@ -175,7 +175,7 @@ IMPORTANT:
                 user=user_prompt,
                 max_tokens=4000
             )
-            return response
+            return response.content  # Extract string content from LLMResponse
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise
