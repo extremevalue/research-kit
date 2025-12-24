@@ -64,6 +64,61 @@ class DataCheckResult:
         }
 
 
+# Patterns that indicate standard market data available in QuantConnect
+# These don't need explicit registry entries - QC has comprehensive coverage
+# for equities, ETFs, futures, options, crypto, forex, etc.
+QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv"}
+
+# Special data sources that are always available in QuantConnect
+QC_NATIVE_SPECIAL = {
+    "risk_free_rate",      # Available via RiskFreeInterestRateModel
+    "treasury_yields",     # Available via FRED data
+    "options_data",        # QC has comprehensive options data
+    "futures_data",        # QC has comprehensive futures data
+    "forex_data",          # QC has forex data
+    "crypto_data",         # QC has crypto data
+}
+
+
+def is_qc_native_data(data_id: str) -> bool:
+    """
+    Check if a data requirement is available as QC Native data.
+
+    QuantConnect provides comprehensive market data coverage including:
+    - All US equities and ETFs
+    - International equities
+    - Futures, options, forex, crypto
+
+    Rather than maintaining a whitelist, we assume standard market data
+    patterns ({ticker}_prices, {ticker}_data) are available. The registry
+    is only needed for specialized/custom data sources.
+
+    Args:
+        data_id: Data source ID (should be lowercase with underscores)
+
+    Returns:
+        True if likely available as QC Native data
+    """
+    # Normalize
+    data_id = data_id.lower().replace("-", "_").replace(" ", "_")
+
+    # Check special data sources first
+    if data_id in QC_NATIVE_SPECIAL:
+        return True
+
+    # Check for standard market data patterns: {ticker}_prices, {ticker}_data, etc.
+    # Any ticker followed by a standard suffix is assumed available in QC
+    for suffix in QC_STANDARD_DATA_SUFFIXES:
+        if data_id.endswith(suffix):
+            ticker = data_id[:-len(suffix)]
+            # Basic validation: ticker should be 1-6 alphanumeric chars
+            # (covers stocks, ETFs, futures symbols, crypto pairs, etc.)
+            if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
+                return True
+
+    return False
+
+
 class DataRegistry:
     """Interface to the data registry."""
 
@@ -160,8 +215,12 @@ def check_data_requirements(data_ids: List[str]) -> DataCheckResult:
     """
     Check if all required data is available.
 
+    Checks in order:
+    1. Explicit registry entries
+    2. Auto-recognized QC Native symbols (e.g., spy_prices, aapl_prices)
+
     Args:
-        data_ids: List of data source IDs from the registry
+        data_ids: List of data source IDs
 
     Returns:
         DataCheckResult with availability status for each source
@@ -171,25 +230,51 @@ def check_data_requirements(data_ids: List[str]) -> DataCheckResult:
     recommended_sources = {}
 
     for data_id in data_ids:
-        source = registry.get_source(data_id)
+        # Normalize the ID
+        normalized_id = data_id.lower().replace("-", "_").replace(" ", "_")
 
-        if source is None:
-            checks.append(DataCheck(
-                data_id=data_id,
-                available=False,
-                error=f"Data source '{data_id}' not found in registry. "
-                      f"Available sources: {', '.join(registry.list_sources()[:10])}..."
-            ))
+        # First check the registry
+        source = registry.get_source(normalized_id)
+
+        if source is not None:
+            # Found in registry - check availability via hierarchy
+            check = check_single_source(source, registry)
+            checks.append(check)
+
+            if check.available:
+                recommended_sources[data_id] = check.source
+                logger.info(f"Data '{data_id}' available via {check.source}")
+            else:
+                logger.warning(f"Data '{data_id}' NOT available: {check.error}")
             continue
 
-        check = check_single_source(source, registry)
-        checks.append(check)
+        # Not in registry - check if it's a recognized QC Native pattern
+        if is_qc_native_data(normalized_id):
+            # Extract ticker for the symbol reference
+            ticker = normalized_id
+            for suffix in QC_STANDARD_DATA_SUFFIXES:
+                if normalized_id.endswith(suffix):
+                    ticker = normalized_id[:-len(suffix)].upper()
+                    break
 
-        if check.available:
-            recommended_sources[data_id] = check.source
-            logger.info(f"Data '{data_id}' available via {check.source}")
-        else:
-            logger.warning(f"Data '{data_id}' NOT available: {check.error}")
+            check = DataCheck(
+                data_id=data_id,
+                available=True,
+                source="qc_native",
+                key_or_path=ticker,
+                usage_notes=f"Standard QC data - use self.AddEquity(\"{ticker}\", Resolution.Daily)"
+            )
+            checks.append(check)
+            recommended_sources[data_id] = "qc_native"
+            logger.info(f"Data '{data_id}' available via qc_native (auto-recognized)")
+            continue
+
+        # Not found in registry and not recognized as QC Native
+        checks.append(DataCheck(
+            data_id=data_id,
+            available=False,
+            error=f"Data source '{data_id}' not found in registry and not recognized as QC Native data."
+        ))
 
     all_available = all(c.available for c in checks)
 

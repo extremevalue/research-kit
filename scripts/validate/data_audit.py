@@ -23,7 +23,10 @@ from datetime import datetime, date
 from enum import Enum
 
 from scripts.utils.logging_config import get_logger, LogContext
-from scripts.data.check_availability import check_data_requirements, DataRegistry, validate_column_access
+from scripts.data.check_availability import (
+    check_data_requirements, DataRegistry, validate_column_access,
+    is_qc_native_data, QC_STANDARD_DATA_SUFFIXES
+)
 
 logger = get_logger("data-audit")
 
@@ -439,14 +442,41 @@ def audit_data_requirements(
 
         result = DataAuditResult(component_id=component_id, passed=True)
 
-        # Load data sources from registry
+        # Load data sources from registry (or create synthetic entries for QC Native)
         try:
             registry = DataRegistry()
             data_ids = hypothesis.get("data_requirements", [])
-            data_sources = [
-                registry.get_source(did) for did in data_ids
-                if registry.get_source(did) is not None
-            ]
+            data_sources = []
+
+            for did in data_ids:
+                normalized_id = did.lower().replace("-", "_").replace(" ", "_")
+                source = registry.get_source(normalized_id)
+
+                if source is not None:
+                    data_sources.append(source)
+                elif is_qc_native_data(normalized_id):
+                    # Create synthetic source dict for auto-recognized QC Native data
+                    ticker = normalized_id
+                    for suffix in QC_STANDARD_DATA_SUFFIXES:
+                        if normalized_id.endswith(suffix):
+                            ticker = normalized_id[:-len(suffix)].upper()
+                            break
+
+                    data_sources.append({
+                        "id": normalized_id,
+                        "name": f"{ticker} Price Data",
+                        "type": "price_data",
+                        "availability": {
+                            "qc_native": {
+                                "available": True,
+                                "symbol": ticker,
+                                "resolution": ["tick", "second", "minute", "hour", "daily"],
+                            }
+                        },
+                        "usage_notes": f"Standard QC data for {ticker}"
+                    })
+                # If not in registry and not QC Native, it will be caught by check_data_availability
+
         except FileNotFoundError as e:
             result.passed = False
             result.blocking_issues.append(f"Data registry not found: {e}")
