@@ -1531,7 +1531,7 @@ def cmd_run(args):
         entries = [entry]
     else:
         # All UNTESTED entries
-        entries = catalog.list(status="UNTESTED")
+        entries = catalog.query().by_status("UNTESTED").execute()
         if not entries:
             print("No UNTESTED entries to process.")
             print("Run 'research catalog list' to see all entries.")
@@ -1540,7 +1540,11 @@ def cmd_run(args):
     if args.dry_run:
         print(f"[DRY-RUN] Would process {len(entries)} entries:")
         for entry in entries:
-            print(f"  {entry.id}: {entry.name}")
+            # entries from query are dicts, from get() are CatalogEntry objects
+            if isinstance(entry, dict):
+                print(f"  {entry['id']}: {entry['name']}")
+            else:
+                print(f"  {entry.id}: {entry.name}")
         return 0
 
     # Initialize LLM client for code generation and expert review
@@ -1580,11 +1584,15 @@ def cmd_run(args):
     print()
 
     for i, entry in enumerate(entries, 1):
-        print(f"[{i}/{len(entries)}] {entry.id}: {entry.name}")
+        # Handle both dict (from query) and CatalogEntry (from get)
+        entry_id = entry['id'] if isinstance(entry, dict) else entry.id
+        entry_name = entry['name'] if isinstance(entry, dict) else entry.name
+
+        print(f"[{i}/{len(entries)}] {entry_id}: {entry_name}")
         print("-" * 60)
 
         try:
-            result = runner.run(entry.id)
+            result = runner.run(entry_id)
 
             if result.determination == "VALIDATED":
                 results["validated"] += 1
