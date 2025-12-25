@@ -82,6 +82,7 @@ For more information, visit: https://github.com/your-repo/research-system
     _add_ingest_parser(subparsers)
     _add_catalog_parser(subparsers)
     _add_data_parser(subparsers)
+    _add_run_parser(subparsers)  # The core validation + expert loop
     _add_validate_parser(subparsers)
     _add_combine_parser(subparsers)
     _add_analyze_parser(subparsers)
@@ -245,6 +246,51 @@ def _add_data_parser(subparsers):
     add_parser.set_defaults(func=cmd_data_add)
 
     parser.set_defaults(func=lambda args: parser.print_help())
+
+
+def _add_run_parser(subparsers):
+    """Add run command parser - the core validation + expert loop."""
+    parser = subparsers.add_parser(
+        "run",
+        help="Run the full validation + expert review loop",
+        description="""
+Run the complete validation and expert review loop for catalog entries.
+
+This is the core command that:
+  1. Generates backtest code from hypothesis
+  2. Runs IS backtest via lean CLI
+  3. Checks gates (alpha, sharpe, drawdown)
+  4. Runs OOS backtest (one shot)
+  5. Runs expert review (multiple personas)
+  6. Marks result (VALIDATED/INVALIDATED)
+  7. Adds derived ideas to catalog
+
+Usage:
+  research run                    Process all UNTESTED entries
+  research run STRAT-309          Process single entry
+  research run --continue         Resume interrupted run
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "id",
+        nargs="?",
+        default=None,
+        help="Entry ID to process (omit to process all UNTESTED)"
+    )
+    parser.add_argument(
+        "--continue",
+        dest="continue_run",
+        action="store_true",
+        help="Resume interrupted run"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be processed without running"
+    )
+    parser.set_defaults(func=cmd_run)
 
 
 def _add_validate_parser(subparsers):
@@ -1463,6 +1509,115 @@ def cmd_migrate_master_index(args):
     print(f"Migrating from {source}")
     print(f"Mode: {mode}")
     print("Migration not yet fully implemented")
+    return 0
+
+
+# ============================================================================
+# Run Command - The Core Validation + Expert Loop
+# ============================================================================
+
+def cmd_run(args):
+    """Run the full validation + expert review loop."""
+    ws = require_workspace(args.workspace)
+    catalog = Catalog(ws)
+
+    # Get entries to process
+    if args.id:
+        # Single entry
+        entry = catalog.get(args.id)
+        if not entry:
+            print(f"Error: Entry not found: {args.id}")
+            return 1
+        entries = [entry]
+    else:
+        # All UNTESTED entries
+        entries = catalog.list(status="UNTESTED")
+        if not entries:
+            print("No UNTESTED entries to process.")
+            print("Run 'research catalog list' to see all entries.")
+            return 0
+
+    if args.dry_run:
+        print(f"[DRY-RUN] Would process {len(entries)} entries:")
+        for entry in entries:
+            print(f"  {entry.id}: {entry.name}")
+        return 0
+
+    # Initialize LLM client for code generation and expert review
+    llm_client = None
+    try:
+        from research_system.llm.client import LLMClient
+        llm_client = LLMClient()
+        if llm_client.is_offline:
+            print("Warning: Running in offline mode. Code generation and expert review will be limited.")
+    except Exception as e:
+        print(f"Warning: Could not initialize LLM client: {e}")
+
+    # Import the full pipeline runner
+    try:
+        from scripts.validate.full_pipeline import FullPipelineRunner
+    except ImportError:
+        print("Error: Full pipeline runner not yet implemented.")
+        print("This will run the complete validation + expert loop.")
+        print()
+        print(f"Would process {len(entries)} entries:")
+        for entry in entries:
+            print(f"  {entry.id}: {entry.name} ({entry.status})")
+        return 1
+
+    # Run the pipeline
+    runner = FullPipelineRunner(ws, llm_client)
+
+    results = {
+        "validated": 0,
+        "invalidated": 0,
+        "failed": 0,
+        "derived_ideas": 0
+    }
+
+    print(f"Processing {len(entries)} entries...")
+    print("=" * 60)
+    print()
+
+    for i, entry in enumerate(entries, 1):
+        print(f"[{i}/{len(entries)}] {entry.id}: {entry.name}")
+        print("-" * 60)
+
+        try:
+            result = runner.run(entry.id)
+
+            if result.determination == "VALIDATED":
+                results["validated"] += 1
+                print(f"  → VALIDATED")
+            elif result.determination == "CONDITIONAL":
+                results["validated"] += 1
+                print(f"  → CONDITIONAL")
+            elif result.determination == "INVALIDATED":
+                results["invalidated"] += 1
+                print(f"  → INVALIDATED")
+            else:
+                results["failed"] += 1
+                print(f"  → {result.determination}")
+
+            if result.derived_ideas:
+                results["derived_ideas"] += len(result.derived_ideas)
+                print(f"  → Added {len(result.derived_ideas)} derived ideas")
+
+        except Exception as e:
+            results["failed"] += 1
+            print(f"  → ERROR: {e}")
+
+        print()
+
+    # Summary
+    print("=" * 60)
+    print("Summary:")
+    print(f"  VALIDATED:    {results['validated']}")
+    print(f"  INVALIDATED:  {results['invalidated']}")
+    print(f"  FAILED:       {results['failed']}")
+    print(f"  DERIVED:      {results['derived_ideas']} new ideas")
+    print()
+
     return 0
 
 

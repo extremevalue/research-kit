@@ -61,6 +61,13 @@ from .orchestrator import (
     StateTransitionError,
 )
 
+from .full_pipeline import (
+    FullPipelineRunner,
+    PipelineResult,
+    BacktestResult,
+    ExpertReview,
+)
+
 __all__ = [
     # Data Audit
     "audit_data_requirements",
@@ -98,4 +105,10 @@ __all__ = [
     "DeterminationStatus",
     "ValidationGateError",
     "StateTransitionError",
+
+    # Full Pipeline
+    "FullPipelineRunner",
+    "PipelineResult",
+    "BacktestResult",
+    "ExpertReview",
 ]
