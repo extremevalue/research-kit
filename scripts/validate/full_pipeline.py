@@ -164,8 +164,27 @@ class FullPipelineRunner:
         if not is_passed:
             print(f"  IS Gates: FAILED ({is_reason})")
             # Still run expert review to get improvement ideas
+            print("  Running expert review for improvement ideas...")
             expert_reviews = self._run_expert_review(entry, is_results, None)
             derived_ideas = self._extract_derived_ideas(expert_reviews)
+
+            # Print expert summaries
+            if expert_reviews:
+                print("\n  Expert Analysis:")
+                for review in expert_reviews:
+                    print(f"    [{review.persona}] {review.assessment[:80]}...")
+                    if review.concerns:
+                        print(f"      Concerns: {', '.join(review.concerns[:2])}")
+                    if review.improvements:
+                        print(f"      Suggestions: {', '.join(review.improvements[:2])}")
+
+            # Add derived ideas to catalog
+            if derived_ideas:
+                self._add_derived_ideas(entry, derived_ideas)
+                print(f"\n  Added {len(derived_ideas)} derived ideas to catalog")
+
+            # Save results even for failures
+            self._save_results(entry_id, is_results, None, expert_reviews, "INVALIDATED")
 
             return PipelineResult(
                 entry_id=entry_id,
