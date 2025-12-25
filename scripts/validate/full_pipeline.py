@@ -524,22 +524,57 @@ Return ONLY the Python code, no explanations."""
             from agents.runner import PersonaRunner
             runner = PersonaRunner(self.llm_client)
 
-            # Prepare validation results dict for personas
+            # Determine which results to use (prefer OOS, fall back to IS)
+            results = oos_results if oos_results else is_results
+            test_type = "oos" if oos_results else "is"
+
+            # Build validation results in the format expected by prompt templates
+            # Template expects flat keys like sharpe_ratio, alpha, cagr, etc.
             validation_results = {
-                "entry_name": entry.name,
-                "hypothesis": entry.hypothesis if hasattr(entry, 'hypothesis') else entry.summary,
-                "is_results": {
-                    "cagr": is_results.cagr,
-                    "sharpe": is_results.sharpe,
-                    "max_drawdown": is_results.max_drawdown,
-                    "alpha": is_results.alpha
-                } if is_results else None,
-                "oos_results": {
-                    "cagr": oos_results.cagr,
-                    "sharpe": oos_results.sharpe,
-                    "max_drawdown": oos_results.max_drawdown,
-                    "alpha": oos_results.alpha
-                } if oos_results else None
+                # Component info
+                "component_name": entry.name,
+                "component_type": entry.type if hasattr(entry, 'type') else "strategy",
+                "hypothesis": entry.hypothesis if hasattr(entry, 'hypothesis') else (entry.summary if hasattr(entry, 'summary') else "N/A"),
+
+                # Test configuration
+                "test_type": test_type,
+                "start_date": "2010-01-01",  # From _calculate_periods
+                "end_date": "2024-12-15",
+                "base_strategy": "SPY Buy & Hold",
+                "filter_config": "N/A",
+
+                # Performance metrics (as percentages for display)
+                "sharpe_ratio": f"{results.sharpe:.2f}" if results and results.sharpe else "N/A",
+                "alpha": f"{results.alpha * 100:.1f}" if results and results.alpha else "N/A",
+                "cagr": f"{results.cagr * 100:.1f}" if results and results.cagr else "N/A",
+                "max_drawdown": f"{results.max_drawdown * 100:.1f}" if results and results.max_drawdown else "N/A",
+                "total_trades": "N/A",  # Not available from current backtest
+                "win_rate": "N/A",
+
+                # Comparison to baseline (estimate vs SPY ~10% CAGR)
+                "baseline_sharpe": "0.50",
+                "sharpe_improvement": f"{(results.sharpe - 0.5):.2f}" if results and results.sharpe else "N/A",
+                "baseline_max_dd": "55.0",  # SPY 2008 drawdown
+                "drawdown_improvement": f"{55.0 - (results.max_drawdown * 100):.1f}" if results and results.max_drawdown else "N/A",
+
+                # Include IS vs OOS comparison if both available
+                "is_sharpe": f"{is_results.sharpe:.2f}" if is_results and is_results.sharpe else "N/A",
+                "is_cagr": f"{is_results.cagr * 100:.1f}" if is_results and is_results.cagr else "N/A",
+                "oos_sharpe": f"{oos_results.sharpe:.2f}" if oos_results and oos_results.sharpe else "N/A",
+                "oos_cagr": f"{oos_results.cagr * 100:.1f}" if oos_results and oos_results.cagr else "N/A",
+
+                # Statistical analysis (not available, provide placeholders)
+                "p_value": "N/A",
+                "bonferroni_p": "N/A",
+                "n_tests": "1",
+                "is_significant": "Not tested",
+                "effect_size": "N/A",
+
+                # Regime results (not available)
+                "regime_results": [],
+
+                # Sanity flags
+                "sanity_flags": [],
             }
 
             # Run analysis with all personas
