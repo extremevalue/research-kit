@@ -388,29 +388,50 @@ Return ONLY the Python code, no explanations."""
                 raw_output=stdout
             )
 
+        # Check for runtime errors in the output (even with exit code 0)
+        if "An error occurred during this backtest:" in stdout:
+            # Extract the error message
+            import re
+            error_match = re.search(r"An error occurred during this backtest:\s*(.+?)(?:\s+at\s+|$)", stdout, re.DOTALL)
+            error_msg = error_match.group(1).strip() if error_match else "Unknown runtime error"
+            return BacktestResult(
+                success=False,
+                error=f"Backtest runtime error: {error_msg}",
+                raw_output=stdout
+            )
+
         # Parse the table format output from lean cloud backtest
         try:
             import re
 
             # Extract metrics from the table format
             # Format: │ Metric Name │ Value │
-            cagr = self._extract_table_metric(stdout, "Compounding Annual Return", 0.0)
-            sharpe = self._extract_table_metric(stdout, "Sharpe Ratio", 0.0)
-            drawdown = self._extract_table_metric(stdout, "Drawdown", 0.0)
-            alpha = self._extract_table_metric(stdout, "Alpha", 0.0)
-            total_return = self._extract_table_metric(stdout, "Return", 0.0)
+            # Note: "Compounding Annual Return" is split across lines, so match partial
+            cagr = self._extract_table_metric(stdout, "Compounding Annual", None)
+            sharpe = self._extract_table_metric(stdout, "Sharpe Ratio", None)
+            drawdown = self._extract_table_metric(stdout, "Drawdown", None)
+            alpha = self._extract_table_metric(stdout, "Alpha", None)
+            total_return = self._extract_table_metric(stdout, "Return", None)
+
+            # Check if we got any valid metrics (should have at least CAGR and Sharpe)
+            if cagr is None or sharpe is None:
+                return BacktestResult(
+                    success=False,
+                    error="Could not parse backtest results from output",
+                    raw_output=stdout
+                )
 
             # If alpha wasn't found in output, estimate from CAGR vs benchmark
-            if alpha == 0.0 and cagr != 0.0:
+            if alpha is None and cagr is not None:
                 alpha = cagr - 0.10  # Assume 10% benchmark
 
             return BacktestResult(
                 success=True,
-                cagr=cagr,
-                sharpe=sharpe,
-                max_drawdown=abs(drawdown),
-                alpha=alpha,
-                total_return=total_return,
+                cagr=cagr or 0.0,
+                sharpe=sharpe or 0.0,
+                max_drawdown=abs(drawdown) if drawdown else 0.0,
+                alpha=alpha or 0.0,
+                total_return=total_return or 0.0,
                 benchmark_cagr=0.10,
                 raw_output=stdout
             )
@@ -421,15 +442,17 @@ Return ONLY the Python code, no explanations."""
                 raw_output=stdout
             )
 
-    def _extract_table_metric(self, output: str, metric_name: str, default: float) -> float:
+    def _extract_table_metric(self, output: str, metric_name: str, default: Optional[float]) -> Optional[float]:
         """Extract a metric value from lean table output format."""
         import re
 
         # Try multiple patterns for table format
         # Pattern 1: │ Metric Name │ Value │ (with possible whitespace)
         patterns = [
-            # Table format with │ separators
-            rf"│\s*{re.escape(metric_name)}\s*│\s*([+-]?\d+\.?\d*)\s*%?\s*│",
+            # Table format with │ separators - value followed by optional %
+            rf"│\s*{re.escape(metric_name)}\s*│\s*([+-]?\d+\.?\d*)\s*%",
+            # Table format without %
+            rf"│\s*{re.escape(metric_name)}\s*│\s*([+-]?\d+\.?\d*)\s*│",
             # Simpler format: Metric Name │ Value
             rf"{re.escape(metric_name)}\s*│\s*([+-]?\d+\.?\d*)\s*%?",
             # Key-value format: Metric Name: Value
@@ -440,9 +463,9 @@ Return ONLY the Python code, no explanations."""
             match = re.search(pattern, output, re.IGNORECASE | re.MULTILINE)
             if match:
                 value = float(match.group(1))
-                # Check if it's a percentage
-                context = output[match.start():match.end()+10]
-                if "%" in context:
+                # Check if it's a percentage (look for % in the matched region)
+                matched_text = output[match.start():match.end()+5]
+                if "%" in matched_text:
                     value /= 100
                 return value
 
