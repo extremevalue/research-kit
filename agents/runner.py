@@ -148,11 +148,15 @@ class PersonaRunner:
 
 {persona_def}
 
-IMPORTANT:
+CRITICAL INSTRUCTIONS:
+- DO NOT use any tools or try to read files - all data you need is in the prompt below
+- DO NOT ask for more information - analyze what is provided
+- Respond IMMEDIATELY with your analysis in the JSON format specified
 - Stay in character as this persona throughout your response
-- Provide your analysis in the JSON format specified in your persona document
 - Be specific and quantitative where possible
 - Your analysis should be actionable and clear
+
+The validation results are provided in the user message. Analyze them directly.
 """
 
     def _call_llm(

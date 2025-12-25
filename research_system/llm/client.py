@@ -220,13 +220,13 @@ class LLMClient:
             cli_model = self.CLI_MODEL_MAP.get(model, "sonnet")
 
             # Build command
-            # Use --max-turns 1 to force direct response without tool use
-            # Personas should analyze provided data, not explore files
+            # Use limited max-turns to prevent excessive tool exploration
+            # Prompt instructs model not to use tools anyway
             cmd = [
                 self._cli_path,
                 "--print",           # Output response only, no interactive mode
                 "--model", cli_model,
-                "--max-turns", "1",  # Single turn - no tool use, just respond
+                "--max-turns", "3",  # Allow a few turns but not unlimited exploration
             ]
 
             # Run claude CLI with prompt on stdin
