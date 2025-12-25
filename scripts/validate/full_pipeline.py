@@ -18,6 +18,7 @@ Usage:
 """
 
 import json
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -364,7 +365,15 @@ Return ONLY the Python code, no explanations."""
             )
 
             # Parse results from output
-            return self._parse_lean_output(result.stdout, result.stderr, result.returncode)
+            backtest_result = self._parse_lean_output(result.stdout, result.stderr, result.returncode)
+
+            # Clean up timestamped project folder (keep main validation folder clean)
+            try:
+                shutil.rmtree(project_dir)
+            except Exception as cleanup_error:
+                logger.debug(f"Failed to clean up {project_dir}: {cleanup_error}")
+
+            return backtest_result
 
         except subprocess.TimeoutExpired:
             return BacktestResult(success=False, error="Backtest timed out")
