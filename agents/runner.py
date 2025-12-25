@@ -295,14 +295,32 @@ The validation results are provided in the user message. Analyze them directly.
             if result.responses.get(p) and result.responses[p].structured_response
         }
 
-        # Build specific context for contrarian
+        # Build specific context for contrarian - use short names to match template
+        # Template expects: momentum_assessment, risk_assessment, quant_assessment
+        persona_short_names = {
+            "momentum-trader": "momentum",
+            "risk-manager": "risk",
+            "quant-researcher": "quant",
+            "mad-genius": "mad_genius"
+        }
         for persona in self.PARALLEL_PERSONAS:
             r = result.responses.get(persona)
             if r and r.structured_response:
-                key = persona.replace("-", "_")
-                contrarian_context[f"{key}_assessment"] = r.structured_response.get("overall_assessment", "N/A")
-                contrarian_context[f"{key}_claims"] = r.structured_response.get("key_observations", [])
-                contrarian_context[f"{key}_recommendation"] = r.structured_response.get("would_trade", "N/A")
+                short_name = persona_short_names.get(persona, persona.replace("-", "_"))
+                sr = r.structured_response
+                # Handle different output formats from different personas
+                if persona == "quant-researcher":
+                    contrarian_context[f"{short_name}_assessment"] = sr.get("verdict", sr.get("scientific_validity", "N/A"))
+                    contrarian_context[f"{short_name}_claims"] = sr.get("methodology_critique", [])
+                    contrarian_context[f"{short_name}_recommendation"] = sr.get("recommendations", ["N/A"])[0] if sr.get("recommendations") else "N/A"
+                elif persona == "mad-genius":
+                    contrarian_context[f"{short_name}_assessment"] = sr.get("overall_assessment", sr.get("hidden_potential", "N/A"))
+                    contrarian_context[f"{short_name}_claims"] = sr.get("creative_modifications", sr.get("edge_cases_to_exploit", []))
+                    contrarian_context[f"{short_name}_recommendation"] = sr.get("moonshot_variation", {}).get("description", "N/A") if isinstance(sr.get("moonshot_variation"), dict) else "N/A"
+                else:
+                    contrarian_context[f"{short_name}_assessment"] = sr.get("overall_assessment", "N/A")
+                    contrarian_context[f"{short_name}_claims"] = sr.get("key_observations", sr.get("concerns", sr.get("key_concerns", [])))
+                    contrarian_context[f"{short_name}_recommendation"] = sr.get("would_trade", sr.get("recommendation", "N/A"))
 
         response = self.run_persona("contrarian", contrarian_context, "challenge_consensus")
         result.responses["contrarian"] = response

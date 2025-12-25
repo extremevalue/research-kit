@@ -616,8 +616,91 @@ Return ONLY the Python code, no explanations."""
                             improvements=improvements[:5],  # Limit to top 5
                             derived_ideas=derived[:3]  # Limit to top 3
                         ))
+
+                    elif persona == "quant-researcher":
+                        # Quant-researcher outputs: verdict, methodology_critique, recommendations
+                        reviews.append(ExpertReview(
+                            persona=persona,
+                            assessment=sr.get("verdict", sr.get("scientific_validity", "N/A")),
+                            concerns=sr.get("methodology_critique", []),
+                            improvements=sr.get("recommendations", []),
+                            derived_ideas=[]
+                        ))
+
+                    elif persona == "contrarian":
+                        # Contrarian outputs: dissent_level, challenges_to_consensus, bear_case
+                        concerns = []
+                        # Extract challenges
+                        for challenge in sr.get("challenges_to_consensus", []):
+                            if isinstance(challenge, dict):
+                                concerns.append(f"{challenge.get('claim', '')}: {challenge.get('challenge', '')}")
+                            else:
+                                concerns.append(str(challenge))
+                        # Add bear case
+                        bear_case = sr.get("bear_case", {})
+                        if isinstance(bear_case, dict) and bear_case.get("primary_failure_mode"):
+                            concerns.append(f"Bear case: {bear_case.get('primary_failure_mode', '')}")
+
+                        # Extract what would change mind as improvements
+                        improvements = sr.get("what_would_change_my_mind", [])
+
+                        # Get final verdict
+                        final = sr.get("final_verdict", sr.get("final_dissent", {}))
+                        if isinstance(final, dict):
+                            assessment = f"{sr.get('dissent_level', 'N/A')} dissent - {'proceed' if final.get('proceed') else 'do not proceed'}"
+                        else:
+                            assessment = sr.get("dissent_level", "N/A")
+
+                        reviews.append(ExpertReview(
+                            persona=persona,
+                            assessment=assessment,
+                            concerns=concerns[:5],
+                            improvements=improvements[:3],
+                            derived_ideas=[]
+                        ))
+
+                    elif persona == "report-synthesizer":
+                        # Report-synthesizer outputs: final_determination, consensus_points, areas_of_disagreement
+                        final_det = sr.get("final_determination", {})
+                        if isinstance(final_det, dict):
+                            assessment = final_det.get("status", sr.get("integrated_assessment", {}).get("overall_verdict", "N/A"))
+                        else:
+                            assessment = "N/A"
+
+                        # Extract consensus points
+                        consensus = []
+                        for point in sr.get("consensus_points", []):
+                            if isinstance(point, dict):
+                                consensus.append(point.get("point", str(point)))
+                            else:
+                                consensus.append(str(point))
+
+                        # Extract disagreements as concerns
+                        concerns = []
+                        for disagreement in sr.get("areas_of_disagreement", []):
+                            if isinstance(disagreement, dict):
+                                concerns.append(f"{disagreement.get('topic', '')}: {disagreement.get('resolution', '')}")
+                            else:
+                                concerns.append(str(disagreement))
+
+                        # Recommended actions as improvements
+                        improvements = []
+                        for action in sr.get("recommended_actions", []):
+                            if isinstance(action, dict):
+                                improvements.append(action.get("action", str(action)))
+                            else:
+                                improvements.append(str(action))
+
+                        reviews.append(ExpertReview(
+                            persona=persona,
+                            assessment=assessment,
+                            concerns=concerns[:5],
+                            improvements=improvements[:3],
+                            derived_ideas=consensus[:3]  # Use consensus points as derived insights
+                        ))
+
                     else:
-                        # Standard format for other personas
+                        # Standard format for momentum-trader and risk-manager
                         reviews.append(ExpertReview(
                             persona=persona,
                             assessment=sr.get("overall_assessment", "N/A"),
