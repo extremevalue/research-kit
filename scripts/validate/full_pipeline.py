@@ -314,15 +314,15 @@ Return ONLY the Python code, no explanations."""
                 config_file = tmp_path / "config.json"
                 config_file.write_text(json.dumps(config))
 
-                # Run lean cloud backtest
+                # Run lean backtest locally (Docker-based)
                 result = subprocess.run(
-                    ["lean", "cloud", "backtest", str(tmp_path), "--push", "--open"],
+                    ["lean", "backtest", str(tmp_path)],
                     capture_output=True,
                     text=True,
-                    timeout=300  # 5 minute timeout
+                    timeout=600  # 10 minute timeout for Docker
                 )
 
-                # Parse results from output
+                # Parse results from output (include both stdout and stderr in error)
                 return self._parse_lean_output(result.stdout, result.stderr, result.returncode)
 
         except subprocess.TimeoutExpired:
@@ -358,9 +358,11 @@ Return ONLY the Python code, no explanations."""
     def _parse_lean_output(self, stdout: str, stderr: str, returncode: int) -> BacktestResult:
         """Parse lean CLI output to extract backtest results."""
         if returncode != 0:
+            # Include both stdout and stderr in error - lean often puts errors in stdout
+            error_details = stderr or stdout[:500] if stdout else "No output"
             return BacktestResult(
                 success=False,
-                error=f"Lean exited with code {returncode}: {stderr}",
+                error=f"Lean exited with code {returncode}: {error_details}",
                 raw_output=stdout
             )
 
