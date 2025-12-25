@@ -1519,7 +1519,7 @@ def cmd_migrate_master_index(args):
 def cmd_run(args):
     """Run the full validation + expert review loop."""
     ws = require_workspace(args.workspace)
-    catalog = Catalog(ws)
+    catalog = Catalog(ws.catalog_path)
 
     # Get entries to process
     if args.id:
