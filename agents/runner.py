@@ -81,12 +81,13 @@ class PersonaRunner:
         "momentum-trader",
         "risk-manager",
         "quant-researcher",
+        "mad-genius",
         "contrarian",
         "report-synthesizer"
     ]
 
     # Personas that can run in parallel (don't need others' output)
-    PARALLEL_PERSONAS = ["momentum-trader", "risk-manager", "quant-researcher"]
+    PARALLEL_PERSONAS = ["momentum-trader", "risk-manager", "quant-researcher", "mad-genius"]
 
     # Personas that need sequential execution
     SEQUENTIAL_PERSONAS = ["contrarian", "report-synthesizer"]
