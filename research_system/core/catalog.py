@@ -407,6 +407,49 @@ class Catalog:
 
         return CatalogEntry(entry_data)
 
+    def add_derived(
+        self,
+        parent_id: str,
+        name: str,
+        hypothesis: str,
+        entry_type: str = "idea",
+        tags: Optional[List[str]] = None
+    ) -> CatalogEntry:
+        """
+        Add a derived idea from an expert review.
+
+        Creates a new catalog entry linked to a parent entry,
+        typically capturing improvement suggestions from expert personas.
+
+        Args:
+            parent_id: ID of the parent entry this idea derives from
+            name: Name for the new idea
+            hypothesis: The improvement hypothesis/suggestion
+            entry_type: Type of entry (default: idea)
+            tags: Optional tags (defaults to ["derived", "expert-suggestion"])
+
+        Returns:
+            The created CatalogEntry
+        """
+        # Verify parent exists
+        if not self.exists(parent_id):
+            raise ValueError(f"Parent entry not found: {parent_id}")
+
+        # Default tags
+        if tags is None:
+            tags = ["derived", "expert-suggestion"]
+
+        # Create the derived entry using existing add method
+        return self.add(
+            entry_type=entry_type,
+            name=name,
+            source_files=[],  # Derived ideas have no source files
+            summary=f"Derived from {parent_id} expert review",
+            hypothesis=hypothesis,
+            tags=tags,
+            related_entries=[parent_id]
+        )
+
     def _update_index(self, entry: Dict[str, Any]):
         """Update the catalog index with a new or modified entry."""
         if self.index_path.exists():
