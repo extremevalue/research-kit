@@ -1606,6 +1606,8 @@ def cmd_run(args):
             else:
                 results["failed"] += 1
                 print(f"  → {result.determination}")
+                if result.error:
+                    print(f"     Error: {result.error}")
 
             if result.derived_ideas:
                 results["derived_ideas"] += len(result.derived_ideas)
