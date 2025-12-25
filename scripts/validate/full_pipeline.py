@@ -144,7 +144,7 @@ class FullPipelineRunner:
 
         # Step 3: Run IS backtest
         print("  Running IS backtest...")
-        is_results = self._run_backtest(backtest_code, periods['is_start'], periods['is_end'])
+        is_results = self._run_backtest(backtest_code, periods['is_start'], periods['is_end'], entry_id)
 
         if not is_results.success:
             return PipelineResult(
@@ -178,7 +178,7 @@ class FullPipelineRunner:
 
         # Step 5: Run OOS backtest (ONE SHOT)
         print("  Running OOS backtest (ONE SHOT)...")
-        oos_results = self._run_backtest(backtest_code, periods['oos_start'], periods['oos_end'])
+        oos_results = self._run_backtest(backtest_code, periods['oos_start'], periods['oos_end'], entry_id)
 
         if not oos_results.success:
             return PipelineResult(
@@ -292,38 +292,52 @@ Return ONLY the Python code, no explanations."""
             "oos_end": "2024-12-15"
         }
 
-    def _run_backtest(self, code: str, start_date: str, end_date: str) -> BacktestResult:
-        """Run a backtest via the lean CLI."""
+    def _run_backtest(self, code: str, start_date: str, end_date: str, entry_id: str = "temp") -> BacktestResult:
+        """
+        Run a backtest via the lean CLI.
+
+        Uses cloud backtest by default (has full data access).
+        Falls back to local with --download-data if cloud fails.
+        """
         try:
-            # Create temporary project directory
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tmp_path = Path(tmp_dir)
+            # Use the validations folder under workspace
+            project_dir = self.workspace.validations_path / entry_id / "backtest_run"
+            project_dir.mkdir(parents=True, exist_ok=True)
 
-                # Write the algorithm code
-                main_py = tmp_path / "main.py"
+            # Write the algorithm code
+            main_py = project_dir / "main.py"
+            modified_code = self._inject_dates(code, start_date, end_date)
+            main_py.write_text(modified_code)
 
-                # Inject date overrides into the code
-                modified_code = self._inject_dates(code, start_date, end_date)
-                main_py.write_text(modified_code)
+            # Create config.json for lean
+            config = {
+                "algorithm-language": "Python",
+                "parameters": {}
+            }
+            config_file = project_dir / "config.json"
+            config_file.write_text(json.dumps(config))
 
-                # Create config.json for lean
-                config = {
-                    "algorithm-language": "Python",
-                    "parameters": {}
-                }
-                config_file = tmp_path / "config.json"
-                config_file.write_text(json.dumps(config))
+            # Find lean.json in workspace
+            lean_config = self.workspace.path / "lean.json"
 
-                # Run lean backtest locally (Docker-based)
-                result = subprocess.run(
-                    ["lean", "backtest", str(tmp_path)],
-                    capture_output=True,
-                    text=True,
-                    timeout=600  # 10 minute timeout for Docker
-                )
+            # Try cloud backtest first (has full data access)
+            # --push uploads the project, no --open to avoid browser popup
+            cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
+            if lean_config.exists():
+                cmd.extend(["--lean-config", str(lean_config)])
 
-                # Parse results from output (include both stdout and stderr in error)
-                return self._parse_lean_output(result.stdout, result.stderr, result.returncode)
+            logger.info(f"Running: {' '.join(cmd)}")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minute timeout
+                cwd=str(self.workspace.path)  # Run from workspace root
+            )
+
+            # Parse results from output
+            return self._parse_lean_output(result.stdout, result.stderr, result.returncode)
 
         except subprocess.TimeoutExpired:
             return BacktestResult(success=False, error="Backtest timed out")
