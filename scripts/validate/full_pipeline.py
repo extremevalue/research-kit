@@ -266,7 +266,7 @@ Return ONLY the Python code, no explanations."""
         try:
             response = self.llm_client.generate_sonnet(prompt)
             # Extract code from response (handle markdown code blocks)
-            code = response
+            code = response.content
             if "```python" in code:
                 code = code.split("```python")[1].split("```")[0]
             elif "```" in code:
