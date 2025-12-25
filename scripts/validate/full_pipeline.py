@@ -317,14 +317,9 @@ Return ONLY the Python code, no explanations."""
             config_file = project_dir / "config.json"
             config_file.write_text(json.dumps(config))
 
-            # Find lean.json in workspace
-            lean_config = self.workspace.path / "lean.json"
-
-            # Try cloud backtest first (has full data access)
+            # Try cloud backtest (has full data access)
             # --push uploads the project, no --open to avoid browser popup
             cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
-            if lean_config.exists():
-                cmd.extend(["--lean-config", str(lean_config)])
 
             logger.info(f"Running: {' '.join(cmd)}")
 
