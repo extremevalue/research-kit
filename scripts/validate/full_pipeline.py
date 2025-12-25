@@ -83,16 +83,18 @@ class FullPipelineRunner:
     OOS_MIN_SHARPE = 0.3  # OOS Sharpe must exceed this
     OOS_MAX_DRAWDOWN = 0.50  # OOS drawdown must be less than 50%
 
-    def __init__(self, workspace, llm_client=None):
+    def __init__(self, workspace, llm_client=None, use_local: bool = False):
         """
         Initialize the pipeline runner.
 
         Args:
             workspace: Workspace instance
             llm_client: LLMClient instance (optional, but needed for code gen and expert review)
+            use_local: If True, use local Docker backtest; if False (default), use cloud
         """
         self.workspace = workspace
         self.llm_client = llm_client
+        self.use_local = use_local
         self.catalog = None
 
         # Lazy load catalog
@@ -319,9 +321,18 @@ Return ONLY the Python code, no explanations."""
             config_file = project_dir / "config.json"
             config_file.write_text(json.dumps(config))
 
-            # Try cloud backtest (has full data access)
-            # --push uploads the project, no --open to avoid browser popup
-            cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
+            # Build command based on mode
+            if self.use_local:
+                # Local Docker backtest with data download from QC
+                cmd = ["lean", "backtest", str(project_dir), "--download-data"]
+                # Find lean.json for local config
+                lean_config = self.workspace.path / "lean.json"
+                if lean_config.exists():
+                    cmd.extend(["--lean-config", str(lean_config)])
+            else:
+                # Cloud backtest (has full data access)
+                # --push uploads the project, no --open to avoid browser popup
+                cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
 
             logger.info(f"Running: {' '.join(cmd)}")
 
@@ -329,7 +340,7 @@ Return ONLY the Python code, no explanations."""
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=600,  # 10 minute timeout
+                timeout=900 if self.use_local else 600,  # Local Docker may need more time
                 cwd=str(self.workspace.path)  # Run from workspace root
             )
 
@@ -377,16 +388,21 @@ Return ONLY the Python code, no explanations."""
                 raw_output=stdout
             )
 
-        # Try to parse results from output
-        # This is a simplified parser - real implementation would parse the JSON results
+        # Parse the table format output from lean cloud backtest
         try:
-            # Look for key metrics in output
-            cagr = self._extract_metric(stdout, "Compounding Annual Return", 0.0)
-            sharpe = self._extract_metric(stdout, "Sharpe Ratio", 0.0)
-            drawdown = self._extract_metric(stdout, "Drawdown", 0.0)
+            import re
 
-            # For now, estimate alpha as CAGR - 10% (SPY benchmark)
-            alpha = cagr - 0.10
+            # Extract metrics from the table format
+            # Format: │ Metric Name │ Value │
+            cagr = self._extract_table_metric(stdout, "Compounding Annual Return", 0.0)
+            sharpe = self._extract_table_metric(stdout, "Sharpe Ratio", 0.0)
+            drawdown = self._extract_table_metric(stdout, "Drawdown", 0.0)
+            alpha = self._extract_table_metric(stdout, "Alpha", 0.0)
+            total_return = self._extract_table_metric(stdout, "Return", 0.0)
+
+            # If alpha wasn't found in output, estimate from CAGR vs benchmark
+            if alpha == 0.0 and cagr != 0.0:
+                alpha = cagr - 0.10  # Assume 10% benchmark
 
             return BacktestResult(
                 success=True,
@@ -394,6 +410,7 @@ Return ONLY the Python code, no explanations."""
                 sharpe=sharpe,
                 max_drawdown=abs(drawdown),
                 alpha=alpha,
+                total_return=total_return,
                 benchmark_cagr=0.10,
                 raw_output=stdout
             )
@@ -404,16 +421,31 @@ Return ONLY the Python code, no explanations."""
                 raw_output=stdout
             )
 
-    def _extract_metric(self, output: str, metric_name: str, default: float) -> float:
-        """Extract a metric value from lean output."""
+    def _extract_table_metric(self, output: str, metric_name: str, default: float) -> float:
+        """Extract a metric value from lean table output format."""
         import re
-        pattern = rf"{metric_name}[:\s]+([+-]?\d+\.?\d*)%?"
-        match = re.search(pattern, output, re.IGNORECASE)
-        if match:
-            value = float(match.group(1))
-            if "%" in output[match.start():match.end()+5]:
-                value /= 100
-            return value
+
+        # Try multiple patterns for table format
+        # Pattern 1: │ Metric Name │ Value │ (with possible whitespace)
+        patterns = [
+            # Table format with │ separators
+            rf"│\s*{re.escape(metric_name)}\s*│\s*([+-]?\d+\.?\d*)\s*%?\s*│",
+            # Simpler format: Metric Name │ Value
+            rf"{re.escape(metric_name)}\s*│\s*([+-]?\d+\.?\d*)\s*%?",
+            # Key-value format: Metric Name: Value
+            rf"{re.escape(metric_name)}[:\s]+([+-]?\d+\.?\d*)\s*%?",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, output, re.IGNORECASE | re.MULTILINE)
+            if match:
+                value = float(match.group(1))
+                # Check if it's a percentage
+                context = output[match.start():match.end()+10]
+                if "%" in context:
+                    value /= 100
+                return value
+
         return default
 
     def _check_is_gates(self, results: BacktestResult) -> tuple[bool, str]:

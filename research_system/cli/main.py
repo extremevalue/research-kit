@@ -290,6 +290,11 @@ Usage:
         action="store_true",
         help="Show what would be processed without running"
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Use local Docker backtest instead of cloud (downloads data from QC)"
+    )
     parser.set_defaults(func=cmd_run)
 
 
@@ -1570,7 +1575,8 @@ def cmd_run(args):
         return 1
 
     # Run the pipeline
-    runner = FullPipelineRunner(ws, llm_client)
+    use_local = getattr(args, 'local', False)
+    runner = FullPipelineRunner(ws, llm_client, use_local=use_local)
 
     results = {
         "validated": 0,
