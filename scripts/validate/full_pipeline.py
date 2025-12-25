@@ -97,7 +97,7 @@ class FullPipelineRunner:
 
         # Lazy load catalog
         from research_system.core.catalog import Catalog
-        self.catalog = Catalog(workspace)
+        self.catalog = Catalog(workspace.catalog_path)
 
     def run(self, entry_id: str) -> PipelineResult:
         """
