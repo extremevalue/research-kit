@@ -448,15 +448,30 @@ Return ONLY the Python code, no explanations."""
             from agents.runner import PersonaRunner
             runner = PersonaRunner(self.llm_client)
 
-            # Prepare context for personas
-            context = self._build_review_context(entry, is_results, oos_results)
+            # Prepare validation results dict for personas
+            validation_results = {
+                "entry_name": entry.name,
+                "hypothesis": entry.hypothesis if hasattr(entry, 'hypothesis') else entry.summary,
+                "is_results": {
+                    "cagr": is_results.cagr,
+                    "sharpe": is_results.sharpe,
+                    "max_drawdown": is_results.max_drawdown,
+                    "alpha": is_results.alpha
+                } if is_results else None,
+                "oos_results": {
+                    "cagr": oos_results.cagr,
+                    "sharpe": oos_results.sharpe,
+                    "max_drawdown": oos_results.max_drawdown,
+                    "alpha": oos_results.alpha
+                } if oos_results else None
+            }
 
-            # Run all personas
-            results = runner.run_all(entry.id, context)
+            # Run analysis with all personas
+            analysis_result = runner.run_analysis(entry.id, validation_results, include_suggestions=True)
 
             # Convert to ExpertReview objects
             reviews = []
-            for persona, response in results.responses.items():
+            for persona, response in analysis_result.responses.items():
                 if response.structured_response:
                     sr = response.structured_response
                     reviews.append(ExpertReview(
@@ -471,6 +486,9 @@ Return ONLY the Python code, no explanations."""
 
         except ImportError:
             logger.warning("Persona runner not available - using simplified review")
+            return self._simplified_expert_review(entry, is_results, oos_results)
+        except Exception as e:
+            logger.warning(f"Expert review failed: {e} - using simplified review")
             return self._simplified_expert_review(entry, is_results, oos_results)
 
     def _simplified_expert_review(self, entry, is_results, oos_results) -> List[ExpertReview]:
