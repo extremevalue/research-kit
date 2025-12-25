@@ -585,13 +585,46 @@ Return ONLY the Python code, no explanations."""
             for persona, response in analysis_result.responses.items():
                 if response.structured_response:
                     sr = response.structured_response
-                    reviews.append(ExpertReview(
-                        persona=persona,
-                        assessment=sr.get("overall_assessment", "N/A"),
-                        concerns=sr.get("concerns", sr.get("key_concerns", [])),
-                        improvements=sr.get("next_steps_recommendations", []),
-                        derived_ideas=sr.get("combination_suggestions", [])
-                    ))
+
+                    # Handle different output formats from different personas
+                    if persona == "mad-genius":
+                        # Mad-genius has creative_modifications, unconventional_uses, etc.
+                        improvements = []
+                        for mod in sr.get("creative_modifications", []):
+                            if isinstance(mod, dict):
+                                improvements.append(f"{mod.get('idea', '')}: {mod.get('rationale', '')}")
+                            else:
+                                improvements.append(str(mod))
+                        for use in sr.get("unconventional_uses", []):
+                            if isinstance(use, dict):
+                                improvements.append(f"{use.get('use_case', '')}: {use.get('example', '')}")
+                        improvements.extend(sr.get("next_experiments", []))
+
+                        # Get moonshot as a derived idea
+                        moonshot = sr.get("moonshot_variation", {})
+                        derived = []
+                        if moonshot and isinstance(moonshot, dict):
+                            derived.append(f"Moonshot: {moonshot.get('description', '')}")
+                        for combo in sr.get("combination_ideas", []):
+                            if isinstance(combo, dict):
+                                derived.append(f"Combine with {combo.get('pair_with', '')}: {combo.get('synergy', '')}")
+
+                        reviews.append(ExpertReview(
+                            persona=persona,
+                            assessment=sr.get("overall_assessment", sr.get("hidden_potential", "N/A")),
+                            concerns=sr.get("edge_cases_to_exploit", []),
+                            improvements=improvements[:5],  # Limit to top 5
+                            derived_ideas=derived[:3]  # Limit to top 3
+                        ))
+                    else:
+                        # Standard format for other personas
+                        reviews.append(ExpertReview(
+                            persona=persona,
+                            assessment=sr.get("overall_assessment", "N/A"),
+                            concerns=sr.get("concerns", sr.get("key_concerns", [])),
+                            improvements=sr.get("next_steps_recommendations", []),
+                            derived_ideas=sr.get("combination_suggestions", [])
+                        ))
                 elif response.raw_response:
                     # Fallback: use raw response when JSON parsing failed
                     # Extract first paragraph as assessment
