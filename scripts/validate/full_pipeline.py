@@ -300,8 +300,10 @@ Return ONLY the Python code, no explanations."""
         Falls back to local with --download-data if cloud fails.
         """
         try:
-            # Use the validations folder under workspace
-            project_dir = self.workspace.validations_path / entry_id / "backtest_run"
+            # Use unique project name with timestamp to avoid cloud naming conflicts
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            project_name = f"{entry_id}_{start_date[:4]}_{end_date[:4]}_{timestamp}"
+            project_dir = self.workspace.validations_path / entry_id / project_name
             project_dir.mkdir(parents=True, exist_ok=True)
 
             # Write the algorithm code
