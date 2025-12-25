@@ -557,6 +557,18 @@ Return ONLY the Python code, no explanations."""
                         improvements=sr.get("next_steps_recommendations", []),
                         derived_ideas=sr.get("combination_suggestions", [])
                     ))
+                elif response.raw_response:
+                    # Fallback: use raw response when JSON parsing failed
+                    # Extract first paragraph as assessment
+                    raw = response.raw_response.strip()
+                    assessment = raw[:500] + "..." if len(raw) > 500 else raw
+                    reviews.append(ExpertReview(
+                        persona=persona,
+                        assessment=assessment,
+                        concerns=[],
+                        improvements=[],
+                        derived_ideas=[]
+                    ))
 
             return reviews
 
