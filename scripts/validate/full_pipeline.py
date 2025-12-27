@@ -335,8 +335,16 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
    self.rsi_indicator = self.rsi("SPY", 14)
    self.sma_fast = self.sma("SPY", 10)
    self.sma_slow = self.sma("SPY", 50)
-   # If you need explicit resolution, include MovingAverageType:
-   # self.rsi_indicator = self.rsi("SPY", 14, MovingAverageType.WILDERS, Resolution.DAILY)
+   self.bb_indicator = self.bb("SPY", 20, 2)  # period=20, k=2 std devs
+   self.std_indicator = self.std("SPY", 20)   # standard deviation
+
+   WRONG - Do NOT add Resolution to simple indicator calls:
+   self.std(symbol, 60, Resolution.DAILY)  # ERROR!
+   self.bb(symbol, 20, 2, Resolution.DAILY)  # ERROR!
+
+   RIGHT - Indicators inherit resolution from the security:
+   self.std_indicator = self.std(symbol, 60)
+   self.bb_indicator = self.bb(symbol, 20, 2)
 
 4. Futures symbols (underscores):
    Futures.Indices.SP_500_E_MINI (not SP500EMini)
@@ -679,11 +687,24 @@ Return ONLY the Python code, no explanations."""
         # Wrong: self.rsi(symbol, 14, Resolution.DAILY)
         # Right: self.rsi(symbol, 14) - uses default resolution from security
         indicator_signature_fixes = [
-            # Remove Resolution argument from indicator calls (uses security's default)
+            # 2-param indicators with extra Resolution: indicator(symbol, period, Resolution) -> indicator(symbol, period)
             (r'self\.rsi\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.rsi(\1, \2)'),
             (r'self\.sma\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.sma(\1, \2)'),
             (r'self\.ema\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.ema(\1, \2)'),
             (r'self\.atr\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.atr(\1, \2)'),
+            (r'self\.adx\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.adx(\1, \2)'),
+            (r'self\.cci\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.cci(\1, \2)'),
+            (r'self\.mom\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.mom(\1, \2)'),
+            (r'self\.roc\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.roc(\1, \2)'),
+            (r'self\.std\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.std(\1, \2)'),
+            (r'self\.var\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.var(\1, \2)'),
+            (r'self\.wilr\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.wilr(\1, \2)'),
+            (r'self\.momp\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.momp(\1, \2)'),
+            # 3-param indicators with extra Resolution: bb(symbol, period, k, Resolution) -> bb(symbol, period, k)
+            (r'self\.bb\(([^,]+),\s*(\d+),\s*(\d+(?:\.\d+)?),\s*Resolution\.\w+\)', r'self.bb(\1, \2, \3)'),
+            (r'self\.stoch\(([^,]+),\s*(\d+),\s*(\d+),\s*Resolution\.\w+\)', r'self.stoch(\1, \2, \3)'),
+            # MACD has special signature: macd(symbol, fast, slow, signal, Resolution) -> macd(symbol, fast, slow, signal)
+            (r'self\.macd\(([^,]+),\s*(\d+),\s*(\d+),\s*(\d+),\s*Resolution\.\w+\)', r'self.macd(\1, \2, \3, \4)'),
         ]
         for pattern, replacement in indicator_signature_fixes:
             code = re.sub(pattern, replacement, code)
