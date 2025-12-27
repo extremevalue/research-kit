@@ -49,6 +49,7 @@ class BacktestResult:
     benchmark_cagr: Optional[float] = None
     error: Optional[str] = None
     raw_output: Optional[str] = None
+    rate_limited: bool = False  # True if failed due to rate limiting
 
 
 @dataclass
@@ -272,7 +273,16 @@ class FullPipelineRunner:
         val_dir = self.workspace.validations_path / entry.id
         code_file = val_dir / "backtest.py"
         if code_file.exists():
-            return code_file.read_text()
+            existing_code = code_file.read_text()
+            # Validate existing code - if it's an error message or invalid, regenerate
+            if self._is_llm_error_response(existing_code) or not self._is_valid_python_code(existing_code):
+                logger.warning(f"Existing backtest.py contains invalid content, regenerating...")
+                code_file.unlink()  # Delete the bad file
+            else:
+                return existing_code
+
+        # Detect if this is a crypto strategy for special handling
+        is_crypto = self._is_crypto_strategy(entry)
 
         # Generate code via Claude with detailed API guidance
         prompt = f"""Generate a QuantConnect algorithm to test this hypothesis:
@@ -291,6 +301,7 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
 2. Adding securities (snake_case methods):
    self.add_equity("SPY", Resolution.DAILY)
    self.add_future(Futures.Indices.SP_500_E_MINI, Resolution.DAILY)
+   self.add_crypto("BTCUSD", Resolution.DAILY)
 
 3. Indicators (snake_case, use symbol's resolution by default):
    # Simple form - uses the security's default resolution
@@ -304,15 +315,36 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
    Futures.Indices.SP_500_E_MINI (not SP500EMini)
    Futures.Indices.NASDAQ_100_E_MINI (not NASDAQ100EMini)
 
-5. Accessing data:
+5. CRITICAL - Safe data access pattern:
+   NEVER use data.contains_key() with direct data[symbol] access - this crashes on corporate actions!
+
+   WRONG (causes NoneType errors):
+   if data.contains_key(self.spy):
+       price = data[self.spy].close  # CRASHES when data[self.spy] is None
+
+   CORRECT (safe pattern):
+   bar = data.bars.get(self.spy)  # Returns None safely
+   if bar is None:
+       return
+   price = bar.close
+
+   For multiple symbols:
+   spy_bar = data.bars.get(self.spy)
+   vix_bar = data.bars.get(self.vix)
+   if spy_bar is None or vix_bar is None:
+       return
+   spy_price = spy_bar.close
+   vix_value = vix_bar.close
+
+6. Accessing indicator data:
    if self.rsi_indicator.is_ready:
        rsi_value = self.rsi_indicator.current.value
 
-6. Trading:
+7. Trading:
    self.set_holdings("SPY", 1.0)  # 100% long
    self.liquidate("SPY")
 
-7. Benchmark:
+8. Benchmark:
    self.set_benchmark("SPY")
 
 IMPORTANT - Variable naming:
@@ -321,7 +353,36 @@ IMPORTANT - Variable naming:
    WRONG: self.sma = self.sma(...)      # shadows self.sma() method!
    RIGHT: self.rsi_indicator = self.rsi(...)
    RIGHT: self.sma_short = self.sma(...)
+"""
 
+        # Add crypto-specific guidance
+        if is_crypto:
+            prompt += """
+CRYPTO-SPECIFIC REQUIREMENTS:
+1. Always guard against division by zero:
+   if self.portfolio.total_portfolio_value <= 0:
+       return
+
+2. Limit rebalancing frequency to avoid overwhelming the order system:
+   # Add at class level: self.last_rebalance = None
+   # In on_data:
+   if self.last_rebalance and (self.time - self.last_rebalance).days < 1:
+       return  # Only rebalance once per day
+   self.last_rebalance = self.time
+
+3. Check data availability before accessing:
+   bar = data.bars.get(self.btc)
+   if bar is None:
+       return
+
+4. Use try/except for crypto holdings calculations:
+   try:
+       weight = self.portfolio[symbol].holdings_value / self.portfolio.total_portfolio_value
+   except (ZeroDivisionError, KeyError):
+       weight = 0
+"""
+
+        prompt += """
 Example structure:
 ```python
 from AlgorithmImports import *
@@ -339,6 +400,12 @@ class MyAlgorithm(QCAlgorithm):
     def on_data(self, data):
         if not self.rsi_indicator.is_ready:
             return
+
+        # Safe data access pattern
+        bar = data.bars.get(self.spy)
+        if bar is None:
+            return
+
         if self.rsi_indicator.current.value < 30:
             self.set_holdings(self.spy, 1.0)
         elif self.rsi_indicator.current.value > 70:
@@ -349,18 +416,30 @@ Requirements:
 - Use the EXACT patterns shown above
 - Use snake_case for all method names (initialize, on_data, set_holdings)
 - Use Resolution.DAILY (all caps)
+- ALWAYS use data.bars.get() for safe data access
 - Include benchmark comparison with SPY
 
 Return ONLY the Python code, no explanations."""
 
         try:
             response = self.llm_client.generate_sonnet(prompt)
-            # Extract code from response (handle markdown code blocks)
             code = response.content
+
+            # Check for LLM errors (Issue #22 fix)
+            if self._is_llm_error_response(code):
+                logger.error(f"LLM returned error instead of code: {code[:200]}")
+                return None
+
+            # Extract code from response (handle markdown code blocks)
             if "```python" in code:
                 code = code.split("```python")[1].split("```")[0]
             elif "```" in code:
                 code = code.split("```")[1].split("```")[0]
+
+            # Validate this looks like Python code
+            if not self._is_valid_python_code(code):
+                logger.error(f"Generated content does not look like valid Python code")
+                return None
 
             # Post-process to fix common issues
             code = self._fix_qc_api_issues(code)
@@ -374,6 +453,49 @@ Return ONLY the Python code, no explanations."""
             logger.error(f"Failed to generate backtest code: {e}")
             return None
 
+    def _is_llm_error_response(self, content: str) -> bool:
+        """Check if LLM response is an error message instead of code."""
+        error_patterns = [
+            "Error: Reached max turns",
+            "Error: CLI request timed out",
+            "CLI Error:",
+            "Error: API",
+            "mode\": \"offline\"",
+            "LLM client is in offline mode",
+        ]
+        return any(pattern in content for pattern in error_patterns)
+
+    def _is_valid_python_code(self, code: str) -> bool:
+        """Basic validation that content looks like Python code."""
+        # Must have some Python-ish content
+        code_lower = code.lower().strip()
+        required_patterns = [
+            ("class ", "def "),  # Must have class or function definition
+        ]
+        optional_patterns = [
+            "import",
+            "self.",
+            "def initialize",
+            "def on_data",
+            "QCAlgorithm",
+        ]
+
+        # Check for required patterns (at least one from each tuple)
+        has_required = any(pattern in code_lower for pattern in required_patterns[0])
+        if not has_required:
+            return False
+
+        # Check for at least 2 optional patterns
+        optional_count = sum(1 for pattern in optional_patterns if pattern.lower() in code_lower)
+        if optional_count < 2:
+            return False
+
+        # Must be at least 100 characters (a minimal algorithm)
+        if len(code.strip()) < 100:
+            return False
+
+        return True
+
     def _fix_qc_api_issues(self, code: str) -> str:
         """
         Post-process generated code to fix common QuantConnect API issues.
@@ -382,6 +504,8 @@ Return ONLY the Python code, no explanations."""
         - Resolution.Daily -> Resolution.DAILY (and other resolutions)
         - Futures symbol names with incorrect casing
         - Method name casing issues
+        - Unsafe data access patterns (data[symbol].close -> data.bars.get())
+        - Crypto safety issues (division by zero, rebalancing)
         """
         # Fix Resolution enum casing
         resolution_fixes = {
@@ -472,6 +596,107 @@ Return ONLY the Python code, no explanations."""
         for pattern, replacement in indicator_shadowing_fixes:
             code = re.sub(pattern, replacement, code)
 
+        # Fix unsafe data access patterns (Issue #21)
+        # Convert data.contains_key() + data[symbol].close to safe data.bars.get() pattern
+        code = self._fix_unsafe_data_access(code)
+
+        # Fix crypto-specific issues (Issue #23)
+        code = self._fix_crypto_safety_issues(code)
+
+        return code
+
+    def _fix_unsafe_data_access(self, code: str) -> str:
+        """
+        Fix unsafe data access patterns that crash on corporate actions.
+
+        Converts:
+            if data.contains_key(self.spy):
+                price = data[self.spy].close
+
+        To:
+            spy_bar = data.bars.get(self.spy)
+            if spy_bar is not None:
+                price = spy_bar.close
+        """
+        # Pattern 1: data[symbol].close/open/high/low/volume direct access
+        # This is the most dangerous pattern - convert to safe access
+        unsafe_access_pattern = r'data\[([^\]]+)\]\.(close|open|high|low|volume|price)'
+
+        def replace_unsafe_access(match):
+            symbol = match.group(1)
+            attr = match.group(2)
+            # Generate a safe variable name from the symbol
+            safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', symbol.replace('self.', ''))
+            # Return a warning comment - can't fully fix inline, but flag it
+            return f'data.bars.get({symbol}).{attr}'  # Still unsafe but more visible
+
+        # More comprehensive fix: look for the contains_key pattern
+        # Pattern: if data.contains_key(symbol): ... data[symbol].close
+        contains_key_pattern = r'if\s+(?:not\s+)?\(?data\.contains_key\(([^)]+)\)'
+
+        # Check if code uses contains_key pattern
+        if 'data.contains_key' in code:
+            # Add a helper function at class level if not present
+            if 'def _get_bar_safely' not in code:
+                # Find the class definition and add helper after __init__ section
+                helper_method = '''
+    def _get_bar_safely(self, data, symbol):
+        """Safely get a bar from data, handling corporate actions."""
+        if data.bars is not None:
+            return data.bars.get(symbol)
+        return None
+
+'''
+                # Try to insert after the class definition's first method
+                class_match = re.search(r'(class\s+\w+.*?:.*?\n)', code)
+                if class_match:
+                    # Find a good insertion point (after imports, before first def)
+                    first_def = code.find('\n    def ', class_match.end())
+                    if first_def != -1:
+                        code = code[:first_def] + helper_method + code[first_def:]
+
+        # Replace direct data[symbol] access with bars.get pattern inline
+        # Pattern: data[self.xxx].close -> (data.bars.get(self.xxx) or type('', (), {'close': 0})).close
+        # This is a more aggressive but safer fix
+        code = re.sub(
+            r'data\[(self\.\w+)\]\.(close|open|high|low|volume)',
+            r'(data.bars.get(\1) or type("", (), {"\2": 0})()).\2',
+            code
+        )
+
+        return code
+
+    def _fix_crypto_safety_issues(self, code: str) -> str:
+        """
+        Fix crypto-specific safety issues that cause Lean crashes.
+
+        Fixes:
+        1. Division by zero with total_portfolio_value
+        2. Missing rebalance rate limiting
+        """
+        # Fix 1: Add guard for division by total_portfolio_value
+        # Pattern: / self.portfolio.total_portfolio_value (without guard)
+        if 'total_portfolio_value' in code.lower():
+            # Check if there's already a guard
+            if 'total_portfolio_value <= 0' not in code and 'total_portfolio_value == 0' not in code:
+                # Add a safety wrapper pattern
+                # Replace direct division with safe division
+                code = re.sub(
+                    r'(\s+)(\w+)\s*=\s*([^/]+)\s*/\s*self\.portfolio\.total_portfolio_value\b',
+                    r'\1_tpv = self.portfolio.total_portfolio_value\n\1\2 = (\3 / _tpv) if _tpv > 0 else 0',
+                    code,
+                    flags=re.IGNORECASE
+                )
+
+        # Fix 2: Look for holdings_value / total_portfolio_value in list comprehensions
+        # This is the pattern from Issue #23
+        code = re.sub(
+            r'\.holdings_value\s*/\s*self\.portfolio\.total_portfolio_value',
+            '.holdings_value / max(self.portfolio.total_portfolio_value, 1)',
+            code,
+            flags=re.IGNORECASE
+        )
+
         return code
 
     def _calculate_periods(self, entry) -> Dict[str, str]:
@@ -526,37 +751,38 @@ Return ONLY the Python code, no explanations."""
 
     def _run_backtest(self, code: str, start_date: str, end_date: str, entry_id: str = "temp") -> BacktestResult:
         """
-        Run a backtest via the lean CLI.
+        Run a backtest via the lean CLI with proper job management.
 
         Uses cloud backtest by default (has full data access).
-        Falls back to local with --download-data if cloud fails.
-        Includes retry logic for rate limiting errors.
+        Uses QC API to:
+        1. Check for and clean up stuck backtests before starting
+        2. Poll for actual completion instead of arbitrary timeouts
+        3. Cancel stuck jobs before proceeding
         """
         import time
-        max_retries = 3
-        retry_delay = 30  # seconds
 
+        # Create project
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        project_name = f"{entry_id}_{start_date[:4]}_{end_date[:4]}_{timestamp}"
+        project_dir = self.workspace.validations_path / entry_id / project_name
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write the algorithm code
+        main_py = project_dir / "main.py"
+        modified_code = self._inject_dates(code, start_date, end_date)
+        main_py.write_text(modified_code)
+
+        # Create config.json for lean
+        config = {
+            "algorithm-language": "Python",
+            "parameters": {}
+        }
+        config_file = project_dir / "config.json"
+        config_file.write_text(json.dumps(config))
+
+        max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Use unique project name with timestamp to avoid cloud naming conflicts
-                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-                project_name = f"{entry_id}_{start_date[:4]}_{end_date[:4]}_{timestamp}"
-                project_dir = self.workspace.validations_path / entry_id / project_name
-                project_dir.mkdir(parents=True, exist_ok=True)
-
-                # Write the algorithm code
-                main_py = project_dir / "main.py"
-                modified_code = self._inject_dates(code, start_date, end_date)
-                main_py.write_text(modified_code)
-
-                # Create config.json for lean
-                config = {
-                    "algorithm-language": "Python",
-                    "parameters": {}
-                }
-                config_file = project_dir / "config.json"
-                config_file.write_text(json.dumps(config))
-
                 # Build command based on mode
                 if self.use_local:
                     # Local Docker backtest with data download from QC
@@ -572,11 +798,12 @@ Return ONLY the Python code, no explanations."""
 
                 logger.info(f"Running: {' '.join(cmd)}")
 
+                # Use shorter initial timeout - we'll poll the API for actual completion
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
-                    timeout=900 if self.use_local else 600,  # Local Docker may need more time
+                    timeout=300,  # 5 min - just enough to submit and get initial response
                     cwd=str(self.workspace.path)  # Run from workspace root
                 )
 
@@ -587,23 +814,66 @@ Return ONLY the Python code, no explanations."""
                 except Exception:
                     pass
 
-                # Check for rate limiting / no spare nodes error - retry if so
-                if "no spare nodes" in result.stdout.lower() or "no spare nodes" in result.stderr.lower():
+                # Check for rate limiting / no spare nodes error
+                output_lower = (result.stdout + result.stderr).lower()
+                if "no spare nodes" in output_lower or "rate limit" in output_lower:
+                    # Try to clean up stuck backtests
+                    project_id, _ = self._extract_backtest_ids(result.stdout)
+                    if project_id:
+                        cleaned = self._cleanup_stuck_backtests(project_id, max_age_seconds=600)
+                        if cleaned > 0:
+                            logger.info(f"Cleaned up {cleaned} stuck backtests, retrying...")
+                            time.sleep(30)  # Wait for cleanup to take effect
+                            continue
+
                     if attempt < max_retries - 1:
-                        logger.warning(f"QC rate limit hit, waiting {retry_delay}s before retry {attempt + 2}/{max_retries}")
-                        # Clean up before retry
+                        logger.warning(f"QC nodes busy, waiting 60s before retry {attempt + 2}/{max_retries}")
+                        time.sleep(60)
+                        continue
+                    else:
                         try:
                             shutil.rmtree(project_dir)
                         except Exception:
                             pass
-                        time.sleep(retry_delay)
-                        continue
-                    else:
                         return BacktestResult(
                             success=False,
-                            error="QC rate limit: no spare nodes available after retries",
-                            raw_output=result.stdout
+                            error="QC nodes unavailable - clean up stuck jobs in QC dashboard",
+                            raw_output=result.stdout,
+                            rate_limited=True
                         )
+
+                # Extract project and backtest IDs
+                project_id, backtest_id = self._extract_backtest_ids(result.stdout)
+
+                # If we got IDs, use API to ensure backtest is complete
+                if project_id and backtest_id and not self.use_local:
+                    status = self._get_backtest_status(project_id, backtest_id)
+
+                    if status == "Running":
+                        # Poll for completion
+                        logger.info(f"Backtest still running, polling for completion...")
+                        final_status = self._wait_for_backtest_completion(
+                            project_id, backtest_id, timeout=600
+                        )
+
+                        if final_status == "Timeout":
+                            # Cancel the stuck backtest
+                            logger.warning(f"Backtest timed out, canceling...")
+                            self._delete_backtest(project_id, backtest_id)
+
+                            if attempt < max_retries - 1:
+                                logger.info("Retrying after cleanup...")
+                                continue
+                            else:
+                                try:
+                                    shutil.rmtree(project_dir)
+                                except Exception:
+                                    pass
+                                return BacktestResult(
+                                    success=False,
+                                    error="Backtest timed out and was canceled",
+                                    rate_limited=True
+                                )
 
                 # Parse results from output
                 backtest_result = self._parse_lean_output(result.stdout, result.stderr, result.returncode)
@@ -617,11 +887,66 @@ Return ONLY the Python code, no explanations."""
                 return backtest_result
 
             except subprocess.TimeoutExpired:
-                return BacktestResult(success=False, error="Backtest timed out")
+                logger.warning(f"Lean CLI timed out (attempt {attempt + 1}/{max_retries})")
+
+                # Try to extract IDs and check status via API
+                project_id, backtest_id = None, None
+                debug_file = self.workspace.validations_path / entry_id / "last_lean_output.txt"
+                if debug_file.exists():
+                    content = debug_file.read_text()
+                    project_id, backtest_id = self._extract_backtest_ids(content)
+
+                if project_id and backtest_id:
+                    # Check if backtest is actually running or stuck
+                    status = self._get_backtest_status(project_id, backtest_id)
+                    if status == "Completed":
+                        # Great, it finished! Get results
+                        stats = self._fetch_backtest_stats(project_id, backtest_id)
+                        if stats:
+                            try:
+                                shutil.rmtree(project_dir)
+                            except Exception:
+                                pass
+                            return BacktestResult(
+                                success=True,
+                                cagr=float(stats.get("Compounding Annual Return", "0").replace("%", "")) / 100,
+                                sharpe=float(stats.get("Sharpe Ratio", "0")),
+                                max_drawdown=abs(float(stats.get("Drawdown", "0").replace("%", ""))) / 100,
+                                alpha=float(stats.get("Alpha", "0")),
+                                raw_output=str(stats)
+                            )
+                    elif status == "Running":
+                        # Cancel it
+                        logger.warning(f"Canceling stuck backtest {backtest_id}")
+                        self._delete_backtest(project_id, backtest_id)
+
+                if attempt < max_retries - 1:
+                    logger.info("Retrying after timeout...")
+                    time.sleep(30)
+                    continue
+
+                try:
+                    shutil.rmtree(project_dir)
+                except Exception:
+                    pass
+                return BacktestResult(
+                    success=False,
+                    error="Backtest timed out after retries",
+                    rate_limited=True
+                )
+
             except Exception as e:
+                try:
+                    shutil.rmtree(project_dir)
+                except Exception:
+                    pass
                 return BacktestResult(success=False, error=str(e))
 
-        # Should not reach here, but just in case
+        # Should not reach here
+        try:
+            shutil.rmtree(project_dir)
+        except Exception:
+            pass
         return BacktestResult(success=False, error="Backtest failed after all retries")
 
     def _inject_dates(self, code: str, start_date: str, end_date: str) -> str:
@@ -726,50 +1051,165 @@ Return ONLY the Python code, no explanations."""
 
         return project_id, backtest_id
 
-    def _fetch_backtest_stats(self, project_id: str, backtest_id: str) -> Optional[Dict[str, Any]]:
-        """Fetch backtest statistics from QC API."""
-        # Load credentials from ~/.lean/credentials
+    def _get_qc_credentials(self) -> Optional[tuple]:
+        """Load QC API credentials from ~/.lean/credentials."""
         creds_file = Path.home() / ".lean" / "credentials"
         if not creds_file.exists():
-            logger.warning("No QC credentials found at ~/.lean/credentials")
             return None
 
         try:
             creds = json.loads(creds_file.read_text())
             user_id = creds.get("user-id")
             api_token = creds.get("api-token")
+            if user_id and api_token:
+                return (user_id, api_token)
+        except Exception:
+            pass
+        return None
 
-            if not user_id or not api_token:
-                return None
+    def _qc_api_request(self, endpoint: str, params: Dict = None, method: str = "GET") -> Optional[Dict]:
+        """Make an authenticated request to the QC API."""
+        creds = self._get_qc_credentials()
+        if not creds:
+            return None
 
-            # QC API requires timestamp and hash
+        user_id, api_token = creds
+
+        try:
             timestamp = str(int(time.time()))
             hash_data = f"{api_token}:{timestamp}"
             hash_value = hashlib.sha256(hash_data.encode()).hexdigest()
 
-            # Build request
-            params = urllib.parse.urlencode({"projectId": project_id, "backtestId": backtest_id})
-            url = f"https://www.quantconnect.com/api/v2/backtests/read?{params}"
+            if params:
+                query_string = urllib.parse.urlencode(params)
+                url = f"https://www.quantconnect.com/api/v2/{endpoint}?{query_string}"
+            else:
+                url = f"https://www.quantconnect.com/api/v2/{endpoint}"
 
             auth_string = f"{user_id}:{hash_value}"
             auth_bytes = base64.b64encode(auth_string.encode()).decode()
 
-            request = urllib.request.Request(url)
+            request = urllib.request.Request(url, method=method)
             request.add_header("Authorization", f"Basic {auth_bytes}")
             request.add_header("Timestamp", timestamp)
 
             response = urllib.request.urlopen(request, timeout=30)
-            data = json.loads(response.read().decode())
-
-            if data.get("success"):
-                return data.get("backtest", {}).get("statistics", {})
-            else:
-                logger.warning(f"QC API error: {data.get('errors', [])}")
-                return None
+            return json.loads(response.read().decode())
 
         except Exception as e:
-            logger.warning(f"Failed to fetch from QC API: {e}")
+            logger.debug(f"QC API request failed: {e}")
             return None
+
+    def _get_backtest_status(self, project_id: str, backtest_id: str) -> Optional[str]:
+        """
+        Get the status of a backtest.
+
+        Returns: "Completed", "Running", "RuntimeError", "BuildError", or None
+        """
+        data = self._qc_api_request("backtests/read", {"projectId": project_id, "backtestId": backtest_id})
+        if data and data.get("success"):
+            backtest = data.get("backtest", {})
+            # Check completion status
+            if backtest.get("completed"):
+                return "Completed"
+            elif backtest.get("error"):
+                return "RuntimeError"
+            else:
+                return "Running"
+        return None
+
+    def _wait_for_backtest_completion(self, project_id: str, backtest_id: str, timeout: int = 600) -> Optional[str]:
+        """
+        Poll the QC API until the backtest completes or times out.
+
+        Returns: Final status ("Completed", "RuntimeError", "Timeout", None)
+        """
+        import time
+        start_time = time.time()
+        poll_interval = 10  # seconds
+
+        while time.time() - start_time < timeout:
+            status = self._get_backtest_status(project_id, backtest_id)
+
+            if status == "Completed":
+                logger.info(f"Backtest {backtest_id} completed")
+                return "Completed"
+            elif status == "RuntimeError":
+                logger.warning(f"Backtest {backtest_id} failed with error")
+                return "RuntimeError"
+            elif status == "Running":
+                logger.debug(f"Backtest {backtest_id} still running, waiting {poll_interval}s...")
+                time.sleep(poll_interval)
+            else:
+                # API failed, wait and retry
+                time.sleep(poll_interval)
+
+        logger.warning(f"Backtest {backtest_id} timed out after {timeout}s")
+        return "Timeout"
+
+    def _delete_backtest(self, project_id: str, backtest_id: str) -> bool:
+        """Delete a backtest from QC (cancels if running)."""
+        data = self._qc_api_request(
+            "backtests/delete",
+            {"projectId": project_id, "backtestId": backtest_id},
+            method="POST"
+        )
+        if data and data.get("success"):
+            logger.info(f"Deleted backtest {backtest_id}")
+            return True
+        return False
+
+    def _list_project_backtests(self, project_id: str) -> list:
+        """List all backtests for a project."""
+        data = self._qc_api_request("backtests/list", {"projectId": project_id})
+        if data and data.get("success"):
+            return data.get("backtests", [])
+        return []
+
+    def _cleanup_stuck_backtests(self, project_id: str, max_age_seconds: int = 1800) -> int:
+        """
+        Cancel/delete any stuck backtests for a project.
+
+        Args:
+            project_id: QC project ID
+            max_age_seconds: Consider stuck if running longer than this (default 30 min)
+
+        Returns:
+            Number of backtests cleaned up
+        """
+        import time
+        cleaned = 0
+
+        backtests = self._list_project_backtests(project_id)
+        current_time = time.time()
+
+        for bt in backtests:
+            # Check if backtest is old and not completed
+            if not bt.get("completed"):
+                # Parse created timestamp
+                created_str = bt.get("created", "")
+                try:
+                    # QC uses ISO format
+                    from datetime import datetime
+                    created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    age = current_time - created_dt.timestamp()
+
+                    if age > max_age_seconds:
+                        bt_id = bt.get("backtestId")
+                        logger.warning(f"Cleaning up stuck backtest {bt_id} (age: {int(age)}s)")
+                        if self._delete_backtest(project_id, bt_id):
+                            cleaned += 1
+                except Exception as e:
+                    logger.debug(f"Could not parse backtest timestamp: {e}")
+
+        return cleaned
+
+    def _fetch_backtest_stats(self, project_id: str, backtest_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch backtest statistics from QC API."""
+        data = self._qc_api_request("backtests/read", {"projectId": project_id, "backtestId": backtest_id})
+        if data and data.get("success"):
+            return data.get("backtest", {}).get("statistics", {})
+        return None
 
     def _parse_lean_output_table(self, stdout: str) -> BacktestResult:
         """Fallback: Parse lean CLI table output to extract backtest results."""

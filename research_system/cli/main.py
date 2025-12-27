@@ -11,9 +11,11 @@ Commands:
     ingest      Process files from inbox into catalog
     catalog     Manage catalog entries
     data        Manage data registry
-    validate    Run validation pipeline
+    run         Run the full validation + expert review loop
+    validate    Run validation pipeline (step-by-step)
     combine     Generate and manage combinations
     analyze     Run persona-based analysis
+    ideate      Generate strategy ideas using multiple personas
     migrate     Migrate from external sources
 
 Run 'research <command> --help' for more information on a command.
@@ -86,6 +88,7 @@ For more information, visit: https://github.com/your-repo/research-system
     _add_validate_parser(subparsers)
     _add_combine_parser(subparsers)
     _add_analyze_parser(subparsers)
+    _add_ideate_parser(subparsers)  # Multi-persona ideation
     _add_migrate_parser(subparsers)
 
     return parser
@@ -439,6 +442,53 @@ Personas:
     show_parser.set_defaults(func=cmd_analyze_show)
 
     parser.set_defaults(func=lambda args: parser.print_help())
+
+
+def _add_ideate_parser(subparsers):
+    """Add ideate command parser."""
+    parser = subparsers.add_parser(
+        "ideate",
+        help="Generate strategy ideas using multiple personas",
+        description="""
+Generate novel strategy ideas using three diverse personas:
+
+Personas:
+  - edge-hunter        : Finds timing and micro-structure edges
+  - macro-strategist   : Cross-asset, regime-aware themes
+  - quant-archaeologist: Rehabilitates failed approaches
+
+Each persona generates 1-2 ideas based on:
+  - Available data in the registry
+  - Validated and invalidated catalog entries
+  - Untested ideas in the pipeline
+
+Output: 3-6 new IDEA entries added to the catalog.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=2,
+        help="Target ideas per persona (default: 2)"
+    )
+    parser.add_argument(
+        "--persona",
+        choices=["edge-hunter", "macro-strategist", "quant-archaeologist"],
+        help="Run only a specific persona"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate ideas but don't add to catalog"
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save raw ideation results to file"
+    )
+    parser.set_defaults(func=cmd_ideate)
 
 
 def _add_migrate_parser(subparsers):
@@ -1499,6 +1549,127 @@ def cmd_analyze_show(args):
 
     if analysis.get("final_recommendation"):
         print(f"Final Recommendation: {analysis['final_recommendation']}")
+
+    return 0
+
+
+def cmd_ideate(args):
+    """Generate strategy ideas using multiple personas."""
+    ws = require_workspace(args.workspace)
+
+    # Initialize LLM client
+    llm_client = None
+    try:
+        from research_system.llm.client import LLMClient, Backend
+        llm_client = LLMClient()
+        if llm_client.is_offline:
+            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI)")
+            print("Ideation will return prompts only, no actual ideas generated.")
+            print()
+        elif llm_client.backend == Backend.CLI:
+            print("Using Claude CLI backend.")
+        elif llm_client.backend == Backend.API:
+            print("Using Anthropic API backend.")
+    except Exception as e:
+        print(f"Warning: Could not initialize LLM client: {e}")
+        print("Running in offline mode.")
+
+    from agents.ideation import IdeationRunner, save_ideation_result
+
+    runner = IdeationRunner(ws, llm_client)
+
+    if args.persona:
+        # Run single persona
+        print(f"Running ideation with {args.persona}...")
+        print()
+
+        ideas, meta = runner.run_persona(args.persona)
+
+        if not ideas:
+            print("No ideas generated.")
+            if meta.get("error"):
+                print(f"Error: {meta['error']}")
+            return 1
+
+        print(f"Generated {len(ideas)} ideas:")
+        print()
+
+        for i, idea in enumerate(ideas, 1):
+            print(f"[{i}] {idea.name}")
+            print(f"    Thesis: {idea.thesis[:100]}...")
+            print(f"    Hypothesis: {idea.hypothesis[:100]}...")
+            print(f"    Data: {', '.join(idea.data_requirements[:3])}")
+            print(f"    Confidence: {idea.confidence}")
+            print()
+
+        if not args.dry_run:
+            # Create a result to add to catalog
+            from agents.ideation import IdeationResult
+            result = IdeationResult(ideas=ideas, personas_run=[args.persona])
+            created_ids = runner.add_ideas_to_catalog(result)
+            print(f"Added {len(created_ids)} ideas to catalog: {', '.join(created_ids)}")
+
+    else:
+        # Run all personas
+        print("Running multi-persona ideation...")
+        print("Personas: edge-hunter, macro-strategist, quant-archaeologist")
+        print()
+
+        result = runner.run(count=args.count)
+
+        if not result.ideas:
+            print("No ideas generated.")
+            if result.errors:
+                print("Errors:")
+                for err in result.errors:
+                    print(f"  - {err}")
+            return 1
+
+        print(f"Generated {len(result.ideas)} ideas from {len(result.personas_run)} personas:")
+        print()
+
+        # Group by persona
+        by_persona = {}
+        for idea in result.ideas:
+            if idea.persona not in by_persona:
+                by_persona[idea.persona] = []
+            by_persona[idea.persona].append(idea)
+
+        for persona, ideas in by_persona.items():
+            print(f"--- {persona} ({len(ideas)} ideas) ---")
+            for idea in ideas:
+                print(f"  * {idea.name}")
+                print(f"    {idea.thesis[:80]}...")
+                print(f"    Confidence: {idea.confidence}")
+            print()
+
+        # Show data gaps and suggestions
+        if result.data_gaps:
+            print("Data Gaps Identified:")
+            for gap in result.data_gaps[:5]:
+                print(f"  - {gap}")
+            print()
+
+        if result.research_suggestions:
+            print("Research Suggestions:")
+            for suggestion in result.research_suggestions[:5]:
+                print(f"  - {suggestion}")
+            print()
+
+        # Save results if requested
+        if args.save:
+            output_dir = ws.path / "ideation"
+            output_file = save_ideation_result(result, output_dir)
+            print(f"Saved results to: {output_file}")
+
+        # Add to catalog unless dry-run
+        if not args.dry_run:
+            created_ids = runner.add_ideas_to_catalog(result)
+            print(f"Added {len(created_ids)} ideas to catalog:")
+            for entry_id in created_ids:
+                print(f"  - {entry_id}")
+        else:
+            print("[DRY-RUN] Ideas not added to catalog")
 
     return 0
 
