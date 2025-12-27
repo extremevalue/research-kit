@@ -26,6 +26,7 @@ from research_system.core.workspace import Workspace
 from research_system.core.catalog import Catalog
 from research_system.core.data_registry import DataRegistry
 from research_system.ingest.extractor import MetadataExtractor, ExtractionResult
+from research_system.ingest.data_extractor import DataFileExtractor, DataExtractionResult, is_data_json
 from research_system.llm.client import LLMClient
 
 
@@ -98,6 +99,7 @@ class IngestProcessor:
     - Preserves subdirectory structure from inbox
     - Moves files to catalog/sources/ (if entry created) or reviewed/ (if skipped)
     - Auto-recognition of QuantConnect Native data sources
+    - Data file ingestion (.csv, .xls, .xlsx, .parquet, .json)
     """
 
     # Files to ignore in inbox
@@ -105,6 +107,9 @@ class IngestProcessor:
 
     # Hash index file for tracking processed content
     HASH_INDEX_FILE = "processed_hashes.json"
+
+    # Data file extensions (routed to DataFileExtractor)
+    DATA_EXTENSIONS = {".csv", ".xls", ".xlsx", ".parquet"}
 
     def __init__(
         self,
@@ -123,6 +128,7 @@ class IngestProcessor:
         self.catalog = Catalog(workspace.catalog_path)
         self.registry = DataRegistry(workspace.data_registry_path)
         self.extractor = MetadataExtractor(llm_client)
+        self.data_extractor = DataFileExtractor(llm_client)
         self._processed_hashes: Optional[Dict[str, str]] = None  # hash -> entry_id
 
     def _get_hash_index_path(self) -> Path:
@@ -258,7 +264,16 @@ class IngestProcessor:
                 result.destination = "reviewed"
             return result
 
-        # Stage 1: LLM Extraction
+        # Route data files to data extractor
+        suffix = file_path.suffix.lower()
+        if suffix in self.DATA_EXTENSIONS:
+            return self._process_data_file(file_path, content_hash, dry_run)
+
+        # Special case: .json could be data or document
+        if suffix == ".json" and is_data_json(file_path):
+            return self._process_data_file(file_path, content_hash, dry_run)
+
+        # Stage 1: LLM Extraction (for documents/code)
         extraction = self.extractor.extract(file_path)
 
         if not extraction.success:
@@ -458,6 +473,147 @@ class IngestProcessor:
 
         # Move file
         shutil.move(str(file_path), str(dest_path))
+
+    def _process_data_file(
+        self,
+        file_path: Path,
+        content_hash: str,
+        dry_run: bool
+    ) -> IngestResult:
+        """
+        Process a data file through the data-specific pipeline.
+
+        Args:
+            file_path: Path to the data file
+            content_hash: Pre-computed content hash
+            dry_run: If True, don't make changes
+
+        Returns:
+            IngestResult with processing outcome
+        """
+        relative_path = self._get_relative_path(file_path)
+        result = IngestResult(
+            filename=file_path.name,
+            relative_path=relative_path,
+            content_hash=content_hash,
+            dry_run=dry_run
+        )
+
+        # Stage 1: Data file extraction (parsing + LLM)
+        extraction = self.data_extractor.extract(file_path)
+
+        if not extraction.success:
+            result.success = False
+            result.skipped_reason = extraction.error or "Data extraction failed"
+            if not dry_run:
+                self._move_to_reviewed(file_path, content_hash)
+                result.destination = "reviewed"
+            return result
+
+        result.entry_type = "data"
+
+        if dry_run:
+            result.success = True
+            result.entry_id = "[DRY-RUN] Would create DATA-XXX"
+            result.status = "UNTESTED"
+            return result
+
+        # Stage 2: Create catalog entry and register data
+        try:
+            file_info = extraction.file_info
+            metadata = extraction.metadata
+
+            # Prepare source path
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            hash_prefix = content_hash[:8]
+
+            if "/" in relative_path or "\\" in relative_path:
+                subdir = str(Path(relative_path).parent)
+                filename = f"{timestamp}_{hash_prefix}_{file_path.name}"
+                sources_path = self.workspace.sources_path / subdir / filename
+            else:
+                filename = f"{timestamp}_{hash_prefix}_{file_path.name}"
+                sources_path = self.workspace.sources_path / filename
+
+            # Create catalog entry
+            entry = self.catalog.add(
+                entry_type="data",
+                name=metadata.get("name", file_path.stem)[:100],
+                source_files=[str(sources_path.relative_to(self.workspace.path))],
+                summary=metadata.get("description"),
+                tags=metadata.get("tags", [])
+            )
+
+            result.entry_id = entry.id
+            result.success = True
+            result.status = "UNTESTED"
+
+            # Register in data registry
+            self._register_data_source(entry.id, extraction, sources_path)
+
+            # Move file to sources
+            self._move_to_sources(file_path, content_hash)
+            result.destination = "catalog/sources"
+
+            # Record hash for duplicate detection
+            self._save_processed_hash(content_hash, entry.id)
+
+        except Exception as e:
+            result.success = False
+            result.error = str(e)
+
+        return result
+
+    def _register_data_source(
+        self,
+        entry_id: str,
+        extraction: DataExtractionResult,
+        sources_path: Path
+    ):
+        """
+        Register an ingested data file in the data registry.
+
+        Args:
+            entry_id: Catalog entry ID (e.g., DATA-021)
+            extraction: Data extraction result with file info and metadata
+            sources_path: Path where file will be stored
+        """
+        file_info = extraction.file_info
+        metadata = extraction.metadata
+
+        # Generate source_id from entry_id: DATA-021 -> data_021
+        source_id = entry_id.lower().replace("-", "_")
+
+        # Build coverage info
+        coverage = None
+        if file_info.date_range:
+            coverage = {
+                "start_date": file_info.date_range[0],
+                "end_date": file_info.date_range[1],
+                "frequency": "unknown"  # Could be enhanced later
+            }
+
+        # Register with internal_curated tier
+        try:
+            self.registry.add(
+                source_id=source_id,
+                name=metadata.get("name", entry_id),
+                data_type=metadata.get("type", "unknown"),
+                description=metadata.get("description"),
+                availability={
+                    "internal_curated": {
+                        "available": True,
+                        "path": str(sources_path.relative_to(self.workspace.path)),
+                        "ingested_at": datetime.utcnow().isoformat() + "Z"
+                    }
+                },
+                coverage=coverage,
+                columns=file_info.columns,
+                usage_notes=f"Ingested from {file_info.file_format} file. {file_info.row_count} rows."
+            )
+        except ValueError:
+            # Source already exists - that's fine, we just created the catalog entry
+            pass
 
     def process_text(
         self,
