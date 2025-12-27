@@ -1056,14 +1056,14 @@ Return ONLY the Python code, no explanations."""
                 # Check for rate limiting / no spare nodes error
                 output_lower = (result.stdout + result.stderr).lower()
                 if "no spare nodes" in output_lower or "rate limit" in output_lower:
-                    # Try to clean up stuck backtests
-                    project_id, _ = self._extract_backtest_ids(result.stdout)
-                    if project_id:
-                        cleaned = self._cleanup_stuck_backtests(project_id, max_age_seconds=600)
-                        if cleaned > 0:
-                            logger.info(f"Cleaned up {cleaned} stuck backtests, retrying...")
-                            time.sleep(30)  # Wait for cleanup to take effect
-                            continue
+                    # Clean up ALL running backtests across ALL projects (not just current)
+                    # Use aggressive mode: clean any non-completed backtest older than 60s
+                    logger.warning("QC nodes busy - scanning all projects for running backtests...")
+                    cleaned = self._cleanup_all_running_backtests()
+                    if cleaned > 0:
+                        logger.info(f"Cleaned up {cleaned} running backtests, waiting 30s for nodes to free...")
+                        time.sleep(30)
+                        continue
 
                     if attempt < max_retries - 1:
                         logger.warning(f"QC nodes busy, waiting 60s before retry {attempt + 2}/{max_retries}")
@@ -1473,6 +1473,72 @@ Return ONLY the Python code, no explanations."""
             time.sleep(10)
         else:
             logger.info("No stuck backtests found")
+
+        return total_cleaned
+
+    def _cleanup_all_running_backtests(self, min_age_seconds: int = 60) -> int:
+        """
+        Aggressively clean up ANY running backtests across ALL projects.
+
+        This is called when QC reports "no spare nodes" to free up the backtest node.
+        Unlike _cleanup_all_stuck_backtests, this:
+        - Checks ALL projects (not limited to 20)
+        - Cleans up any non-completed backtest older than min_age_seconds
+
+        Args:
+            min_age_seconds: Only clean backtests older than this (default 60s)
+                            This avoids canceling backtests that just started
+
+        Returns:
+            Total number of backtests cleaned up
+        """
+        total_cleaned = 0
+
+        # Get ALL projects
+        data = self._qc_api_request("projects/read")
+        if not data or not data.get("success"):
+            logger.warning("Could not fetch QC projects for cleanup")
+            return 0
+
+        projects = data.get("projects", [])
+        logger.info(f"Scanning {len(projects)} projects for running backtests...")
+
+        current_time = time.time()
+
+        for proj in projects:
+            proj_id = str(proj.get("projectId", ""))
+            if not proj_id:
+                continue
+
+            backtests = self._list_project_backtests(proj_id)
+
+            for bt in backtests:
+                # Check if backtest is not completed
+                if not bt.get("completed"):
+                    bt_id = bt.get("backtestId")
+                    created_str = bt.get("created", "")
+
+                    # Check age
+                    try:
+                        from datetime import datetime
+                        created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                        age = current_time - created_dt.timestamp()
+
+                        if age > min_age_seconds:
+                            proj_name = proj.get("name", proj_id)[:40]
+                            logger.warning(f"Canceling running backtest {bt_id} in {proj_name} (age: {int(age)}s)")
+                            if self._delete_backtest(proj_id, bt_id):
+                                total_cleaned += 1
+                    except Exception as e:
+                        # If we can't parse the date, cancel it anyway (safer)
+                        logger.warning(f"Canceling backtest {bt_id} (could not determine age)")
+                        if self._delete_backtest(proj_id, bt_id):
+                            total_cleaned += 1
+
+        if total_cleaned > 0:
+            logger.info(f"Canceled {total_cleaned} running backtests")
+        else:
+            logger.info("No running backtests found across any project")
 
         return total_cleaned
 
