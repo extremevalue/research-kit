@@ -545,30 +545,73 @@ Return ONLY the Python code, no explanations."""
         # Fix method casing (PascalCase -> snake_case for common methods)
         # Only fix standalone method calls, not class names
         method_fixes = [
+            # Setup methods
             (r'\bself\.SetStartDate\b', 'self.set_start_date'),
             (r'\bself\.SetEndDate\b', 'self.set_end_date'),
             (r'\bself\.SetCash\b', 'self.set_cash'),
             (r'\bself\.SetBenchmark\b', 'self.set_benchmark'),
+            (r'\bself\.SetWarmUp\b', 'self.set_warm_up'),
+            (r'\bself\.SetWarmup\b', 'self.set_warm_up'),
+            # Adding securities
             (r'\bself\.AddEquity\b', 'self.add_equity'),
             (r'\bself\.AddFuture\b', 'self.add_future'),
             (r'\bself\.AddCrypto\b', 'self.add_crypto'),
+            (r'\bself\.AddForex\b', 'self.add_forex'),
+            (r'\bself\.AddOption\b', 'self.add_option'),
+            # Trading
             (r'\bself\.SetHoldings\b', 'self.set_holdings'),
             (r'\bself\.Liquidate\b', 'self.liquidate'),
+            (r'\bself\.MarketOrder\b', 'self.market_order'),
+            (r'\bself\.LimitOrder\b', 'self.limit_order'),
+            (r'\bself\.StopMarketOrder\b', 'self.stop_market_order'),
+            # Logging
             (r'\bself\.Debug\b', 'self.debug'),
             (r'\bself\.Log\b', 'self.log'),
+            (r'\bself\.Error\b', 'self.error'),
+            # Indicators (comprehensive list)
             (r'\bself\.RSI\b', 'self.rsi'),
             (r'\bself\.SMA\b', 'self.sma'),
             (r'\bself\.EMA\b', 'self.ema'),
             (r'\bself\.MACD\b', 'self.macd'),
             (r'\bself\.BB\b', 'self.bb'),
             (r'\bself\.ATR\b', 'self.atr'),
+            (r'\bself\.ADX\b', 'self.adx'),
+            (r'\bself\.STOCH\b', 'self.stoch'),
+            (r'\bself\.STO\b', 'self.sto'),
+            (r'\bself\.MOM\b', 'self.mom'),
+            (r'\bself\.AROON\b', 'self.aroon'),
+            (r'\bself\.CCI\b', 'self.cci'),
+            (r'\bself\.WILR\b', 'self.wilr'),
+            (r'\bself\.ROC\b', 'self.roc'),
+            (r'\bself\.MOMP\b', 'self.momp'),
+            (r'\bself\.STD\b', 'self.std'),
+            (r'\bself\.VAR\b', 'self.var'),
+            # Scheduling
+            (r'\bself\.Schedule\.On\b', 'self.schedule.on'),
+            (r'\bself\.DateRules\b', 'self.date_rules'),
+            (r'\bself\.TimeRules\b', 'self.time_rules'),
+            # Data access
+            (r'\bself\.History\b', 'self.history'),
+            (r'\bself\.Securities\b', 'self.securities'),
+            (r'\bself\.Portfolio\b', 'self.portfolio'),
+            (r'\bself\.Time\b(?!\w)', 'self.time'),
+            (r'\bself\.IsWarmingUp\b', 'self.is_warming_up'),
+            # Method definitions
             (r'\bdef Initialize\b', 'def initialize'),
             (r'\bdef OnData\b', 'def on_data'),
             (r'\bdef OnOrderEvent\b', 'def on_order_event'),
             (r'\bdef OnEndOfDay\b', 'def on_end_of_day'),
+            (r'\bdef OnEndOfAlgorithm\b', 'def on_end_of_algorithm'),
+            (r'\bdef OnSecuritiesChanged\b', 'def on_securities_changed'),
+            # Property access
             (r'\.Symbol\b', '.symbol'),
             (r'\.IsReady\b', '.is_ready'),
             (r'\.Current\.Value\b', '.current.value'),
+            (r'\.IsLong\b', '.is_long'),
+            (r'\.IsShort\b', '.is_short'),
+            (r'\.Invested\b', '.invested'),
+            (r'\.HoldingsValue\b', '.holdings_value'),
+            (r'\.TotalPortfolioValue\b', '.total_portfolio_value'),
         ]
         for pattern, replacement in method_fixes:
             code = re.sub(pattern, replacement, code)
@@ -589,32 +632,65 @@ Return ONLY the Python code, no explanations."""
         # Fix variable names that shadow indicator methods
         # Pattern: self.rsi = self.rsi(...) or self.rsi = {} followed by self.rsi[...] = self.rsi(...)
         indicator_shadowing_fixes = [
-            # Direct assignment shadowing: self.rsi = self.rsi(...)
+            # Direct assignment shadowing: self.xxx = self.xxx(...)
             (r'self\.rsi\s*=\s*self\.rsi\(', 'self.rsi_indicator = self.rsi('),
             (r'self\.sma\s*=\s*self\.sma\(', 'self.sma_indicator = self.sma('),
             (r'self\.ema\s*=\s*self\.ema\(', 'self.ema_indicator = self.ema('),
             (r'self\.macd\s*=\s*self\.macd\(', 'self.macd_indicator = self.macd('),
             (r'self\.bb\s*=\s*self\.bb\(', 'self.bb_indicator = self.bb('),
             (r'self\.atr\s*=\s*self\.atr\(', 'self.atr_indicator = self.atr('),
+            (r'self\.adx\s*=\s*self\.adx\(', 'self.adx_indicator = self.adx('),
+            (r'self\.stoch\s*=\s*self\.stoch\(', 'self.stoch_indicator = self.stoch('),
+            (r'self\.sto\s*=\s*self\.sto\(', 'self.sto_indicator = self.sto('),
+            (r'self\.mom\s*=\s*self\.mom\(', 'self.mom_indicator = self.mom('),
+            (r'self\.aroon\s*=\s*self\.aroon\(', 'self.aroon_indicator = self.aroon('),
+            (r'self\.cci\s*=\s*self\.cci\(', 'self.cci_indicator = self.cci('),
+            (r'self\.wilr\s*=\s*self\.wilr\(', 'self.wilr_indicator = self.wilr('),
+            (r'self\.roc\s*=\s*self\.roc\(', 'self.roc_indicator = self.roc('),
+            (r'self\.momp\s*=\s*self\.momp\(', 'self.momp_indicator = self.momp('),
+            (r'self\.std\s*=\s*self\.std\(', 'self.std_indicator = self.std('),
             # Dict then method call: self.rsi = {} ... self.rsi[x] = self.rsi(...)
             (r'self\.rsi\s*=\s*\{\}', 'self.rsi_indicators = {}'),
             (r'self\.sma\s*=\s*\{\}', 'self.sma_indicators = {}'),
             (r'self\.ema\s*=\s*\{\}', 'self.ema_indicators = {}'),
+            (r'self\.macd\s*=\s*\{\}', 'self.macd_indicators = {}'),
+            (r'self\.atr\s*=\s*\{\}', 'self.atr_indicators = {}'),
+            (r'self\.adx\s*=\s*\{\}', 'self.adx_indicators = {}'),
             # Fix references to renamed dicts
             (r'self\.rsi\[', 'self.rsi_indicators['),
             (r'self\.sma\[', 'self.sma_indicators['),
             (r'self\.ema\[', 'self.ema_indicators['),
+            (r'self\.macd\[', 'self.macd_indicators['),
+            (r'self\.atr\[', 'self.atr_indicators['),
+            (r'self\.adx\[', 'self.adx_indicators['),
         ]
         for pattern, replacement in indicator_shadowing_fixes:
             code = re.sub(pattern, replacement, code)
 
-        # Fix references to self.macd when it should be self.macd_indicator
-        # Only if self.macd_indicator exists in the code
-        if 'self.macd_indicator' in code:
-            # Fix self.macd.is_ready, self.macd.current, self.macd.signal
-            code = re.sub(r'\bself\.macd\.is_ready\b', 'self.macd_indicator.is_ready', code)
-            code = re.sub(r'\bself\.macd\.current\b', 'self.macd_indicator.current', code)
-            code = re.sub(r'\bself\.macd\.signal\b', 'self.macd_indicator.signal', code)
+        # Fix references to self.xxx when it should be self.xxx_indicator
+        # This handles cases where code references the indicator without the _indicator suffix
+        indicator_reference_fixes = [
+            ('macd', ['is_ready', 'current', 'signal', 'fast', 'slow', 'histogram']),
+            ('rsi', ['is_ready', 'current']),
+            ('sma', ['is_ready', 'current']),
+            ('ema', ['is_ready', 'current']),
+            ('bb', ['is_ready', 'upper_band', 'lower_band', 'middle_band', 'standard_deviation']),
+            ('atr', ['is_ready', 'current']),
+            ('adx', ['is_ready', 'current', 'positive_directional_index', 'negative_directional_index']),
+            ('stoch', ['is_ready', 'stoch_k', 'stoch_d']),
+            ('aroon', ['is_ready', 'aroon_up', 'aroon_down']),
+            ('cci', ['is_ready', 'current']),
+            ('mom', ['is_ready', 'current']),
+            ('roc', ['is_ready', 'current']),
+        ]
+        for indicator, attrs in indicator_reference_fixes:
+            if f'self.{indicator}_indicator' in code:
+                for attr in attrs:
+                    code = re.sub(
+                        rf'\bself\.{indicator}\.{attr}\b',
+                        f'self.{indicator}_indicator.{attr}',
+                        code
+                    )
 
         # Fix BB band extraction pattern - storing .upper_band directly doesn't work
         # Pattern: self.xxx = self.bb(...).upper_band -> self.bb_indicator = self.bb(...) + separate access
