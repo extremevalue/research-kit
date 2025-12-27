@@ -274,7 +274,7 @@ class FullPipelineRunner:
         if code_file.exists():
             return code_file.read_text()
 
-        # Generate code via Claude
+        # Generate code via Claude with detailed API guidance
         prompt = f"""Generate a QuantConnect algorithm to test this hypothesis:
 
 Entry: {entry.id}
@@ -283,12 +283,61 @@ Type: {entry.type}
 Summary: {entry.summary}
 Hypothesis: {entry.hypothesis}
 
+CRITICAL - Use these EXACT QuantConnect Python API patterns:
+
+1. Resolution enum (ALL CAPS):
+   Resolution.DAILY, Resolution.HOUR, Resolution.MINUTE (not Resolution.Daily)
+
+2. Adding securities (snake_case methods):
+   self.add_equity("SPY", Resolution.DAILY)
+   self.add_future(Futures.Indices.SP_500_E_MINI, Resolution.DAILY)
+
+3. Indicators (snake_case, automatic updates):
+   self.rsi_indicator = self.rsi("SPY", 14, Resolution.DAILY)
+   self.sma_fast = self.sma("SPY", 10, Resolution.DAILY)
+   self.sma_slow = self.sma("SPY", 50, Resolution.DAILY)
+
+4. Futures symbols (underscores):
+   Futures.Indices.SP_500_E_MINI (not SP500EMini)
+   Futures.Indices.NASDAQ_100_E_MINI (not NASDAQ100EMini)
+
+5. Accessing data:
+   if self.rsi_indicator.is_ready:
+       rsi_value = self.rsi_indicator.current.value
+
+6. Trading:
+   self.set_holdings("SPY", 1.0)  # 100% long
+   self.liquidate("SPY")
+
+7. Benchmark:
+   self.set_benchmark("SPY")
+
+Example structure:
+```python
+from AlgorithmImports import *
+
+class MyAlgorithm(QCAlgorithm):
+    def initialize(self):
+        self.set_start_date(2020, 1, 1)
+        self.set_cash(100000)
+        self.spy = self.add_equity("SPY", Resolution.DAILY).symbol
+        self.set_benchmark("SPY")
+        self.rsi = self.rsi(self.spy, 14, Resolution.DAILY)
+
+    def on_data(self, data):
+        if not self.rsi.is_ready:
+            return
+        if self.rsi.current.value < 30:
+            self.set_holdings(self.spy, 1.0)
+        elif self.rsi.current.value > 70:
+            self.liquidate()
+```
+
 Requirements:
-- Use QuantConnect's AlgorithmImports
-- Implement Initialize() and OnData()
-- Use daily resolution
-- Include a benchmark comparison (SPY)
-- Log regime changes and key decisions
+- Use the EXACT patterns shown above
+- Use snake_case for all method names (initialize, on_data, set_holdings)
+- Use Resolution.DAILY (all caps)
+- Include benchmark comparison with SPY
 
 Return ONLY the Python code, no explanations."""
 
@@ -301,6 +350,9 @@ Return ONLY the Python code, no explanations."""
             elif "```" in code:
                 code = code.split("```")[1].split("```")[0]
 
+            # Post-process to fix common issues
+            code = self._fix_qc_api_issues(code)
+
             # Save the generated code
             val_dir.mkdir(parents=True, exist_ok=True)
             code_file.write_text(code)
@@ -310,16 +362,120 @@ Return ONLY the Python code, no explanations."""
             logger.error(f"Failed to generate backtest code: {e}")
             return None
 
-    def _calculate_periods(self, entry) -> Dict[str, str]:
-        """Calculate IS/OOS periods based on data availability."""
-        # Default periods - should be enhanced to check actual data availability
-        # IS: 30% of available data, OOS: 70%
-        return {
-            "is_start": "2010-01-01",
-            "is_end": "2019-12-31",
-            "oos_start": "2020-01-01",
-            "oos_end": "2024-12-15"
+    def _fix_qc_api_issues(self, code: str) -> str:
+        """
+        Post-process generated code to fix common QuantConnect API issues.
+
+        Fixes:
+        - Resolution.Daily -> Resolution.DAILY (and other resolutions)
+        - Futures symbol names with incorrect casing
+        - Method name casing issues
+        """
+        # Fix Resolution enum casing
+        resolution_fixes = {
+            "Resolution.Daily": "Resolution.DAILY",
+            "Resolution.Minute": "Resolution.MINUTE",
+            "Resolution.Hour": "Resolution.HOUR",
+            "Resolution.Second": "Resolution.SECOND",
+            "Resolution.Tick": "Resolution.TICK",
         }
+        for wrong, correct in resolution_fixes.items():
+            code = code.replace(wrong, correct)
+
+        # Fix common Futures symbol names
+        futures_fixes = {
+            "SP500EMini": "SP_500_E_MINI",
+            "SP500": "SP_500_E_MINI",
+            "NASDAQ100EMini": "NASDAQ_100_E_MINI",
+            "NASDAQ100": "NASDAQ_100_E_MINI",
+            "Nasdaq100EMini": "NASDAQ_100_E_MINI",
+            "Russell2000EMini": "RUSSELL_2000_E_MINI",
+        }
+        for wrong, correct in futures_fixes.items():
+            code = code.replace(wrong, correct)
+
+        # Fix method casing (PascalCase -> snake_case for common methods)
+        # Only fix standalone method calls, not class names
+        method_fixes = [
+            (r'\bself\.SetStartDate\b', 'self.set_start_date'),
+            (r'\bself\.SetEndDate\b', 'self.set_end_date'),
+            (r'\bself\.SetCash\b', 'self.set_cash'),
+            (r'\bself\.SetBenchmark\b', 'self.set_benchmark'),
+            (r'\bself\.AddEquity\b', 'self.add_equity'),
+            (r'\bself\.AddFuture\b', 'self.add_future'),
+            (r'\bself\.AddCrypto\b', 'self.add_crypto'),
+            (r'\bself\.SetHoldings\b', 'self.set_holdings'),
+            (r'\bself\.Liquidate\b', 'self.liquidate'),
+            (r'\bself\.Debug\b', 'self.debug'),
+            (r'\bself\.Log\b', 'self.log'),
+            (r'\bself\.RSI\b', 'self.rsi'),
+            (r'\bself\.SMA\b', 'self.sma'),
+            (r'\bself\.EMA\b', 'self.ema'),
+            (r'\bself\.MACD\b', 'self.macd'),
+            (r'\bself\.BB\b', 'self.bb'),
+            (r'\bself\.ATR\b', 'self.atr'),
+            (r'\bdef Initialize\b', 'def initialize'),
+            (r'\bdef OnData\b', 'def on_data'),
+            (r'\bdef OnOrderEvent\b', 'def on_order_event'),
+            (r'\bdef OnEndOfDay\b', 'def on_end_of_day'),
+            (r'\.Symbol\b', '.symbol'),
+            (r'\.IsReady\b', '.is_ready'),
+            (r'\.Current\.Value\b', '.current.value'),
+        ]
+        for pattern, replacement in method_fixes:
+            code = re.sub(pattern, replacement, code)
+
+        return code
+
+    def _calculate_periods(self, entry) -> Dict[str, str]:
+        """
+        Calculate IS/OOS periods based on data availability.
+
+        Adjusts date ranges based on asset class:
+        - Crypto: Data typically starts 2015-2017, use 2017-2021 for IS
+        - Equities: Use standard 2010-2019 for IS
+        """
+        # Check if entry involves crypto assets
+        is_crypto = self._is_crypto_strategy(entry)
+
+        if is_crypto:
+            # Crypto data is limited - most coins have data from 2017+
+            return {
+                "is_start": "2017-01-01",
+                "is_end": "2021-12-31",
+                "oos_start": "2022-01-01",
+                "oos_end": "2024-12-15"
+            }
+        else:
+            # Standard equity/futures periods
+            return {
+                "is_start": "2010-01-01",
+                "is_end": "2019-12-31",
+                "oos_start": "2020-01-01",
+                "oos_end": "2024-12-15"
+            }
+
+    def _is_crypto_strategy(self, entry) -> bool:
+        """
+        Detect if an entry involves cryptocurrency assets.
+
+        Checks name, summary, hypothesis, and tags for crypto indicators.
+        """
+        crypto_keywords = [
+            "crypto", "bitcoin", "btc", "ethereum", "eth", "solana", "sol",
+            "binance", "coinbase", "defi", "blockchain", "altcoin", "token",
+            "btcusd", "ethusd", "cryptocurrency"
+        ]
+
+        # Check all text fields
+        text_to_check = " ".join([
+            entry.name or "",
+            entry.summary or "",
+            entry.hypothesis or "",
+            " ".join(entry.tags or [])
+        ]).lower()
+
+        return any(keyword in text_to_check for keyword in crypto_keywords)
 
     def _run_backtest(self, code: str, start_date: str, end_date: str, entry_id: str = "temp") -> BacktestResult:
         """
