@@ -323,6 +323,13 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
    self.add_future(Futures.Indices.SP_500_E_MINI, Resolution.DAILY)
    self.add_crypto("BTCUSD", Resolution.DAILY)
 
+   IMPORTANT - Cash indices (VIX, SPX, DXY, etc.):
+   THERE IS NO add_index() METHOD! Use ETF proxies instead:
+   - VIX volatility: Use self.add_equity("VIXY", Resolution.DAILY) (VIX short-term futures ETF)
+   - S&P 500: Use self.add_equity("SPY", Resolution.DAILY) (SPY tracks SPX)
+   - NASDAQ: Use self.add_equity("QQQ", Resolution.DAILY)
+   - Dollar index: Use self.add_equity("UUP", Resolution.DAILY) (Dollar bull ETF)
+
 3. Indicators (snake_case, use symbol's resolution by default):
    # Simple form - uses the security's default resolution
    self.rsi_indicator = self.rsi("SPY", 14)
@@ -561,6 +568,38 @@ Return ONLY the Python code, no explanations."""
         }
         for wrong, correct in futures_fixes.items():
             code = code.replace(wrong, correct)
+
+        # Fix non-existent add_index() method - use ETF proxies instead
+        # add_index() does NOT exist in QuantConnect API - crashes with PAL_SEHException
+        index_to_etf = {
+            '"VIX"': '"VIXY"',       # VIX -> VIXY (VIX short-term futures ETF)
+            '"vix"': '"VIXY"',
+            '"SPX"': '"SPY"',        # SPX -> SPY
+            '"spx"': '"SPY"',
+            '"DXY"': '"UUP"',        # Dollar index -> Dollar bull ETF
+            '"dxy"': '"UUP"',
+            '"NDX"': '"QQQ"',        # NASDAQ -> QQQ
+            '"ndx"': '"QQQ"',
+        }
+        # Replace add_index with add_equity and fix the symbol
+        if 'add_index(' in code.lower():
+            for index_sym, etf_sym in index_to_etf.items():
+                # Handle both snake_case and PascalCase
+                code = re.sub(
+                    rf'self\.add_index\(\s*{index_sym}',
+                    f'self.add_equity({etf_sym}',
+                    code,
+                    flags=re.IGNORECASE
+                )
+                code = re.sub(
+                    rf'self\.AddIndex\(\s*{index_sym}',
+                    f'self.add_equity({etf_sym}',
+                    code,
+                    flags=re.IGNORECASE
+                )
+            # Catch any remaining add_index calls and convert to add_equity
+            code = re.sub(r'self\.add_index\(', 'self.add_equity(', code, flags=re.IGNORECASE)
+            code = re.sub(r'self\.AddIndex\(', 'self.add_equity(', code, flags=re.IGNORECASE)
 
         # Fix method casing (PascalCase -> snake_case for common methods)
         # Only fix standalone method calls, not class names
