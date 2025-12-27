@@ -312,6 +312,13 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
 7. Benchmark:
    self.set_benchmark("SPY")
 
+IMPORTANT - Variable naming:
+   NEVER use indicator method names as variable names (they shadow the methods):
+   WRONG: self.rsi = self.rsi(...)      # shadows self.rsi() method!
+   WRONG: self.sma = self.sma(...)      # shadows self.sma() method!
+   RIGHT: self.rsi_indicator = self.rsi(...)
+   RIGHT: self.sma_short = self.sma(...)
+
 Example structure:
 ```python
 from AlgorithmImports import *
@@ -322,14 +329,15 @@ class MyAlgorithm(QCAlgorithm):
         self.set_cash(100000)
         self.spy = self.add_equity("SPY", Resolution.DAILY).symbol
         self.set_benchmark("SPY")
-        self.rsi = self.rsi(self.spy, 14, Resolution.DAILY)
+        # Use descriptive names that don't shadow methods
+        self.rsi_indicator = self.rsi(self.spy, 14, Resolution.DAILY)
 
     def on_data(self, data):
-        if not self.rsi.is_ready:
+        if not self.rsi_indicator.is_ready:
             return
-        if self.rsi.current.value < 30:
+        if self.rsi_indicator.current.value < 30:
             self.set_holdings(self.spy, 1.0)
-        elif self.rsi.current.value > 70:
+        elif self.rsi_indicator.current.value > 70:
             self.liquidate()
 ```
 
@@ -423,6 +431,28 @@ Return ONLY the Python code, no explanations."""
             (r'\.Current\.Value\b', '.current.value'),
         ]
         for pattern, replacement in method_fixes:
+            code = re.sub(pattern, replacement, code)
+
+        # Fix variable names that shadow indicator methods
+        # Pattern: self.rsi = self.rsi(...) or self.rsi = {} followed by self.rsi[...] = self.rsi(...)
+        indicator_shadowing_fixes = [
+            # Direct assignment shadowing: self.rsi = self.rsi(...)
+            (r'self\.rsi\s*=\s*self\.rsi\(', 'self.rsi_indicator = self.rsi('),
+            (r'self\.sma\s*=\s*self\.sma\(', 'self.sma_indicator = self.sma('),
+            (r'self\.ema\s*=\s*self\.ema\(', 'self.ema_indicator = self.ema('),
+            (r'self\.macd\s*=\s*self\.macd\(', 'self.macd_indicator = self.macd('),
+            (r'self\.bb\s*=\s*self\.bb\(', 'self.bb_indicator = self.bb('),
+            (r'self\.atr\s*=\s*self\.atr\(', 'self.atr_indicator = self.atr('),
+            # Dict then method call: self.rsi = {} ... self.rsi[x] = self.rsi(...)
+            (r'self\.rsi\s*=\s*\{\}', 'self.rsi_indicators = {}'),
+            (r'self\.sma\s*=\s*\{\}', 'self.sma_indicators = {}'),
+            (r'self\.ema\s*=\s*\{\}', 'self.ema_indicators = {}'),
+            # Fix references to renamed dicts
+            (r'self\.rsi\[', 'self.rsi_indicators['),
+            (r'self\.sma\[', 'self.sma_indicators['),
+            (r'self\.ema\[', 'self.ema_indicators['),
+        ]
+        for pattern, replacement in indicator_shadowing_fixes:
             code = re.sub(pattern, replacement, code)
 
         return code
