@@ -1099,6 +1099,7 @@ Return ONLY the Python code, no explanations."""
                             # Cancel the stuck backtest
                             logger.warning(f"Backtest timed out, canceling...")
                             self._delete_backtest(project_id, backtest_id)
+                            time.sleep(5)  # Give QC time to free the node
 
                             if attempt < max_retries - 1:
                                 logger.info("Retrying after cleanup...")
@@ -1154,15 +1155,23 @@ Return ONLY the Python code, no explanations."""
                                 alpha=float(stats.get("Alpha", "0")),
                                 raw_output=str(stats)
                             )
-                    elif status == "Running":
-                        # Cancel it
-                        logger.warning(f"Canceling stuck backtest {backtest_id}")
+                    else:
+                        # Cancel any non-completed backtest (Running, In Queue, etc.)
+                        # These all consume nodes and need to be freed
+                        logger.warning(f"Canceling backtest {backtest_id} (status: {status})")
                         self._delete_backtest(project_id, backtest_id)
+                        time.sleep(5)  # Give QC time to free the node
 
                 if attempt < max_retries - 1:
                     logger.info("Retrying after timeout...")
                     time.sleep(30)
                     continue
+
+                # Final attempt failed - ensure backtest is canceled before giving up
+                if project_id and backtest_id:
+                    logger.warning(f"Final cleanup: canceling backtest {backtest_id}")
+                    self._delete_backtest(project_id, backtest_id)
+                    time.sleep(5)
 
                 try:
                     shutil.rmtree(project_dir)
@@ -1175,6 +1184,17 @@ Return ONLY the Python code, no explanations."""
                 )
 
             except Exception as e:
+                # Try to cancel any submitted backtest before returning
+                debug_file = self.workspace.validations_path / entry_id / "last_lean_output.txt"
+                if debug_file.exists():
+                    try:
+                        content = debug_file.read_text()
+                        proj_id, bt_id = self._extract_backtest_ids(content)
+                        if proj_id and bt_id:
+                            logger.warning(f"Exception occurred, canceling backtest {bt_id}")
+                            self._delete_backtest(proj_id, bt_id)
+                    except Exception:
+                        pass
                 try:
                     shutil.rmtree(project_dir)
                 except Exception:
