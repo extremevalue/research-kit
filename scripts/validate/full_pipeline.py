@@ -91,7 +91,7 @@ class FullPipelineRunner:
     OOS_MIN_SHARPE = 0.3  # OOS Sharpe must exceed this
     OOS_MAX_DRAWDOWN = 0.50  # OOS drawdown must be less than 50%
 
-    def __init__(self, workspace, llm_client=None, use_local: bool = False):
+    def __init__(self, workspace, llm_client=None, use_local: bool = False, cleanup_on_start: bool = True):
         """
         Initialize the pipeline runner.
 
@@ -99,6 +99,7 @@ class FullPipelineRunner:
             workspace: Workspace instance
             llm_client: LLMClient instance (optional, but needed for code gen and expert review)
             use_local: If True, use local Docker backtest; if False (default), use cloud
+            cleanup_on_start: If True (default), clean up any stuck QC backtests on initialization
         """
         self.workspace = workspace
         self.llm_client = llm_client
@@ -108,6 +109,10 @@ class FullPipelineRunner:
         # Lazy load catalog
         from research_system.core.catalog import Catalog
         self.catalog = Catalog(workspace.catalog_path)
+
+        # Clean up any stuck backtests from previous runs
+        if cleanup_on_start and not use_local:
+            self._cleanup_all_stuck_backtests()
 
     def run(self, entry_id: str) -> PipelineResult:
         """
@@ -1362,6 +1367,43 @@ Return ONLY the Python code, no explanations."""
         if data and data.get("success"):
             return data.get("backtests", [])
         return []
+
+    def _cleanup_all_stuck_backtests(self, max_age_seconds: int = 600) -> int:
+        """
+        Clean up stuck backtests across ALL projects at startup.
+
+        This ensures a clean slate before starting a new batch run.
+
+        Args:
+            max_age_seconds: Consider stuck if running longer than this (default 10 min)
+
+        Returns:
+            Total number of backtests cleaned up
+        """
+        logger.info("Checking for stuck backtests from previous runs...")
+        total_cleaned = 0
+
+        # Get all projects
+        data = self._qc_api_request("projects/read")
+        if not data or not data.get("success"):
+            logger.warning("Could not fetch QC projects for cleanup")
+            return 0
+
+        projects = data.get("projects", [])
+        for proj in projects:
+            proj_id = str(proj.get("projectId", ""))
+            if proj_id:
+                cleaned = self._cleanup_stuck_backtests(proj_id, max_age_seconds)
+                total_cleaned += cleaned
+
+        if total_cleaned > 0:
+            logger.info(f"Cleaned up {total_cleaned} stuck backtests. Waiting 10s for nodes to free...")
+            import time
+            time.sleep(10)
+        else:
+            logger.info("No stuck backtests found")
+
+        return total_cleaned
 
     def _cleanup_stuck_backtests(self, project_id: str, max_age_seconds: int = 1800) -> int:
         """
