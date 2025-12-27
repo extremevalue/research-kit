@@ -229,6 +229,23 @@ research combine prioritize              # Recalculate priorities
 research combine next --count 5          # Get next 5 to test
 ```
 
+### `research ideate`
+
+Generate new strategy ideas using AI personas.
+
+```bash
+research ideate                          # Run all 3 personas
+research ideate --count 2                # Generate 2 ideas per persona
+research ideate --add-to-catalog         # Auto-add generated ideas to catalog
+```
+
+**Personas:**
+- **edge-hunter** - Finds micro-structure and timing edges
+- **macro-strategist** - Cross-asset, regime-aware themes
+- **quant-archaeologist** - Rehabilitates failed approaches with modern techniques
+
+Ideas are generated based on your catalog's validated/invalidated entries and available data sources.
+
 ### `research analyze <action>`
 
 Run multi-persona analysis on validation results.
@@ -243,6 +260,7 @@ research analyze show IND-002            # Show results
 - **momentum-trader** - Trend-following perspective
 - **risk-manager** - Risk and drawdown focus
 - **quant-researcher** - Statistical rigor
+- **mad-genius** - Unconventional, creative insights
 - **contrarian** - Challenges consensus
 - **report-synthesizer** - Integrates all perspectives
 
@@ -253,6 +271,36 @@ Import from external sources.
 ```bash
 research migrate master-index /path/to/MASTER_INDEX.json
 research migrate master-index /path/to/MASTER_INDEX.json --dry-run
+```
+
+## System Overview
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          Research Validation Pipeline                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────┐    ┌─────────┐    ┌──────────┐    ┌─────────────┐               │
+│  │ SOURCES │───▶│  INBOX  │───▶│  INGEST  │───▶│   CATALOG   │               │
+│  │ Papers  │    │ Drop    │    │ Extract  │    │ IND-001     │               │
+│  │ Ideas   │    │ files   │    │ metadata │    │ STRAT-002   │               │
+│  │ Data    │    │ here    │    │ via LLM  │    │ IDEA-003    │               │
+│  └─────────┘    └─────────┘    └──────────┘    └──────┬──────┘               │
+│                                                       │                       │
+│       ┌─────────────────────────────────────────────┬─┴───────┐               │
+│       ▼                                             ▼         ▼               │
+│  ┌─────────┐                                  ┌──────────┐  ┌───────┐         │
+│  │ IDEATE  │                                  │ COMBINE  │  │VALIDATE│        │
+│  │ 3 AI    │                                  │ Generate │  │Pipeline│        │
+│  │ personas│──────────────────────────────────▶│ IND+STRAT│──▶│ 7 gates│        │
+│  └─────────┘                                  └──────────┘  └───┬───┘         │
+│                                                                 │              │
+│           ┌─────────────────────────────────────────────────────┘              │
+│           ▼                                                                    │
+│      ┌──────────────────────────────────────────────────────────┐             │
+│      │  DETERMINATION:  VALIDATED  |  CONDITIONAL  |  INVALIDATED │            │
+│      └──────────────────────────────────────────────────────────┘             │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Key Concepts
@@ -298,9 +346,45 @@ HYPOTHESIS → DATA_AUDIT → IS_TESTING → STATISTICAL → REGIME → OOS → 
 - **OOS is ONE SHOT** - no retries, no adjustments after seeing results
 - This prevents p-hacking and curve fitting
 
-### Data Hierarchy
+### Data Resolution
 
-Data sources are checked in this order:
+When a strategy requires data (e.g., `vix_index`, `spy_prices`), the system resolves it through multiple layers:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Data Requirement Resolution                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  "vix_index"  ──┬─▶  Registry Lookup (by ID)  ──┬──▶ FOUND      │
+│                 │                               │                │
+│                 └─▶  Registry Lookup (by alias) ─┘               │
+│                 │                                                │
+│                 └─▶  QC Native Aliases (150+)  ─────▶ VIX       │
+│                 │    - vix_index → VIX                          │
+│                 │    - eur_usd → EURUSD                         │
+│                 │    - sp500_futures → ES                       │
+│                 │                                                │
+│                 └─▶  QC Native Patterns ────────────▶ AUTO      │
+│                      - spy_prices → SPY                         │
+│                      - aapl_data → AAPL                         │
+│                                                                  │
+│  Resolution fails only if no match at any level                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Semantic aliases automatically resolve to QC Native data:**
+
+| Category | Examples | Resolves To |
+|----------|----------|-------------|
+| Cash Indices | `vix_index`, `sp500_index`, `dollar_index` | VIX, SPX, DXY |
+| Forex | `eur_usd`, `gbp_usd`, `usd_jpy` | EURUSD, GBPUSD, USDJPY |
+| Crypto | `bitcoin`, `ethereum` | BTCUSD, ETHUSD |
+| ETFs | `sp500_etf`, `gold_etf`, `vix_etf` | SPY, GLD, VXX |
+| Futures | `sp500_futures`, `gold_futures`, `oil_futures` | ES, GC, CL |
+| Sectors | `technology_etf`, `financials_etf` | XLK, XLF |
+
+**Data tiers (in resolution order):**
+
 1. **QC Native** - QuantConnect built-in data (always preferred)
 2. **QC Object Store** - Data you've uploaded to QC cloud
 3. **Internal Purchased** - Paid data you own

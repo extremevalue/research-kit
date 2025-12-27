@@ -38,6 +38,7 @@ class DataSource:
     coverage: Optional[Dict[str, Any]]
     columns: Optional[List[str]]
     usage_notes: Optional[str]
+    aliases: Optional[List[str]] = None  # Alternative names that resolve to this source
     is_auto_recognized: bool = False  # True if auto-recognized from QC Native pattern
 
     def is_qc_native(self) -> bool:
@@ -88,7 +89,7 @@ class DataSource:
         return DataAvailability(available=False)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "id": self.id,
             "name": self.name,
             "type": self.data_type,
@@ -98,6 +99,11 @@ class DataSource:
             "columns": self.columns,
             "usage_notes": self.usage_notes
         }
+        if self.aliases:
+            result["aliases"] = self.aliases
+        if self.is_auto_recognized:
+            result["is_auto_recognized"] = True
+        return result
 
 
 class DataRegistry:
@@ -125,7 +131,7 @@ class DataRegistry:
 
     # Patterns that indicate standard market data available in QuantConnect
     # These don't need explicit registry entries - QC has comprehensive coverage
-    QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv"}
+    QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv", "_price", "_returns"}
 
     # Special data sources always available in QuantConnect
     QC_NATIVE_SPECIAL = {
@@ -135,6 +141,206 @@ class DataRegistry:
         "futures_data",        # QC has comprehensive futures data
         "forex_data",          # QC has forex data
         "crypto_data",         # QC has crypto data
+    }
+
+    # Mapping of semantic data requirement names to QC Native symbols/data types
+    # This enables matching "vix_index" to QC's VIX cash index, etc.
+    QC_NATIVE_ALIASES = {
+        # Cash Indices (125+ available free in QC cloud)
+        # See: https://www.quantconnect.com/docs/v2/writing-algorithms/datasets/quantconnect/cash-indices
+        "vix": "VIX",
+        "vix_index": "VIX",
+        "vix_data": "VIX",
+        "cboe_vix": "VIX",
+        "volatility_index": "VIX",
+        "spx": "SPX",
+        "spx_index": "SPX",
+        "sp500_index": "SPX",
+        "sp500": "SPX",
+        "s&p500": "SPX",
+        "s&p_500": "SPX",
+        "dxy": "DXY",
+        "dxy_index": "DXY",
+        "dollar_index": "DXY",
+        "us_dollar_index": "DXY",
+        "usdx": "DXY",
+        "ndx": "NDX",
+        "ndx_index": "NDX",
+        "nasdaq_index": "NDX",
+        "nasdaq100_index": "NDX",
+        "nasdaq_100": "NDX",
+        "rut": "RUT",
+        "rut_index": "RUT",
+        "russell_2000": "RUT",
+        "russell2000": "RUT",
+        "russell_index": "RUT",
+        "djia": "DJI",
+        "dji": "DJI",
+        "dow_jones": "DJI",
+        "dow_index": "DJI",
+
+        # Forex (71+ pairs available free)
+        # See: https://www.quantconnect.com/docs/v2/cloud-platform/datasets/quantconnect/forex
+        "eurusd": "EURUSD",
+        "eur_usd": "EURUSD",
+        "eur_usd_prices": "EURUSD",
+        "euro_dollar": "EURUSD",
+        "gbpusd": "GBPUSD",
+        "gbp_usd": "GBPUSD",
+        "gbp_usd_prices": "GBPUSD",
+        "pound_dollar": "GBPUSD",
+        "usdjpy": "USDJPY",
+        "usd_jpy": "USDJPY",
+        "usd_jpy_prices": "USDJPY",
+        "dollar_yen": "USDJPY",
+        "audusd": "AUDUSD",
+        "aud_usd": "AUDUSD",
+        "aussie_dollar": "AUDUSD",
+        "usdcad": "USDCAD",
+        "usd_cad": "USDCAD",
+        "usdchf": "USDCHF",
+        "usd_chf": "USDCHF",
+        "nzdusd": "NZDUSD",
+        "nzd_usd": "NZDUSD",
+        "eurgbp": "EURGBP",
+        "eur_gbp": "EURGBP",
+        "eurjpy": "EURJPY",
+        "eur_jpy": "EURJPY",
+
+        # Crypto (available in QC)
+        "btcusd": "BTCUSD",
+        "btc_usd": "BTCUSD",
+        "bitcoin": "BTCUSD",
+        "bitcoin_price": "BTCUSD",
+        "ethusd": "ETHUSD",
+        "eth_usd": "ETHUSD",
+        "ethereum": "ETHUSD",
+        "ethereum_price": "ETHUSD",
+
+        # Common ETFs/Equities (all US equities free in QC)
+        "spy": "SPY",
+        "spy_etf": "SPY",
+        "sp500_etf": "SPY",
+        "qqq": "QQQ",
+        "qqq_etf": "QQQ",
+        "nasdaq_etf": "QQQ",
+        "iwm": "IWM",
+        "iwm_etf": "IWM",
+        "russell_etf": "IWM",
+        "dia": "DIA",
+        "dia_etf": "DIA",
+        "dow_etf": "DIA",
+        "tlt": "TLT",
+        "tlt_etf": "TLT",
+        "treasury_bond_etf": "TLT",
+        "gld": "GLD",
+        "gld_etf": "GLD",
+        "gold_etf": "GLD",
+        "gold_prices": "GLD",
+        "slv": "SLV",
+        "slv_etf": "SLV",
+        "silver_etf": "SLV",
+        "eem": "EEM",
+        "emerging_markets": "EEM",
+        "vxx": "VXX",
+        "vxx_etf": "VXX",
+        "vix_etf": "VXX",
+        "vixy": "VIXY",
+        "vixy_etf": "VIXY",
+        "uvxy": "UVXY",
+        "uvxy_etf": "UVXY",
+        "hyg": "HYG",
+        "high_yield_bonds": "HYG",
+        "lqd": "LQD",
+        "investment_grade_bonds": "LQD",
+        "xlf": "XLF",
+        "financials_etf": "XLF",
+        "xlk": "XLK",
+        "technology_etf": "XLK",
+        "xle": "XLE",
+        "energy_etf": "XLE",
+        "xlv": "XLV",
+        "healthcare_etf": "XLV",
+        "xli": "XLI",
+        "industrials_etf": "XLI",
+        "xlp": "XLP",
+        "consumer_staples_etf": "XLP",
+        "xly": "XLY",
+        "consumer_discretionary_etf": "XLY",
+        "xlb": "XLB",
+        "materials_etf": "XLB",
+        "xlu": "XLU",
+        "utilities_etf": "XLU",
+        "xlre": "XLRE",
+        "real_estate_etf": "XLRE",
+        "efa": "EFA",
+        "international_developed": "EFA",
+        "vgk": "VGK",
+        "europe_etf": "VGK",
+        "ewj": "EWJ",
+        "japan_etf": "EWJ",
+        "fxi": "FXI",
+        "china_etf": "FXI",
+
+        # Futures (most available in QC - CBOT, CME, COMEX, ICE, NYMEX)
+        "es_futures": "ES",
+        "sp500_futures": "ES",
+        "e_mini_futures": "ES",
+        "nq_futures": "NQ",
+        "nasdaq_futures": "NQ",
+        "cl_futures": "CL",
+        "crude_oil_futures": "CL",
+        "oil_futures": "CL",
+        "gc_futures": "GC",
+        "gold_futures": "GC",
+        "si_futures": "SI",
+        "silver_futures": "SI",
+        "zn_futures": "ZN",
+        "treasury_futures": "ZN",
+        "10yr_futures": "ZN",
+        "zb_futures": "ZB",
+        "bond_futures": "ZB",
+        "30yr_futures": "ZB",
+        "zc_futures": "ZC",
+        "corn_futures": "ZC",
+        "zs_futures": "ZS",
+        "soybean_futures": "ZS",
+        "zw_futures": "ZW",
+        "wheat_futures": "ZW",
+        "ng_futures": "NG",
+        "natural_gas_futures": "NG",
+    }
+
+    # Data types that are implicitly available in QC (no explicit symbol needed)
+    QC_NATIVE_DATA_TYPES = {
+        "us_equities",
+        "equities",
+        "stock_prices",
+        "equity_prices",
+        "stock_data",
+        "equity_data",
+        "market_data",
+        "price_data",
+        "ohlcv_data",
+        "volume_data",
+        "forex",
+        "forex_prices",
+        "fx_data",
+        "currency_data",
+        "crypto",
+        "cryptocurrency",
+        "crypto_prices",
+        "futures",
+        "futures_prices",
+        "commodities",
+        "commodity_prices",
+        "options",
+        "options_data",
+        "fundamentals",
+        "fundamental_data",
+        "corporate_actions",
+        "dividends",
+        "splits",
     }
 
     def __init__(self, registry_path: Path):
@@ -161,6 +367,7 @@ class DataRegistry:
         QuantConnect provides comprehensive market data coverage including:
         - All US equities and ETFs
         - International equities
+        - Cash indices (VIX, SPX, DXY, etc.)
         - Futures, options, forex, crypto
 
         Args:
@@ -172,11 +379,19 @@ class DataRegistry:
         # Normalize
         source_id = source_id.lower().replace("-", "_").replace(" ", "_")
 
+        # Check known aliases first (vix_index -> VIX, eur_usd -> EURUSD, etc.)
+        if source_id in cls.QC_NATIVE_ALIASES:
+            return True
+
         # Check special data sources
         if source_id in cls.QC_NATIVE_SPECIAL:
             return True
 
-        # Check for standard market data patterns
+        # Check generic data types (us_equities, forex_data, etc.)
+        if source_id in cls.QC_NATIVE_DATA_TYPES:
+            return True
+
+        # Check for standard market data patterns (spy_prices, aapl_data, etc.)
         for suffix in cls.QC_STANDARD_DATA_SUFFIXES:
             if source_id.endswith(suffix):
                 ticker = source_id[:-len(suffix)]
@@ -185,6 +400,32 @@ class DataRegistry:
                     return True
 
         return False
+
+    @classmethod
+    def resolve_qc_native_symbol(cls, source_id: str) -> Optional[str]:
+        """
+        Resolve a semantic data requirement to its QC Native symbol.
+
+        Args:
+            source_id: Data source ID (will be normalized)
+
+        Returns:
+            QC symbol if resolvable, None otherwise
+        """
+        source_id = source_id.lower().replace("-", "_").replace(" ", "_")
+
+        # Check known aliases
+        if source_id in cls.QC_NATIVE_ALIASES:
+            return cls.QC_NATIVE_ALIASES[source_id]
+
+        # Check for standard market data patterns
+        for suffix in cls.QC_STANDARD_DATA_SUFFIXES:
+            if source_id.endswith(suffix):
+                ticker = source_id[:-len(suffix)]
+                if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
+                    return ticker.upper()
+
+        return None
 
     @classmethod
     def create_qc_native_source(cls, source_id: str) -> DataSource:
@@ -197,31 +438,61 @@ class DataRegistry:
         Returns:
             DataSource representing the QC Native data
         """
-        # Extract ticker from pattern
-        ticker = source_id.upper()
-        for suffix in cls.QC_STANDARD_DATA_SUFFIXES:
-            if source_id.endswith(suffix):
-                ticker = source_id[:-len(suffix)].upper()
-                break
+        # Resolve to QC symbol
+        symbol = cls.resolve_qc_native_symbol(source_id)
+        if not symbol:
+            symbol = source_id.upper()
+
+        # Determine data type and usage notes based on symbol
+        normalized = source_id.lower().replace("-", "_").replace(" ", "_")
+
+        # Check what type of data this is
+        if normalized in cls.QC_NATIVE_ALIASES:
+            # It's an alias - determine type from symbol characteristics
+            if symbol in ("VIX", "SPX", "DXY", "NDX", "RUT", "DJI"):
+                data_type = "cash_index"
+                usage = f"Cash index - use self.add_data(Index, \"{symbol}\", Resolution.DAILY)"
+            elif len(symbol) == 6 and symbol[:3].isalpha() and symbol[3:].isalpha():
+                # Forex pair like EURUSD
+                data_type = "forex"
+                usage = f"Forex - use self.add_forex(\"{symbol}\", Resolution.DAILY)"
+            elif symbol.endswith("USD") and len(symbol) <= 7:
+                # Crypto like BTCUSD
+                data_type = "crypto"
+                usage = f"Crypto - use self.add_crypto(\"{symbol}\", Resolution.DAILY)"
+            elif len(symbol) <= 2:
+                # Futures like ES, NQ, CL
+                data_type = "futures"
+                usage = f"Futures - use self.add_future(Futures.Indices.{symbol}, Resolution.DAILY)"
+            else:
+                # Default to equity/ETF
+                data_type = "equity"
+                usage = f"Equity/ETF - use self.add_equity(\"{symbol}\", Resolution.DAILY)"
+        elif normalized in cls.QC_NATIVE_DATA_TYPES:
+            data_type = "generic"
+            usage = "Generic QC data - available for all supported asset types"
+        else:
+            data_type = "equity"
+            usage = f"Equity - use self.add_equity(\"{symbol}\", Resolution.DAILY)"
 
         return DataSource(
             id=source_id,
-            name=f"{ticker} Price Data",
-            data_type="price_data",
-            description=f"Standard QuantConnect market data for {ticker}",
+            name=f"{symbol} Data",
+            data_type=data_type,
+            description=f"QuantConnect native data for {symbol}",
             availability={
                 "qc_native": {
                     "available": True,
-                    "symbol": ticker,
+                    "symbol": symbol,
                     "resolution": ["tick", "second", "minute", "hour", "daily"],
                 }
             },
             coverage={
-                "start_date": "1998-01-01",  # Conservative estimate for most securities
+                "start_date": "1998-01-01",  # Conservative estimate
                 "end_date": "present",
             },
             columns=["open", "high", "low", "close", "volume"],
-            usage_notes=f"Standard QC data - use self.AddEquity(\"{ticker}\", Resolution.Daily)",
+            usage_notes=usage,
             is_auto_recognized=True
         )
 
@@ -258,16 +529,7 @@ class DataRegistry:
         sources = []
 
         for source_data in registry.get("data_sources", []):
-            source = DataSource(
-                id=source_data["id"],
-                name=source_data.get("name", source_data["id"]),
-                data_type=source_data.get("type", "unknown"),
-                description=source_data.get("description"),
-                availability=source_data.get("availability", {}),
-                coverage=source_data.get("coverage"),
-                columns=source_data.get("columns"),
-                usage_notes=source_data.get("usage_notes")
-            )
+            source = self._create_source_from_data(source_data)
 
             if available_only and not source.is_available():
                 continue
@@ -280,11 +542,13 @@ class DataRegistry:
         """
         Get a specific data source by ID.
 
-        First checks the explicit registry, then falls back to QC Native
-        pattern recognition for standard market data.
+        Resolution order:
+        1. Explicit registry entry by ID
+        2. Explicit registry entry by alias
+        3. QC Native pattern recognition (aliases, data types, suffixes)
 
         Args:
-            source_id: Data source ID (will be normalized for QC Native check)
+            source_id: Data source ID (will be normalized for matching)
 
         Returns:
             DataSource if found or recognized, None otherwise
@@ -296,24 +560,37 @@ class DataRegistry:
         registry = self._load_registry()
 
         for source_data in registry.get("data_sources", []):
+            # Check direct ID match
             if source_data["id"] == source_id or source_data["id"] == normalized_id:
-                return DataSource(
-                    id=source_data["id"],
-                    name=source_data.get("name", source_data["id"]),
-                    data_type=source_data.get("type", "unknown"),
-                    description=source_data.get("description"),
-                    availability=source_data.get("availability", {}),
-                    coverage=source_data.get("coverage"),
-                    columns=source_data.get("columns"),
-                    usage_notes=source_data.get("usage_notes"),
-                    is_auto_recognized=False
-                )
+                return self._create_source_from_data(source_data)
+
+            # Check aliases
+            aliases = source_data.get("aliases", [])
+            for alias in aliases:
+                alias_normalized = alias.lower().replace("-", "_").replace(" ", "_")
+                if alias_normalized == normalized_id:
+                    return self._create_source_from_data(source_data)
 
         # Fall back to QC Native pattern recognition
         if self.is_qc_native_pattern(normalized_id):
             return self.create_qc_native_source(normalized_id)
 
         return None
+
+    def _create_source_from_data(self, source_data: Dict[str, Any]) -> DataSource:
+        """Create a DataSource object from registry data."""
+        return DataSource(
+            id=source_data["id"],
+            name=source_data.get("name", source_data["id"]),
+            data_type=source_data.get("type", "unknown"),
+            description=source_data.get("description"),
+            availability=source_data.get("availability", {}),
+            coverage=source_data.get("coverage"),
+            columns=source_data.get("columns"),
+            usage_notes=source_data.get("usage_notes"),
+            aliases=source_data.get("aliases"),
+            is_auto_recognized=False
+        )
 
     def check_availability(self, source_ids: List[str]) -> Dict[str, DataAvailability]:
         """
