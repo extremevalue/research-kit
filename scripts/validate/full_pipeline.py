@@ -142,6 +142,10 @@ class FullPipelineRunner:
                 error=f"Entry is BLOCKED: {entry.blocked_reason}"
             )
 
+        # Prevent idea chains: IDEA entries don't generate more ideas
+        # Only run expert review on original entries (strategies, indicators)
+        self._skip_expert_review = entry.type in ("idea", "task", "action")
+
         # Step 1: Generate backtest code (or load existing)
         print("  Generating backtest code...")
         backtest_code = self._generate_backtest_code(entry)
@@ -176,25 +180,32 @@ class FullPipelineRunner:
         is_passed, is_reason = self._check_is_gates(is_results)
         if not is_passed:
             print(f"  IS Gates: FAILED ({is_reason})")
-            # Still run expert review to get improvement ideas
-            print("  Running expert review for improvement ideas...")
-            expert_reviews = self._run_expert_review(entry, is_results, None)
-            derived_ideas = self._extract_derived_ideas(expert_reviews)
 
-            # Print expert summaries
-            if expert_reviews:
-                print("\n  Expert Analysis:")
-                for review in expert_reviews:
-                    print(f"    [{review.persona}] {review.assessment[:80]}...")
-                    if review.concerns:
-                        print(f"      Concerns: {', '.join(review.concerns[:2])}")
-                    if review.improvements:
-                        print(f"      Suggestions: {', '.join(review.improvements[:2])}")
+            expert_reviews = []
+            derived_ideas = []
 
-            # Add derived ideas to catalog
-            if derived_ideas:
-                self._add_derived_ideas(entry, derived_ideas)
-                print(f"\n  Added {len(derived_ideas)} derived ideas to catalog")
+            # Only run expert review for strategies/indicators (prevent idea chains)
+            if not self._skip_expert_review:
+                print("  Running expert review for improvement ideas...")
+                expert_reviews = self._run_expert_review(entry, is_results, None)
+                derived_ideas = self._extract_and_classify_improvements(expert_reviews, entry)
+
+                # Print expert summaries
+                if expert_reviews:
+                    print("\n  Expert Analysis:")
+                    for review in expert_reviews:
+                        print(f"    [{review.persona}] {review.assessment[:80]}...")
+                        if review.concerns:
+                            print(f"      Concerns: {', '.join(review.concerns[:2])}")
+                        if review.improvements:
+                            print(f"      Suggestions: {', '.join(review.improvements[:2])}")
+
+                # Add derived entries to catalog (routed by type)
+                if derived_ideas:
+                    self._add_derived_entries(entry, derived_ideas)
+                    print(f"\n  Added {len(derived_ideas)} derived ideas to catalog")
+            else:
+                print("  Skipping expert review (IDEA/TASK/ACTION entries don't generate children)")
 
             # Update catalog status and save results
             self._update_entry_status(entry_id, "INVALIDATED")
@@ -234,14 +245,20 @@ class FullPipelineRunner:
         else:
             print("  OOS Gates: PASSED")
 
-        # Step 7: Run expert review
-        print("  Running expert review...")
-        expert_reviews = self._run_expert_review(entry, is_results, oos_results)
-        derived_ideas = self._extract_derived_ideas(expert_reviews)
+        # Step 7: Run expert review (skip for IDEA/TASK/ACTION entries)
+        expert_reviews = []
+        derived_ideas = []
 
-        # Print expert summaries
-        for review in expert_reviews:
-            print(f"    [{review.persona}] {review.assessment[:60]}...")
+        if not self._skip_expert_review:
+            print("  Running expert review...")
+            expert_reviews = self._run_expert_review(entry, is_results, oos_results)
+            derived_ideas = self._extract_and_classify_improvements(expert_reviews, entry)
+
+            # Print expert summaries
+            for review in expert_reviews:
+                print(f"    [{review.persona}] {review.assessment[:60]}...")
+        else:
+            print("  Skipping expert review (IDEA/TASK/ACTION entries don't generate children)")
 
         # Step 8: Make determination
         if oos_passed:
@@ -249,9 +266,9 @@ class FullPipelineRunner:
         else:
             determination = "INVALIDATED"
 
-        # Step 9: Add derived ideas to catalog
+        # Step 9: Add derived entries to catalog (routed by type)
         if derived_ideas:
-            self._add_derived_ideas(entry, derived_ideas)
+            self._add_derived_entries(entry, derived_ideas)
 
         # Step 10: Update entry status
         self._update_entry_status(entry_id, determination)
@@ -1811,15 +1828,115 @@ Alpha Decay: {(is_results.alpha - oos_results.alpha)*100:.1f}%
 
         return context
 
+    # Keywords for classifying improvements by type
+    TASK_KEYWORDS = [
+        "bootstrap", "p-value", "confidence interval", "t-test", "significance",
+        "regime analysis", "validate", "verify", "debug", "audit", "calculate",
+        "statistical", "methodology", "test for", "check for", "analyze",
+        "rolling window", "sensitivity analysis", "parameter sweep", "backtest",
+        "correlation", "factor regression", "walk-forward", "monte carlo"
+    ]
+    ACTION_KEYWORDS = [
+        "reject", "invalidate", "archive", "delete", "remove", "do not proceed",
+        "abort", "cancel", "stop", "discontinue", "fail", "mark as"
+    ]
+
+    def _classify_improvement(self, text: str) -> str:
+        """
+        Classify an improvement as idea, task, or action.
+
+        Returns: 'idea' (tradeable), 'task' (methodology), or 'action' (admin)
+        """
+        text_lower = text.lower()
+
+        # Check for action keywords first (most specific)
+        for kw in self.ACTION_KEYWORDS:
+            if kw in text_lower:
+                return "action"
+
+        # Check for task/methodology keywords
+        for kw in self.TASK_KEYWORDS:
+            if kw in text_lower:
+                return "task"
+
+        # Default to tradeable idea
+        return "idea"
+
+    def _extract_and_classify_improvements(self, reviews: List[ExpertReview], parent_entry) -> List[Dict[str, str]]:
+        """
+        Extract and classify improvements from expert reviews.
+
+        Returns list of dicts with 'text', 'type', and 'persona' keys.
+        Limited to MAX_IDEAS_PER_PARENT total, prioritizing tradeable ideas.
+        """
+        MAX_IDEAS_PER_PARENT = 5
+
+        classified = []
+        seen_texts = set()  # Simple deduplication
+
+        for review in reviews:
+            for improvement in review.improvements[:3]:  # Max 3 per reviewer
+                # Skip very short or empty improvements
+                if not improvement or len(improvement) < 10:
+                    continue
+
+                # Simple deduplication: check if similar text already seen
+                text_normalized = improvement.lower().strip()[:100]
+                if text_normalized in seen_texts:
+                    continue
+                seen_texts.add(text_normalized)
+
+                entry_type = self._classify_improvement(improvement)
+                classified.append({
+                    "text": improvement,
+                    "type": entry_type,
+                    "persona": review.persona
+                })
+
+        # Prioritize: ideas first, then tasks, then actions
+        priority_order = {"idea": 0, "task": 1, "action": 2}
+        classified.sort(key=lambda x: priority_order.get(x["type"], 99))
+
+        # Limit total and log what we're keeping
+        kept = classified[:MAX_IDEAS_PER_PARENT]
+        if len(classified) > MAX_IDEAS_PER_PARENT:
+            logger.info(f"Limited from {len(classified)} to {MAX_IDEAS_PER_PARENT} derived entries")
+
+        # Log classification breakdown
+        type_counts = {}
+        for item in kept:
+            type_counts[item["type"]] = type_counts.get(item["type"], 0) + 1
+        logger.info(f"Classified improvements: {type_counts}")
+
+        return kept
+
+    def _add_derived_entries(self, parent_entry, classified_items: List[Dict[str, str]]):
+        """Add derived entries to the catalog, routed by type."""
+        for item in classified_items:
+            try:
+                entry_type = item["type"]
+                text = item["text"]
+
+                # Create appropriate entry
+                self.catalog.add_derived(
+                    parent_id=parent_entry.id,
+                    name=f"{parent_entry.name} - {text[:50]}",
+                    hypothesis=text,
+                    entry_type=entry_type,
+                    tags=["derived", f"from-{item['persona']}", entry_type]
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add derived {item['type']}: {e}")
+
     def _extract_derived_ideas(self, reviews: List[ExpertReview]) -> List[str]:
-        """Extract derived ideas from expert reviews."""
+        """Extract derived ideas from expert reviews. DEPRECATED - use _extract_and_classify_improvements."""
         ideas = []
         for review in reviews:
             ideas.extend(review.improvements[:2])  # Take top 2 improvements per reviewer
         return list(set(ideas))[:5]  # Dedupe and limit to 5
 
     def _add_derived_ideas(self, parent_entry, ideas: List[str]):
-        """Add derived ideas to the catalog."""
+        """Add derived ideas to the catalog. DEPRECATED - use _add_derived_entries."""
         for idea in ideas:
             try:
                 self.catalog.add_derived(

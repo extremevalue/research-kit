@@ -188,6 +188,8 @@ class Catalog:
         "indicator": "IND",
         "strategy": "STRAT",
         "idea": "IDEA",
+        "task": "TASK",      # Methodology/research tasks (not tradeable)
+        "action": "ACTION",  # Administrative actions (reject, archive, etc.)
         "learning": "LEARN",
         "tool": "TOOL",
         "data": "DATA"
