@@ -1547,14 +1547,16 @@ Return ONLY the Python code, no explanations."""
                     created_str = bt.get("created", "")
 
                     # Check age - handle both ISO format and QC's "YYYY-MM-DD HH:MM:SS" format
+                    # IMPORTANT: QC returns UTC times, so we must parse them as UTC
                     try:
-                        from datetime import datetime
+                        from datetime import datetime, timezone
                         # Try ISO format first
                         if "T" in created_str:
                             created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
                         else:
-                            # QC uses "YYYY-MM-DD HH:MM:SS" format
+                            # QC uses "YYYY-MM-DD HH:MM:SS" format in UTC
                             created_dt = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
+                            created_dt = created_dt.replace(tzinfo=timezone.utc)
                         age = current_time - created_dt.timestamp()
 
                         if age > min_age_seconds:
@@ -1607,12 +1609,14 @@ Return ONLY the Python code, no explanations."""
             if is_consuming_node:
                 created_str = bt.get("created", "")
                 try:
-                    from datetime import datetime
+                    from datetime import datetime, timezone
                     # Handle both ISO format and QC's "YYYY-MM-DD HH:MM:SS" format
+                    # IMPORTANT: QC returns UTC times, so we must parse them as UTC
                     if "T" in created_str:
                         created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
                     else:
                         created_dt = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
+                        created_dt = created_dt.replace(tzinfo=timezone.utc)
                     age = current_time - created_dt.timestamp()
 
                     if age > max_age_seconds:
