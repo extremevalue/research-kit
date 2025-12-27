@@ -292,10 +292,13 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
    self.add_equity("SPY", Resolution.DAILY)
    self.add_future(Futures.Indices.SP_500_E_MINI, Resolution.DAILY)
 
-3. Indicators (snake_case, automatic updates):
-   self.rsi_indicator = self.rsi("SPY", 14, Resolution.DAILY)
-   self.sma_fast = self.sma("SPY", 10, Resolution.DAILY)
-   self.sma_slow = self.sma("SPY", 50, Resolution.DAILY)
+3. Indicators (snake_case, use symbol's resolution by default):
+   # Simple form - uses the security's default resolution
+   self.rsi_indicator = self.rsi("SPY", 14)
+   self.sma_fast = self.sma("SPY", 10)
+   self.sma_slow = self.sma("SPY", 50)
+   # If you need explicit resolution, include MovingAverageType:
+   # self.rsi_indicator = self.rsi("SPY", 14, MovingAverageType.WILDERS, Resolution.DAILY)
 
 4. Futures symbols (underscores):
    Futures.Indices.SP_500_E_MINI (not SP500EMini)
@@ -330,7 +333,8 @@ class MyAlgorithm(QCAlgorithm):
         self.spy = self.add_equity("SPY", Resolution.DAILY).symbol
         self.set_benchmark("SPY")
         # Use descriptive names that don't shadow methods
-        self.rsi_indicator = self.rsi(self.spy, 14, Resolution.DAILY)
+        # Simple form uses security's default resolution
+        self.rsi_indicator = self.rsi(self.spy, 14)
 
     def on_data(self, data):
         if not self.rsi_indicator.is_ready:
@@ -431,6 +435,19 @@ Return ONLY the Python code, no explanations."""
             (r'\.Current\.Value\b', '.current.value'),
         ]
         for pattern, replacement in method_fixes:
+            code = re.sub(pattern, replacement, code)
+
+        # Fix incorrect indicator signatures (Resolution without MovingAverageType)
+        # Wrong: self.rsi(symbol, 14, Resolution.DAILY)
+        # Right: self.rsi(symbol, 14) - uses default resolution from security
+        indicator_signature_fixes = [
+            # Remove Resolution argument from indicator calls (uses security's default)
+            (r'self\.rsi\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.rsi(\1, \2)'),
+            (r'self\.sma\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.sma(\1, \2)'),
+            (r'self\.ema\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.ema(\1, \2)'),
+            (r'self\.atr\(([^,]+),\s*(\d+),\s*Resolution\.\w+\)', r'self.atr(\1, \2)'),
+        ]
+        for pattern, replacement in indicator_signature_fixes:
             code = re.sub(pattern, replacement, code)
 
         # Fix variable names that shadow indicator methods
