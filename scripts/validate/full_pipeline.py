@@ -279,7 +279,27 @@ class FullPipelineRunner:
                 logger.warning(f"Existing backtest.py contains invalid content, regenerating...")
                 code_file.unlink()  # Delete the bad file
             else:
-                return existing_code
+                # Check if previous run failed with runtime error - regenerate to apply fixes
+                last_output = val_dir / "last_lean_output.txt"
+                if last_output.exists():
+                    output_content = last_output.read_text().lower()
+                    runtime_errors = [
+                        "runtime error:",
+                        "name '",  # NameError patterns
+                        "' is not defined",
+                        "has no attribute",
+                        "object has no attribute",
+                        "'nonetype' object",
+                        "typeerror:",
+                        "attributeerror:",
+                    ]
+                    if any(err in output_content for err in runtime_errors):
+                        logger.warning(f"Previous run had runtime errors, regenerating backtest.py...")
+                        code_file.unlink()
+                    else:
+                        return existing_code
+                else:
+                    return existing_code
 
         # Detect if this is a crypto strategy for special handling
         is_crypto = self._is_crypto_strategy(entry)
