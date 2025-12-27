@@ -1513,25 +1513,40 @@ Return ONLY the Python code, no explanations."""
             backtests = self._list_project_backtests(proj_id)
 
             for bt in backtests:
-                # Check if backtest is not completed
-                if not bt.get("completed"):
-                    bt_id = bt.get("backtestId")
+                bt_id = bt.get("backtestId")
+                node_name = bt.get("nodeName", "")
+                is_completed = bt.get("completed", False)
+                status = bt.get("status", "")
+
+                # A backtest is consuming a node if:
+                # 1. It has a nodeName assigned (node is allocated), OR
+                # 2. It's not completed (still running/queued)
+                is_consuming_node = bool(node_name) or not is_completed
+
+                if is_consuming_node:
                     created_str = bt.get("created", "")
 
-                    # Check age
+                    # Check age - handle both ISO format and QC's "YYYY-MM-DD HH:MM:SS" format
                     try:
                         from datetime import datetime
-                        created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                        # Try ISO format first
+                        if "T" in created_str:
+                            created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                        else:
+                            # QC uses "YYYY-MM-DD HH:MM:SS" format
+                            created_dt = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
                         age = current_time - created_dt.timestamp()
 
                         if age > min_age_seconds:
                             proj_name = proj.get("name", proj_id)[:40]
-                            logger.warning(f"Canceling running backtest {bt_id} in {proj_name} (age: {int(age)}s)")
+                            logger.warning(f"Canceling backtest {bt_id} in {proj_name} (status: {status}, node: {node_name}, age: {int(age)}s)")
                             if self._delete_backtest(proj_id, bt_id):
                                 total_cleaned += 1
+                        else:
+                            logger.debug(f"Skipping recent backtest {bt_id} (age: {int(age)}s < {min_age_seconds}s)")
                     except Exception as e:
                         # If we can't parse the date, cancel it anyway (safer)
-                        logger.warning(f"Canceling backtest {bt_id} (could not determine age)")
+                        logger.warning(f"Canceling backtest {bt_id} (could not determine age: {e})")
                         if self._delete_backtest(proj_id, bt_id):
                             total_cleaned += 1
 
@@ -1560,19 +1575,28 @@ Return ONLY the Python code, no explanations."""
         current_time = time.time()
 
         for bt in backtests:
-            # Check if backtest is old and not completed
-            if not bt.get("completed"):
-                # Parse created timestamp
+            bt_id = bt.get("backtestId")
+            node_name = bt.get("nodeName", "")
+            is_completed = bt.get("completed", False)
+
+            # A backtest is consuming a node if:
+            # 1. It has a nodeName assigned (node is allocated), OR
+            # 2. It's not completed (still running/queued)
+            is_consuming_node = bool(node_name) or not is_completed
+
+            if is_consuming_node:
                 created_str = bt.get("created", "")
                 try:
-                    # QC uses ISO format
                     from datetime import datetime
-                    created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    # Handle both ISO format and QC's "YYYY-MM-DD HH:MM:SS" format
+                    if "T" in created_str:
+                        created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    else:
+                        created_dt = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
                     age = current_time - created_dt.timestamp()
 
                     if age > max_age_seconds:
-                        bt_id = bt.get("backtestId")
-                        logger.warning(f"Cleaning up stuck backtest {bt_id} (age: {int(age)}s)")
+                        logger.warning(f"Cleaning up stuck backtest {bt_id} (node: {node_name}, age: {int(age)}s)")
                         if self._delete_backtest(project_id, bt_id):
                             cleaned += 1
                 except Exception as e:
