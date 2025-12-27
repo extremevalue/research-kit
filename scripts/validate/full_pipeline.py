@@ -340,11 +340,23 @@ CRITICAL - Use these EXACT QuantConnect Python API patterns:
    if self.rsi_indicator.is_ready:
        rsi_value = self.rsi_indicator.current.value
 
-7. Trading:
+7. Bollinger Bands - store the indicator, access bands from it:
+   WRONG: self.bb_upper = self.bb("SPY", 20).upper_band  # .upper_band returns IndicatorBase, not value!
+   RIGHT: self.bb_indicator = self.bb("SPY", 20, 2)
+          # Then in on_data: bb_upper = self.bb_indicator.upper_band.current.value
+
+8. CRITICAL - The 'data' parameter is ONLY available inside on_data():
+   WRONG: def my_helper_method(self):
+              bar = data.bars.get(self.spy)  # ERROR: 'data' is not defined!
+   RIGHT: def my_helper_method(self, data):  # Pass data as parameter
+              bar = data.bars.get(self.spy)
+   OR:    Store values from on_data in self.xxx and access in other methods
+
+9. Trading:
    self.set_holdings("SPY", 1.0)  # 100% long
    self.liquidate("SPY")
 
-8. Benchmark:
+10. Benchmark:
    self.set_benchmark("SPY")
 
 IMPORTANT - Variable naming:
@@ -595,6 +607,35 @@ Return ONLY the Python code, no explanations."""
         ]
         for pattern, replacement in indicator_shadowing_fixes:
             code = re.sub(pattern, replacement, code)
+
+        # Fix references to self.macd when it should be self.macd_indicator
+        # Only if self.macd_indicator exists in the code
+        if 'self.macd_indicator' in code:
+            # Fix self.macd.is_ready, self.macd.current, self.macd.signal
+            code = re.sub(r'\bself\.macd\.is_ready\b', 'self.macd_indicator.is_ready', code)
+            code = re.sub(r'\bself\.macd\.current\b', 'self.macd_indicator.current', code)
+            code = re.sub(r'\bself\.macd\.signal\b', 'self.macd_indicator.signal', code)
+
+        # Fix BB band extraction pattern - storing .upper_band directly doesn't work
+        # Pattern: self.xxx = self.bb(...).upper_band -> self.bb_indicator = self.bb(...) + separate access
+        # This is tricky - for now, warn and try to fix common patterns
+        if '.upper_band' in code or '.lower_band' in code or '.middle_band' in code:
+            # If someone assigned self.bb_upper = self.bb(...).upper_band, fix it
+            code = re.sub(
+                r'self\.(\w+)\s*=\s*self\.bb\(([^)]+)\)\.upper_band',
+                r'# NOTE: BB bands must be accessed from indicator object\n        self.bb_indicator = self.bb(\2)\n        # Access via: self.bb_indicator.upper_band.current.value',
+                code
+            )
+            code = re.sub(
+                r'self\.(\w+)\s*=\s*self\.bb\(([^)]+)\)\.lower_band',
+                r'# NOTE: BB bands must be accessed from indicator object\n        self.bb_indicator = self.bb(\2)\n        # Access via: self.bb_indicator.lower_band.current.value',
+                code
+            )
+            code = re.sub(
+                r'self\.(\w+)\s*=\s*self\.bb\(([^)]+)\)\.middle_band',
+                r'# NOTE: BB bands must be accessed from indicator object\n        self.bb_indicator = self.bb(\2)\n        # Access via: self.bb_indicator.middle_band.current.value',
+                code
+            )
 
         # Fix unsafe data access patterns (Issue #21)
         # Convert data.contains_key() + data[symbol].close to safe data.bars.get() pattern
