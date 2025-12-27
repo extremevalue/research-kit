@@ -50,6 +50,7 @@ class BacktestResult:
     error: Optional[str] = None
     raw_output: Optional[str] = None
     rate_limited: bool = False  # True if failed due to rate limiting
+    engine_crash: bool = False  # True if LEAN engine crashed (not user code error)
 
 
 @dataclass
@@ -166,11 +167,16 @@ class FullPipelineRunner:
         is_results = self._run_backtest(backtest_code, periods['is_start'], periods['is_end'], entry_id)
 
         if not is_results.success:
+            # Engine crashes are infrastructure issues - mark as BLOCKED, not FAILED
+            determination = "BLOCKED" if is_results.engine_crash else "FAILED"
+            error_prefix = "IS backtest crashed (infrastructure issue)" if is_results.engine_crash else "IS backtest failed"
+            if is_results.engine_crash:
+                self._update_entry_status(entry_id, "BLOCKED", blocked_reason="LEAN engine crash - retry later")
             return PipelineResult(
                 entry_id=entry_id,
-                determination="FAILED",
+                determination=determination,
                 is_results=is_results,
-                error=f"IS backtest failed: {is_results.error}"
+                error=f"{error_prefix}: {is_results.error}"
             )
 
         print(f"    CAGR: {is_results.cagr*100:.1f}%  |  Sharpe: {is_results.sharpe:.2f}  |  Max DD: {is_results.max_drawdown*100:.1f}%")
@@ -227,12 +233,17 @@ class FullPipelineRunner:
         oos_results = self._run_backtest(backtest_code, periods['oos_start'], periods['oos_end'], entry_id)
 
         if not oos_results.success:
+            # Engine crashes are infrastructure issues - mark as BLOCKED, not FAILED
+            determination = "BLOCKED" if oos_results.engine_crash else "FAILED"
+            error_prefix = "OOS backtest crashed (infrastructure issue)" if oos_results.engine_crash else "OOS backtest failed"
+            if oos_results.engine_crash:
+                self._update_entry_status(entry_id, "BLOCKED", blocked_reason="LEAN engine crash - retry later")
             return PipelineResult(
                 entry_id=entry_id,
-                determination="FAILED",
+                determination=determination,
                 is_results=is_results,
                 oos_results=oos_results,
-                error=f"OOS backtest failed: {oos_results.error}"
+                error=f"{error_prefix}: {oos_results.error}"
             )
 
         print(f"    CAGR: {oos_results.cagr*100:.1f}%  |  Sharpe: {oos_results.sharpe:.2f}  |  Max DD: {oos_results.max_drawdown*100:.1f}%")
@@ -325,6 +336,10 @@ class FullPipelineRunner:
 
         # Detect if this is a crypto strategy for special handling
         is_crypto = self._is_crypto_strategy(entry)
+
+        if is_crypto:
+            logger.warning(f"Crypto strategy detected for {entry.id} - QC crypto data may cause engine crashes")
+            print("  ⚠️  Crypto strategy detected - data reliability may vary")
 
         # Generate code via Claude with detailed API guidance
         prompt = f"""Generate a QuantConnect algorithm to test this hypothesis:
@@ -512,6 +527,11 @@ Return ONLY the Python code, no explanations."""
 
             # Post-process to fix common issues
             code = self._fix_qc_api_issues(code)
+
+            # Check if generated code uses crypto (even if hypothesis didn't mention it)
+            if "add_crypto" in code.lower() and not is_crypto:
+                logger.warning(f"Generated code uses crypto for {entry.id} - QC crypto data may cause engine crashes")
+                print("  ⚠️  Crypto detected in generated code - data reliability may vary")
 
             # Save the generated code
             val_dir.mkdir(parents=True, exist_ok=True)
@@ -1198,6 +1218,26 @@ Return ONLY the Python code, no explanations."""
 
         Uses QC API to fetch reliable JSON statistics instead of parsing table output.
         """
+        combined_output = (stdout or "") + (stderr or "")
+
+        # Check for LEAN engine crashes (infrastructure issue, not user code)
+        engine_crash_patterns = [
+            "PAL_SEHException",
+            "core dumped",
+            "FATAL UNHANDLED EXCEPTION",
+            "Aborted (core dumped)",
+            "Segmentation fault",
+        ]
+        for pattern in engine_crash_patterns:
+            if pattern in combined_output:
+                logger.warning(f"LEAN engine crash detected: {pattern}")
+                return BacktestResult(
+                    success=False,
+                    error=f"LEAN engine crash: {pattern}",
+                    raw_output=stdout,
+                    engine_crash=True
+                )
+
         if returncode != 0:
             # Include both stdout and stderr in error - lean often puts errors in stdout
             error_details = stderr or stdout[:500] if stdout else "No output"
@@ -1385,14 +1425,15 @@ Return ONLY the Python code, no explanations."""
             return data.get("backtests", [])
         return []
 
-    def _cleanup_all_stuck_backtests(self, max_age_seconds: int = 600) -> int:
+    def _cleanup_all_stuck_backtests(self, max_age_seconds: int = 600, max_projects: int = 20) -> int:
         """
-        Clean up stuck backtests across ALL projects at startup.
+        Clean up stuck backtests across recent projects at startup.
 
         This ensures a clean slate before starting a new batch run.
 
         Args:
             max_age_seconds: Consider stuck if running longer than this (default 10 min)
+            max_projects: Maximum number of recent projects to check (default 20)
 
         Returns:
             Total number of backtests cleaned up
@@ -1407,9 +1448,22 @@ Return ONLY the Python code, no explanations."""
             return 0
 
         projects = data.get("projects", [])
-        for proj in projects:
+
+        # Sort by modified date (most recent first) and limit to recent projects
+        # This avoids checking hundreds of old projects
+        try:
+            projects = sorted(projects, key=lambda p: p.get("modified", ""), reverse=True)
+        except Exception:
+            pass  # If sorting fails, use original order
+
+        projects = projects[:max_projects]
+        logger.info(f"Checking {len(projects)} recent projects for stuck backtests...")
+
+        for i, proj in enumerate(projects):
             proj_id = str(proj.get("projectId", ""))
+            proj_name = proj.get("name", proj_id)
             if proj_id:
+                logger.debug(f"  [{i+1}/{len(projects)}] Checking project: {proj_name}")
                 cleaned = self._cleanup_stuck_backtests(proj_id, max_age_seconds)
                 total_cleaned += cleaned
 
@@ -1948,10 +2002,10 @@ Alpha Decay: {(is_results.alpha - oos_results.alpha)*100:.1f}%
             except Exception as e:
                 logger.warning(f"Failed to add derived idea: {e}")
 
-    def _update_entry_status(self, entry_id: str, determination: str):
+    def _update_entry_status(self, entry_id: str, determination: str, blocked_reason: Optional[str] = None):
         """Update the entry status in the catalog."""
         try:
-            self.catalog.update_status(entry_id, determination)
+            self.catalog.update_status(entry_id, determination, blocked_reason=blocked_reason)
         except Exception as e:
             logger.warning(f"Failed to update entry status: {e}")
 
