@@ -17,14 +17,20 @@ Usage:
     result = runner.run("STRAT-309")
 """
 
+import base64
+import hashlib
 import json
+import re
 import shutil
 import subprocess
 import tempfile
+import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from scripts.utils.logging_config import get_logger
 
@@ -184,7 +190,8 @@ class FullPipelineRunner:
                 self._add_derived_ideas(entry, derived_ideas)
                 print(f"\n  Added {len(derived_ideas)} derived ideas to catalog")
 
-            # Save results even for failures
+            # Update catalog status and save results
+            self._update_entry_status(entry_id, "INVALIDATED")
             self._save_results(entry_id, is_results, None, expert_reviews, "INVALIDATED")
 
             return PipelineResult(
@@ -320,65 +327,99 @@ Return ONLY the Python code, no explanations."""
 
         Uses cloud backtest by default (has full data access).
         Falls back to local with --download-data if cloud fails.
+        Includes retry logic for rate limiting errors.
         """
-        try:
-            # Use unique project name with timestamp to avoid cloud naming conflicts
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            project_name = f"{entry_id}_{start_date[:4]}_{end_date[:4]}_{timestamp}"
-            project_dir = self.workspace.validations_path / entry_id / project_name
-            project_dir.mkdir(parents=True, exist_ok=True)
+        import time
+        max_retries = 3
+        retry_delay = 30  # seconds
 
-            # Write the algorithm code
-            main_py = project_dir / "main.py"
-            modified_code = self._inject_dates(code, start_date, end_date)
-            main_py.write_text(modified_code)
-
-            # Create config.json for lean
-            config = {
-                "algorithm-language": "Python",
-                "parameters": {}
-            }
-            config_file = project_dir / "config.json"
-            config_file.write_text(json.dumps(config))
-
-            # Build command based on mode
-            if self.use_local:
-                # Local Docker backtest with data download from QC
-                cmd = ["lean", "backtest", str(project_dir), "--download-data"]
-                # Find lean.json for local config
-                lean_config = self.workspace.path / "lean.json"
-                if lean_config.exists():
-                    cmd.extend(["--lean-config", str(lean_config)])
-            else:
-                # Cloud backtest (has full data access)
-                # --push uploads the project, no --open to avoid browser popup
-                cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
-
-            logger.info(f"Running: {' '.join(cmd)}")
-
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=900 if self.use_local else 600,  # Local Docker may need more time
-                cwd=str(self.workspace.path)  # Run from workspace root
-            )
-
-            # Parse results from output
-            backtest_result = self._parse_lean_output(result.stdout, result.stderr, result.returncode)
-
-            # Clean up timestamped project folder (keep main validation folder clean)
+        for attempt in range(max_retries):
             try:
-                shutil.rmtree(project_dir)
-            except Exception as cleanup_error:
-                logger.debug(f"Failed to clean up {project_dir}: {cleanup_error}")
+                # Use unique project name with timestamp to avoid cloud naming conflicts
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                project_name = f"{entry_id}_{start_date[:4]}_{end_date[:4]}_{timestamp}"
+                project_dir = self.workspace.validations_path / entry_id / project_name
+                project_dir.mkdir(parents=True, exist_ok=True)
 
-            return backtest_result
+                # Write the algorithm code
+                main_py = project_dir / "main.py"
+                modified_code = self._inject_dates(code, start_date, end_date)
+                main_py.write_text(modified_code)
 
-        except subprocess.TimeoutExpired:
-            return BacktestResult(success=False, error="Backtest timed out")
-        except Exception as e:
-            return BacktestResult(success=False, error=str(e))
+                # Create config.json for lean
+                config = {
+                    "algorithm-language": "Python",
+                    "parameters": {}
+                }
+                config_file = project_dir / "config.json"
+                config_file.write_text(json.dumps(config))
+
+                # Build command based on mode
+                if self.use_local:
+                    # Local Docker backtest with data download from QC
+                    cmd = ["lean", "backtest", str(project_dir), "--download-data"]
+                    # Find lean.json for local config
+                    lean_config = self.workspace.path / "lean.json"
+                    if lean_config.exists():
+                        cmd.extend(["--lean-config", str(lean_config)])
+                else:
+                    # Cloud backtest (has full data access)
+                    # --push uploads the project, no --open to avoid browser popup
+                    cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
+
+                logger.info(f"Running: {' '.join(cmd)}")
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=900 if self.use_local else 600,  # Local Docker may need more time
+                    cwd=str(self.workspace.path)  # Run from workspace root
+                )
+
+                # Debug: save raw output for troubleshooting
+                debug_file = self.workspace.validations_path / entry_id / "last_lean_output.txt"
+                try:
+                    debug_file.write_text(f"=== RETURNCODE: {result.returncode} ===\n\n=== STDOUT ===\n{result.stdout}\n\n=== STDERR ===\n{result.stderr}")
+                except Exception:
+                    pass
+
+                # Check for rate limiting / no spare nodes error - retry if so
+                if "no spare nodes" in result.stdout.lower() or "no spare nodes" in result.stderr.lower():
+                    if attempt < max_retries - 1:
+                        logger.warning(f"QC rate limit hit, waiting {retry_delay}s before retry {attempt + 2}/{max_retries}")
+                        # Clean up before retry
+                        try:
+                            shutil.rmtree(project_dir)
+                        except Exception:
+                            pass
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        return BacktestResult(
+                            success=False,
+                            error="QC rate limit: no spare nodes available after retries",
+                            raw_output=result.stdout
+                        )
+
+                # Parse results from output
+                backtest_result = self._parse_lean_output(result.stdout, result.stderr, result.returncode)
+
+                # Clean up timestamped project folder (keep main validation folder clean)
+                try:
+                    shutil.rmtree(project_dir)
+                except Exception as cleanup_error:
+                    logger.debug(f"Failed to clean up {project_dir}: {cleanup_error}")
+
+                return backtest_result
+
+            except subprocess.TimeoutExpired:
+                return BacktestResult(success=False, error="Backtest timed out")
+            except Exception as e:
+                return BacktestResult(success=False, error=str(e))
+
+        # Should not reach here, but just in case
+        return BacktestResult(success=False, error="Backtest failed after all retries")
 
     def _inject_dates(self, code: str, start_date: str, end_date: str) -> str:
         """Inject start/end dates into the algorithm code."""
@@ -406,7 +447,10 @@ Return ONLY the Python code, no explanations."""
         return code
 
     def _parse_lean_output(self, stdout: str, stderr: str, returncode: int) -> BacktestResult:
-        """Parse lean CLI output to extract backtest results."""
+        """Parse lean CLI output to extract backtest results.
+
+        Uses QC API to fetch reliable JSON statistics instead of parsing table output.
+        """
         if returncode != 0:
             # Include both stdout and stderr in error - lean often puts errors in stdout
             error_details = stderr or stdout[:500] if stdout else "No output"
@@ -418,8 +462,6 @@ Return ONLY the Python code, no explanations."""
 
         # Check for runtime errors in the output (even with exit code 0)
         if "An error occurred during this backtest:" in stdout:
-            # Extract the error message
-            import re
             error_match = re.search(r"An error occurred during this backtest:\s*(.+?)(?:\s+at\s+|$)", stdout, re.DOTALL)
             error_msg = error_match.group(1).strip() if error_match else "Unknown runtime error"
             return BacktestResult(
@@ -428,20 +470,115 @@ Return ONLY the Python code, no explanations."""
                 raw_output=stdout
             )
 
-        # Parse the table format output from lean cloud backtest
-        try:
-            import re
+        # Extract project ID and backtest ID from output
+        project_id, backtest_id = self._extract_backtest_ids(stdout)
 
+        if not project_id or not backtest_id:
+            # Fallback to table parsing if we can't extract IDs
+            return self._parse_lean_output_table(stdout)
+
+        # Fetch results from QC API (more reliable than parsing table)
+        try:
+            stats = self._fetch_backtest_stats(project_id, backtest_id)
+            if stats:
+                # Parse percentage strings like "10.127%" to floats
+                def parse_pct(s):
+                    if isinstance(s, (int, float)):
+                        return float(s)
+                    if isinstance(s, str):
+                        return float(s.replace('%', '').replace('$', '').replace(',', ''))
+                    return 0.0
+
+                cagr = parse_pct(stats.get("Compounding Annual Return", 0)) / 100
+                sharpe = parse_pct(stats.get("Sharpe Ratio", 0))
+                drawdown = parse_pct(stats.get("Drawdown", 0)) / 100
+                alpha = parse_pct(stats.get("Alpha", 0))
+                total_return = parse_pct(stats.get("Net Profit", 0)) / 100
+
+                return BacktestResult(
+                    success=True,
+                    cagr=cagr,
+                    sharpe=sharpe,
+                    max_drawdown=abs(drawdown),
+                    alpha=alpha,
+                    total_return=total_return,
+                    benchmark_cagr=0.10,
+                    raw_output=stdout
+                )
+        except Exception as e:
+            logger.warning(f"API fetch failed, falling back to table parsing: {e}")
+
+        # Fallback to table parsing
+        return self._parse_lean_output_table(stdout)
+
+    def _extract_backtest_ids(self, stdout: str) -> Tuple[Optional[str], Optional[str]]:
+        """Extract project ID and backtest ID from lean output."""
+        # Look for: Project ID: 27018367
+        # Look for: Backtest id: 205d98ce63238f18187f9da04186e199
+        project_match = re.search(r"Project ID:\s*(\d+)", stdout)
+        backtest_match = re.search(r"Backtest id:\s*([a-f0-9]+)", stdout)
+
+        project_id = project_match.group(1) if project_match else None
+        backtest_id = backtest_match.group(1) if backtest_match else None
+
+        return project_id, backtest_id
+
+    def _fetch_backtest_stats(self, project_id: str, backtest_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch backtest statistics from QC API."""
+        # Load credentials from ~/.lean/credentials
+        creds_file = Path.home() / ".lean" / "credentials"
+        if not creds_file.exists():
+            logger.warning("No QC credentials found at ~/.lean/credentials")
+            return None
+
+        try:
+            creds = json.loads(creds_file.read_text())
+            user_id = creds.get("user-id")
+            api_token = creds.get("api-token")
+
+            if not user_id or not api_token:
+                return None
+
+            # QC API requires timestamp and hash
+            timestamp = str(int(time.time()))
+            hash_data = f"{api_token}:{timestamp}"
+            hash_value = hashlib.sha256(hash_data.encode()).hexdigest()
+
+            # Build request
+            params = urllib.parse.urlencode({"projectId": project_id, "backtestId": backtest_id})
+            url = f"https://www.quantconnect.com/api/v2/backtests/read?{params}"
+
+            auth_string = f"{user_id}:{hash_value}"
+            auth_bytes = base64.b64encode(auth_string.encode()).decode()
+
+            request = urllib.request.Request(url)
+            request.add_header("Authorization", f"Basic {auth_bytes}")
+            request.add_header("Timestamp", timestamp)
+
+            response = urllib.request.urlopen(request, timeout=30)
+            data = json.loads(response.read().decode())
+
+            if data.get("success"):
+                return data.get("backtest", {}).get("statistics", {})
+            else:
+                logger.warning(f"QC API error: {data.get('errors', [])}")
+                return None
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch from QC API: {e}")
+            return None
+
+    def _parse_lean_output_table(self, stdout: str) -> BacktestResult:
+        """Fallback: Parse lean CLI table output to extract backtest results."""
+        try:
             # Extract metrics from the table format
-            # Format: │ Metric Name │ Value │
-            # Note: "Compounding Annual Return" is split across lines, so match partial
             cagr = self._extract_table_metric(stdout, "Compounding Annual", None)
             sharpe = self._extract_table_metric(stdout, "Sharpe Ratio", None)
             drawdown = self._extract_table_metric(stdout, "Drawdown", None)
             alpha = self._extract_table_metric(stdout, "Alpha", None)
             total_return = self._extract_table_metric(stdout, "Return", None)
 
-            # Check if we got any valid metrics (should have at least CAGR and Sharpe)
+            # Check if we got any valid metrics
             if cagr is None or sharpe is None:
                 return BacktestResult(
                     success=False,
@@ -449,9 +586,9 @@ Return ONLY the Python code, no explanations."""
                     raw_output=stdout
                 )
 
-            # If alpha wasn't found in output, estimate from CAGR vs benchmark
+            # If alpha wasn't found, estimate from CAGR vs benchmark
             if alpha is None and cagr is not None:
-                alpha = cagr - 0.10  # Assume 10% benchmark
+                alpha = cagr - 0.10
 
             return BacktestResult(
                 success=True,
