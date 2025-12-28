@@ -555,7 +555,7 @@ Return ONLY the Python code, no explanations."""
         return any(pattern in content for pattern in error_patterns)
 
     def _is_valid_python_code(self, code: str) -> bool:
-        """Basic validation that content looks like Python code."""
+        """Validate that content is syntactically valid Python code."""
         # Must have some Python-ish content
         code_lower = code.lower().strip()
         required_patterns = [
@@ -581,6 +581,13 @@ Return ONLY the Python code, no explanations."""
 
         # Must be at least 100 characters (a minimal algorithm)
         if len(code.strip()) < 100:
+            return False
+
+        # Validate Python syntax by attempting to compile (Issue #32 fix)
+        try:
+            compile(code, '<generated>', 'exec')
+        except SyntaxError as e:
+            logger.error(f"Generated code has syntax error at line {e.lineno}: {e.msg}")
             return False
 
         return True
