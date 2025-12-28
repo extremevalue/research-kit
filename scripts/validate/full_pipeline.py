@@ -528,6 +528,13 @@ Return ONLY the Python code, no explanations."""
             # Post-process to fix common issues
             code = self._fix_qc_api_issues(code)
 
+            # Final syntax validation after post-processing (Issue #33 fix)
+            try:
+                compile(code, '<generated>', 'exec')
+            except SyntaxError as e:
+                logger.error(f"Post-processed code has syntax error at line {e.lineno}: {e.msg}")
+                return None
+
             # Check if generated code uses crypto (even if hypothesis didn't mention it)
             if "add_crypto" in code.lower() and not is_crypto:
                 logger.warning(f"Generated code uses crypto for {entry.id} - QC crypto data may cause engine crashes")
