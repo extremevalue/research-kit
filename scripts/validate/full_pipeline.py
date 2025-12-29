@@ -296,8 +296,14 @@ class FullPipelineRunner:
             derived_ideas=derived_ideas
         )
 
-    def _generate_backtest_code(self, entry) -> Optional[str]:
-        """Generate backtest code from the entry's hypothesis."""
+    def _generate_backtest_code(self, entry, previous_error: Optional[str] = None, previous_code: Optional[str] = None) -> Optional[str]:
+        """Generate backtest code from the entry's hypothesis.
+
+        Args:
+            entry: The catalog entry to generate code for
+            previous_error: If provided, the error from a previous failed attempt (Issue #35)
+            previous_code: If provided, the code that caused the error (Issue #35)
+        """
         if not self.llm_client:
             logger.warning("No LLM client - cannot generate backtest code")
             return None
@@ -305,6 +311,8 @@ class FullPipelineRunner:
         # Check if code already exists in validation folder
         val_dir = self.workspace.validations_path / entry.id
         code_file = val_dir / "backtest.py"
+        extracted_error = None  # Will store the error for feedback loop
+
         if code_file.exists():
             existing_code = code_file.read_text()
             # Validate existing code - if it's an error message or invalid, regenerate
@@ -312,10 +320,11 @@ class FullPipelineRunner:
                 logger.warning(f"Existing backtest.py contains invalid content, regenerating...")
                 code_file.unlink()  # Delete the bad file
             else:
-                # Check if previous run failed with runtime error - regenerate to apply fixes
+                # Check if previous run failed with runtime error - regenerate with error feedback
                 last_output = val_dir / "last_lean_output.txt"
                 if last_output.exists():
-                    output_content = last_output.read_text().lower()
+                    output_content = last_output.read_text()
+                    output_lower = output_content.lower()
                     runtime_errors = [
                         "runtime error:",
                         "name '",  # NameError patterns
@@ -326,13 +335,20 @@ class FullPipelineRunner:
                         "typeerror:",
                         "attributeerror:",
                     ]
-                    if any(err in output_content for err in runtime_errors):
+                    if any(err in output_lower for err in runtime_errors):
                         logger.warning(f"Previous run had runtime errors, regenerating backtest.py...")
+                        # Extract the error message for feedback (Issue #35)
+                        extracted_error = self._extract_runtime_error(output_content)
+                        previous_code = existing_code  # Save the failing code
                         code_file.unlink()
                     else:
                         return existing_code
                 else:
                     return existing_code
+
+        # Use extracted error from last_output if not explicitly provided
+        if previous_error is None and extracted_error:
+            previous_error = extracted_error
 
         # Detect if this is a crypto strategy for special handling
         is_crypto = self._is_crypto_strategy(entry)
@@ -496,6 +512,38 @@ class MyAlgorithm(QCAlgorithm):
             self.liquidate()
 ```
 
+CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
+
+1. NEVER use variable names that conflict with QCAlgorithm base class:
+   WRONG: self.universe = ...        # Conflicts with QCAlgorithm.Universe
+   WRONG: self.securities = ...      # Conflicts with QCAlgorithm.Securities
+   WRONG: self.transactions = ...    # Conflicts with QCAlgorithm.Transactions
+   RIGHT: self._universe = ...       # Prefix with underscore for private variables
+   RIGHT: self._my_securities = ...
+
+2. NEVER access non-existent attributes:
+   WRONG: self.transactions_manager  # Does not exist!
+   WRONG: self.order_manager         # Does not exist!
+   RIGHT: Use self.transactions for transaction history
+
+3. ALWAYS check for None before arithmetic:
+   WRONG: return_value = price / prev_price - 1  # prev_price could be None!
+   RIGHT: if prev_price is None or prev_price == 0: return
+          return_value = price / prev_price - 1
+
+4. KEEP ARRAYS SYNCHRONIZED - when tracking multiple time series:
+   WRONG:
+       self.returns.append(ret)       # In one code path
+       self.benchmark.append(bench)   # In different code path - arrays get out of sync!
+   RIGHT:
+       # Always append all arrays together in the same code block
+       self.returns.append(ret)
+       self.benchmark.append(bench)
+
+5. NEVER mix datetime and int in arithmetic:
+   WRONG: days_held = self.time - entry_date  # Returns timedelta, not int
+   RIGHT: days_held = (self.time - entry_date).days
+
 Requirements:
 - Use the EXACT patterns shown above
 - Use snake_case for all method names (initialize, on_data, set_holdings)
@@ -504,6 +552,29 @@ Requirements:
 - Include benchmark comparison with SPY
 
 Return ONLY the Python code, no explanations."""
+
+        # Issue #35: Add error feedback if previous attempt failed
+        if previous_error and previous_code:
+            prompt += f"""
+
+⚠️ IMPORTANT - FIXING PREVIOUS ERROR ⚠️
+The previous version of this code failed with the following runtime error:
+
+ERROR: {previous_error}
+
+Here is the code that caused this error:
+```python
+{previous_code[:2000]}{'...[truncated]' if len(previous_code) > 2000 else ''}
+```
+
+You MUST fix this specific error in your new implementation. Analyze what caused it and avoid the same mistake.
+Common fixes:
+- If "has no attribute": check you're not using non-existent QC API methods
+- If "NoneType": add None checks before using values
+- If "index out of bounds" or "broadcast": ensure arrays stay synchronized
+- If variable name conflict: prefix with underscore (self._xxx)
+"""
+            logger.info(f"Providing error feedback to LLM: {previous_error[:100]}...")
 
         try:
             response = self.llm_client.generate_sonnet(prompt)
@@ -560,6 +631,32 @@ Return ONLY the Python code, no explanations."""
             "LLM client is in offline mode",
         ]
         return any(pattern in content for pattern in error_patterns)
+
+    def _extract_runtime_error(self, lean_output: str) -> Optional[str]:
+        """Extract the runtime error message from Lean output for feedback loop (Issue #35)."""
+        import re
+
+        # Try to find the error message in various formats
+        patterns = [
+            r"An error occurred during this backtest:\s*(.+?)(?:\s+at\s+|$)",
+            r"Runtime Error:\s*(.+?)(?:\n|$)",
+            r"(?:TypeError|AttributeError|NameError|IndexError|ValueError|KeyError):\s*(.+?)(?:\n|$)",
+            r"'(\w+)' object has no attribute '(\w+)'",
+            r"index (\d+) is out of bounds for axis \d+ with size (\d+)",
+            r"operands could not be broadcast together with shapes (.+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, lean_output, re.IGNORECASE | re.DOTALL)
+            if match:
+                return match.group(0).strip()[:500]  # Limit length
+
+        # Fallback: look for common error keywords
+        for line in lean_output.split('\n'):
+            if any(kw in line.lower() for kw in ['error:', 'exception:', 'failed:', 'typeerror', 'attributeerror']):
+                return line.strip()[:500]
+
+        return None
 
     def _is_valid_python_code(self, code: str) -> bool:
         """Validate that content is syntactically valid Python code."""
