@@ -515,10 +515,13 @@ class MyAlgorithm(QCAlgorithm):
 CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
 
 1. NEVER use variable names that conflict with QCAlgorithm base class:
+   WRONG: self.alpha = ...           # Conflicts with QCAlgorithm.Alpha (alpha model)
    WRONG: self.universe = ...        # Conflicts with QCAlgorithm.Universe
    WRONG: self.securities = ...      # Conflicts with QCAlgorithm.Securities
    WRONG: self.transactions = ...    # Conflicts with QCAlgorithm.Transactions
-   RIGHT: self._universe = ...       # Prefix with underscore for private variables
+   RIGHT: self._alpha = ...          # Prefix with underscore for private variables
+   RIGHT: self.significance_level = ...  # Use descriptive alternative name
+   RIGHT: self._universe = ...
    RIGHT: self._my_securities = ...
 
 2. NEVER access non-existent attributes:
