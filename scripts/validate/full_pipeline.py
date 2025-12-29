@@ -563,6 +563,16 @@ CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
        self.btc = self.add_crypto("BTCUSD", Resolution.DAILY).symbol
        # In on_data: ratio = eth_price / btc_price
 
+7. NEVER assign to read-only portfolio properties (Issue #39):
+   The following are READ-ONLY - QuantConnect manages them automatically:
+   WRONG: self.portfolio.cash = 50000          # Read-only property!
+   WRONG: self.portfolio.cash -= cost          # Read-only property!
+   WRONG: self.portfolio.invested_capital = x  # Read-only property!
+   WRONG: self.portfolio.total_portfolio_value = x  # Read-only property!
+   RIGHT: To READ current cash: cash = self.portfolio.cash
+   RIGHT: To set initial capital in initialize(): self.set_cash(100000)
+   RIGHT: Let QC manage cash automatically via trades - don't track it manually
+
 Requirements:
 - Use the EXACT patterns shown above
 - Use snake_case for all method names (initialize, on_data, set_holdings)
@@ -597,6 +607,9 @@ Common fixes:
     benchmark = np.array(self.benchmark_returns[-min_len:])
   DO NOT use [:len(other_array)] - that doesn't work if the array is already shorter!
 - If variable name conflict: prefix with underscore (self._xxx)
+- If "property is read-only" on portfolio.cash or similar:
+  NEVER assign to self.portfolio.cash, .invested_capital, etc. - these are read-only!
+  Let QC manage cash automatically via trades.
 """
             logger.info(f"Providing error feedback to LLM: {previous_error[:100]}...")
 
