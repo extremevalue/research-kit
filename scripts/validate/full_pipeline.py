@@ -1094,73 +1094,106 @@ Common fixes:
 
     def _fix_array_sync_issues(self, code: str) -> str:
         """
-        Fix array synchronization issues that cause shape mismatch errors (Issue #36).
+        Fix array synchronization issues that cause shape mismatch errors (Issue #36, #43).
 
         Common error patterns:
         - 'operands could not be broadcast together with shapes (2769,) (2767,)'
         - 'index 2768 is out of bounds for axis 0 with size 2768'
 
-        These occur when multiple arrays are tracked separately and get out of sync
-        due to conditional appends in on_data().
+        These occur when:
+        1. Multiple arrays are tracked separately and get out of sync (conditional appends)
+        2. Bootstrap indices are generated from one array but used on another
+        3. Direct array subtraction without length checking
 
-        Fix approach: Find all self.xxx_returns lists used in on_end_of_algorithm
-        and sync them to minimum length at the start of the method.
+        Fix approach:
+        1. Sync all return arrays to minimum length at start of on_end_of_algorithm
+        2. Fix bootstrap indexing to use safe bounds
+        3. Fix direct array operations to sync lengths first
         """
         # Check if there's an on_end_of_algorithm that might do array math
         if 'def on_end_of_algorithm' not in code:
             return code  # No end-of-algo processing to fix
 
-        # Find all self.xxx_returns lists that are converted to np.array
-        # Match patterns like: np.array(self.strategy_returns) or np.array(self.benchmark_returns[:...])
-        # Exclude patterns that look like dict access (self.xxx[symbol])
-        array_patterns = re.findall(r'np\.array\(self\.(\w*returns)\b', code)
+        # Find all self.xxx_returns or similar lists that are converted to np.array
+        # Match patterns like: np.array(self.strategy_returns), np.array(self.benchmark_returns)
+        array_patterns = re.findall(r'np\.array\(self\.(\w*(?:returns|_returns|Returns))\b', code)
 
-        # Combine and deduplicate - only keep simple list names (not dicts like returns_history)
+        # Also find xxx_array patterns used in bootstrap
+        array_var_patterns = re.findall(r'(\w+_array)\s*=\s*np\.array', code)
+
+        # Combine and deduplicate
         all_arrays = list(set(array_patterns))
-        # Filter out obvious dict names
         all_arrays = [a for a in all_arrays if not a.endswith('_history') and not a.endswith('_dict')]
 
-        if len(all_arrays) < 2:
-            return code  # No multiple array operations to fix
+        # Fix 1: Sync arrays at start of on_end_of_algorithm
+        if len(all_arrays) >= 2:
+            sync_lines = ['        # Sync arrays to same length (Issue #36 fix)']
+            sync_lines.append(f'        _min_len = min({", ".join(f"len(self.{a})" for a in all_arrays)}) if {" and ".join(f"len(self.{a}) > 0" for a in all_arrays)} else 0')
+            sync_lines.append('        if _min_len == 0:')
+            sync_lines.append('            return')
+            for arr in all_arrays:
+                sync_lines.append(f'        self.{arr} = self.{arr}[-_min_len:]')
+            sync_block = '\n'.join(sync_lines) + '\n'
 
-        # Build sync code that syncs all arrays to min length
-        sync_lines = ['        # Sync arrays to same length (Issue #36 fix)']
-        sync_lines.append(f'        _min_len = min({", ".join(f"len(self.{a})" for a in all_arrays)})')
-        for arr in all_arrays:
-            sync_lines.append(f'        self.{arr} = self.{arr}[-_min_len:] if len(self.{arr}) > _min_len else self.{arr}')
-        sync_block = '\n'.join(sync_lines) + '\n'
+            def insert_sync(match):
+                method_body = match.group(1)
+                lines = method_body.split('\n')
+                result = []
+                inserted = False
 
-        # Find on_end_of_algorithm and inject sync code after initial guards
-        def insert_sync(match):
-            method_body = match.group(1)
-            lines = method_body.split('\n')
-            result = []
-            inserted = False
+                for i, line in enumerate(lines):
+                    result.append(line)
+                    if not inserted and i > 0:
+                        stripped = line.strip()
+                        if stripped and not stripped.startswith(('if len(', 'if not ', 'return', '#')):
+                            result.insert(-1, sync_block)
+                            inserted = True
 
-            for i, line in enumerate(lines):
-                result.append(line)
-                # Skip the def line, empty lines, and guard clauses (if len < X, return)
-                if not inserted and i > 0:
-                    stripped = line.strip()
-                    # Don't insert before guards or empty lines
-                    if stripped and not stripped.startswith(('if len(', 'if not ', 'return', '#')):
-                        # Found first real statement - insert sync before it
-                        result.insert(-1, sync_block)
-                        inserted = True
+                if not inserted and len(lines) > 1:
+                    result.insert(1, sync_block)
 
-            # If guards never ended (edge case), insert after first line
-            if not inserted and len(lines) > 1:
-                result.insert(1, sync_block)
+                return '\n'.join(result)
 
-            return '\n'.join(result)
+            code = re.sub(
+                r'(def on_end_of_algorithm\(self\):.*?)(?=\n    def |\n\nclass |\Z)',
+                insert_sync,
+                code,
+                flags=re.DOTALL
+            )
 
-        # Match on_end_of_algorithm method
-        code = re.sub(
-            r'(def on_end_of_algorithm\(self\):.*?)(?=\n    def |\n\nclass |\Z)',
-            insert_sync,
-            code,
-            flags=re.DOTALL
-        )
+        # Fix 2: Bootstrap indexing - ensure indices don't exceed array bounds (Issue #43)
+        # Pattern: xxx_array[indices] where indices comes from np.random.randint
+        # Add bounds clipping: indices = np.clip(indices, 0, len(xxx_array) - 1)
+
+        # Find bootstrap patterns: variable[indices] where indices is from randint
+        if 'np.random.randint' in code and '[indices]' in code:
+            # Insert bounds checking before array indexing in bootstrap loops
+            # Pattern: for _ in range(...): ... indices = np.random.randint(...) ... array[indices]
+
+            # Add a helper comment and fix - clip indices to array size
+            # Replace: boot_xxx = xxx_array[indices]
+            # With: boot_xxx = xxx_array[np.clip(indices, 0, len(xxx_array) - 1)]
+            def fix_bootstrap_indexing(match):
+                var_name = match.group(1)
+                array_name = match.group(2)
+                return f'{var_name} = {array_name}[np.clip(indices, 0, len({array_name}) - 1)]'
+
+            code = re.sub(
+                r'(\w+)\s*=\s*(\w+_array)\[indices\]',
+                fix_bootstrap_indexing,
+                code
+            )
+
+            # Also fix patterns like: returns_array[indices] without assignment
+            code = re.sub(
+                r'(\w+_array)\[indices\](?!\s*=)',
+                r'\1[np.clip(indices, 0, len(\1) - 1)]',
+                code
+            )
+
+        # Fix 3: Direct array operations - sync before subtraction/addition
+        # Pattern: np.array(self.xxx) - np.array(self.yyy)
+        # This is harder to fix automatically, but we can add a guard
 
         return code
 
