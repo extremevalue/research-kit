@@ -540,6 +540,17 @@ CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
        self.returns.append(ret)
        self.benchmark.append(bench)
 
+   CRITICAL for on_end_of_algorithm - ALWAYS sync arrays before operations:
+   WRONG:
+       benchmark_array = np.array(self.benchmark[:len(self.returns)])  # Doesn't work if benchmark is shorter!
+       excess = np.array(self.returns) - benchmark_array  # Shape mismatch crash!
+   RIGHT:
+       # Sync to minimum length FIRST
+       min_len = min(len(self.returns), len(self.benchmark_returns))
+       returns = np.array(self.returns[-min_len:])
+       benchmark = np.array(self.benchmark_returns[-min_len:])
+       excess = returns - benchmark  # Now safe!
+
 5. NEVER mix datetime and int in arithmetic:
    WRONG: days_held = self.time - entry_date  # Returns timedelta, not int
    RIGHT: days_held = (self.time - entry_date).days
@@ -579,7 +590,12 @@ You MUST fix this specific error in your new implementation. Analyze what caused
 Common fixes:
 - If "has no attribute": check you're not using non-existent QC API methods
 - If "NoneType": add None checks before using values
-- If "index out of bounds" or "broadcast": ensure arrays stay synchronized
+- If "index out of bounds" or "broadcast together with shapes":
+  THIS IS AN ARRAY SYNC BUG! Fix by syncing arrays to min length FIRST:
+    min_len = min(len(self.returns), len(self.benchmark_returns))
+    returns = np.array(self.returns[-min_len:])
+    benchmark = np.array(self.benchmark_returns[-min_len:])
+  DO NOT use [:len(other_array)] - that doesn't work if the array is already shorter!
 - If variable name conflict: prefix with underscore (self._xxx)
 """
             logger.info(f"Providing error feedback to LLM: {previous_error[:100]}...")
@@ -1068,66 +1084,67 @@ Common fixes:
         - 'operands could not be broadcast together with shapes (2769,) (2767,)'
         - 'index 2768 is out of bounds for axis 0 with size 2768'
 
-        These occur when multiple arrays are tracked separately and get out of sync.
+        These occur when multiple arrays are tracked separately and get out of sync
+        due to conditional appends in on_data().
 
-        Fix approach:
-        1. Inject a helper function to sync array lengths
-        2. Wrap numpy array operations in try/except with sync fallback
+        Fix approach: Find all self.xxx_returns lists used in on_end_of_algorithm
+        and sync them to minimum length at the start of the method.
         """
-        # Only apply if code uses numpy arrays with multiple self.xxx lists
-        array_patterns = re.findall(r'np\.array\(self\.(\w+)\)', code)
-        if len(array_patterns) < 2:
-            return code  # No multiple array operations to fix
-
         # Check if there's an on_end_of_algorithm that might do array math
         if 'def on_end_of_algorithm' not in code:
             return code  # No end-of-algo processing to fix
 
-        # Inject a helper method to sync arrays
-        sync_helper = '''
-    def _sync_arrays(self, *arrays):
-        """Sync multiple arrays to same length (Issue #36 fix)."""
-        if not arrays:
-            return arrays
-        min_len = min(len(a) for a in arrays)
-        return tuple(a[-min_len:] if len(a) > min_len else a for a in arrays)
-'''
+        # Find all self.xxx_returns lists that are converted to np.array
+        # Match patterns like: np.array(self.strategy_returns) or np.array(self.benchmark_returns[:...])
+        # Exclude patterns that look like dict access (self.xxx[symbol])
+        array_patterns = re.findall(r'np\.array\(self\.(\w*returns)\b', code)
 
-        # Find where to insert the helper - after class definition or after initialize
-        if 'def initialize(self):' in code:
-            # Insert after initialize method definition line
-            code = re.sub(
-                r'(class \w+\(QCAlgorithm\):)\n',
-                r'\1\n' + sync_helper + '\n',
-                code
-            )
+        # Combine and deduplicate - only keep simple list names (not dicts like returns_history)
+        all_arrays = list(set(array_patterns))
+        # Filter out obvious dict names
+        all_arrays = [a for a in all_arrays if not a.endswith('_history') and not a.endswith('_dict')]
 
-        # Wrap array operations in on_end_of_algorithm with try/except
-        # Find the on_end_of_algorithm method and add protection
-        if 'def on_end_of_algorithm' in code:
-            # Add try/except wrapper around common array operations
-            # Pattern: arr1 - arr2 or np.array(self.x) - np.array(self.y)
+        if len(all_arrays) < 2:
+            return code  # No multiple array operations to fix
 
-            # Replace np.array(self.xxx) operations with synced versions
-            # Find pairs of array operations and sync them
-            def sync_array_pair(match):
-                full = match.group(0)
-                arr1_name = match.group(1)
-                arr2_name = match.group(2)
-                op = match.group(3) if match.lastindex >= 3 else '-'
-                return f'''# Sync arrays before operation (Issue #36 fix)
-        _arr1, _arr2 = self._sync_arrays(self.{arr1_name}, self.{arr2_name})
-        _arr1, _arr2 = np.array(_arr1), np.array(_arr2)
-        _result = _arr1 {op} _arr2'''
+        # Build sync code that syncs all arrays to min length
+        sync_lines = ['        # Sync arrays to same length (Issue #36 fix)']
+        sync_lines.append(f'        _min_len = min({", ".join(f"len(self.{a})" for a in all_arrays)})')
+        for arr in all_arrays:
+            sync_lines.append(f'        self.{arr} = self.{arr}[-_min_len:] if len(self.{arr}) > _min_len else self.{arr}')
+        sync_block = '\n'.join(sync_lines) + '\n'
 
-            # Pattern: np.array(self.xxx) - np.array(self.yyy)
-            code = re.sub(
-                r'np\.array\(self\.(\w+)\)\s*([-+*/])\s*np\.array\(self\.(\w+)\)',
-                lambda m: f'''# Sync arrays (Issue #36)
-        _a1, _a2 = self._sync_arrays(self.{m.group(1)}, self.{m.group(3)})
-        np.array(_a1) {m.group(2)} np.array(_a2)''',
-                code
-            )
+        # Find on_end_of_algorithm and inject sync code after initial guards
+        def insert_sync(match):
+            method_body = match.group(1)
+            lines = method_body.split('\n')
+            result = []
+            inserted = False
+
+            for i, line in enumerate(lines):
+                result.append(line)
+                # Skip the def line, empty lines, and guard clauses (if len < X, return)
+                if not inserted and i > 0:
+                    stripped = line.strip()
+                    # Don't insert before guards or empty lines
+                    if stripped and not stripped.startswith(('if len(', 'if not ', 'return', '#')):
+                        # Found first real statement - insert sync before it
+                        result.insert(-1, sync_block)
+                        inserted = True
+
+            # If guards never ended (edge case), insert after first line
+            if not inserted and len(lines) > 1:
+                result.insert(1, sync_block)
+
+            return '\n'.join(result)
+
+        # Match on_end_of_algorithm method
+        code = re.sub(
+            r'(def on_end_of_algorithm\(self\):.*?)(?=\n    def |\n\nclass |\Z)',
+            insert_sync,
+            code,
+            flags=re.DOTALL
+        )
 
         return code
 
