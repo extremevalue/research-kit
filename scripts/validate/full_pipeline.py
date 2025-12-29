@@ -1377,6 +1377,12 @@ Common fixes:
                 # Parse results from output
                 backtest_result = self._parse_lean_output(result.stdout, result.stderr, result.returncode)
 
+                # If rate limited, retry (Issue #45)
+                if backtest_result.rate_limited and attempt < max_retries - 1:
+                    logger.warning(f"Rate limited (detected in output), waiting 60s before retry {attempt + 2}/{max_retries}")
+                    time.sleep(60)
+                    continue
+
                 # Clean up timestamped project folder (keep main validation folder clean)
                 try:
                     shutil.rmtree(project_dir)
@@ -1519,7 +1525,23 @@ Common fixes:
 
         if returncode != 0:
             # Include both stdout and stderr in error - lean often puts errors in stdout
-            error_details = stderr or stdout[:500] if stdout else "No output"
+            # Use full output for error detection, truncate only for display (Issue #45)
+            combined = (stdout or "") + (stderr or "")
+
+            # Check for rate limiting even on non-zero exit (Issue #45)
+            # The "no spare nodes" error can appear after 500 chars in the output
+            if "no spare nodes" in combined.lower() or "rate limit" in combined.lower():
+                return BacktestResult(
+                    success=False,
+                    error="QC nodes unavailable - no spare nodes in cluster",
+                    raw_output=stdout,
+                    rate_limited=True
+                )
+
+            # Use last 1000 chars of combined output for better error context
+            error_details = combined[-1000:] if len(combined) > 1000 else combined
+            if not error_details.strip():
+                error_details = "No output"
             return BacktestResult(
                 success=False,
                 error=f"Lean exited with code {returncode}: {error_details}",
