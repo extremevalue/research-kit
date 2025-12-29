@@ -544,6 +544,14 @@ CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
    WRONG: days_held = self.time - entry_date  # Returns timedelta, not int
    RIGHT: days_held = (self.time - entry_date).days
 
+6. NEVER use ratio symbols for crypto trading (Issue #37):
+   WRONG: self.create_ratio_symbol("ETHUSD", "BTCUSD")  # Creates invalid "ETHUSD/BTCUSD"
+   WRONG: self.add_crypto("ETHUSD/BTCUSD")             # Ratio symbols don't exist!
+   RIGHT: Subscribe to each crypto separately and calculate ratio manually:
+       self.eth = self.add_crypto("ETHUSD", Resolution.DAILY).symbol
+       self.btc = self.add_crypto("BTCUSD", Resolution.DAILY).symbol
+       # In on_data: ratio = eth_price / btc_price
+
 Requirements:
 - Use the EXACT patterns shown above
 - Use snake_case for all method names (initialize, on_data, set_holdings)
