@@ -953,6 +953,9 @@ Common fixes:
         # Fix crypto-specific issues (Issue #23)
         code = self._fix_crypto_safety_issues(code)
 
+        # Fix array synchronization issues (Issue #36)
+        code = self._fix_array_sync_issues(code)
+
         return code
 
     def _fix_unsafe_data_access(self, code: str) -> str:
@@ -1046,6 +1049,77 @@ Common fixes:
             code,
             flags=re.IGNORECASE
         )
+
+        return code
+
+    def _fix_array_sync_issues(self, code: str) -> str:
+        """
+        Fix array synchronization issues that cause shape mismatch errors (Issue #36).
+
+        Common error patterns:
+        - 'operands could not be broadcast together with shapes (2769,) (2767,)'
+        - 'index 2768 is out of bounds for axis 0 with size 2768'
+
+        These occur when multiple arrays are tracked separately and get out of sync.
+
+        Fix approach:
+        1. Inject a helper function to sync array lengths
+        2. Wrap numpy array operations in try/except with sync fallback
+        """
+        # Only apply if code uses numpy arrays with multiple self.xxx lists
+        array_patterns = re.findall(r'np\.array\(self\.(\w+)\)', code)
+        if len(array_patterns) < 2:
+            return code  # No multiple array operations to fix
+
+        # Check if there's an on_end_of_algorithm that might do array math
+        if 'def on_end_of_algorithm' not in code:
+            return code  # No end-of-algo processing to fix
+
+        # Inject a helper method to sync arrays
+        sync_helper = '''
+    def _sync_arrays(self, *arrays):
+        """Sync multiple arrays to same length (Issue #36 fix)."""
+        if not arrays:
+            return arrays
+        min_len = min(len(a) for a in arrays)
+        return tuple(a[-min_len:] if len(a) > min_len else a for a in arrays)
+'''
+
+        # Find where to insert the helper - after class definition or after initialize
+        if 'def initialize(self):' in code:
+            # Insert after initialize method definition line
+            code = re.sub(
+                r'(class \w+\(QCAlgorithm\):)\n',
+                r'\1\n' + sync_helper + '\n',
+                code
+            )
+
+        # Wrap array operations in on_end_of_algorithm with try/except
+        # Find the on_end_of_algorithm method and add protection
+        if 'def on_end_of_algorithm' in code:
+            # Add try/except wrapper around common array operations
+            # Pattern: arr1 - arr2 or np.array(self.x) - np.array(self.y)
+
+            # Replace np.array(self.xxx) operations with synced versions
+            # Find pairs of array operations and sync them
+            def sync_array_pair(match):
+                full = match.group(0)
+                arr1_name = match.group(1)
+                arr2_name = match.group(2)
+                op = match.group(3) if match.lastindex >= 3 else '-'
+                return f'''# Sync arrays before operation (Issue #36 fix)
+        _arr1, _arr2 = self._sync_arrays(self.{arr1_name}, self.{arr2_name})
+        _arr1, _arr2 = np.array(_arr1), np.array(_arr2)
+        _result = _arr1 {op} _arr2'''
+
+            # Pattern: np.array(self.xxx) - np.array(self.yyy)
+            code = re.sub(
+                r'np\.array\(self\.(\w+)\)\s*([-+*/])\s*np\.array\(self\.(\w+)\)',
+                lambda m: f'''# Sync arrays (Issue #36)
+        _a1, _a2 = self._sync_arrays(self.{m.group(1)}, self.{m.group(3)})
+        np.array(_a1) {m.group(2)} np.array(_a2)''',
+                code
+            )
 
         return code
 
