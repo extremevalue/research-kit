@@ -514,7 +514,25 @@ class MyAlgorithm(QCAlgorithm):
 
 CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
 
-1. NEVER use variable names that conflict with QCAlgorithm base class:
+1. NEVER iterate over methods directly - call them properly (Issue #51):
+   WRONG: for symbol in self.securities:           # 'MethodBinding' not iterable!
+   WRONG: for symbol in self.Securities:           # Same error
+   RIGHT: for symbol, security in self.securities.items():
+   RIGHT: for symbol in self.securities.keys:      # Keys is a property
+
+   WRONG: for symbol in self.active_securities:    # Not iterable
+   RIGHT: for symbol in self.active_securities.keys:
+
+2. NEVER use methods that don't exist in QuantConnect API (Issue #52):
+   WRONG: self.set_seed(42)                        # Does not exist!
+   WRONG: self.SetRandomSeed(42)                   # Does not exist!
+   WRONG: np.random.seed(42)                       # No numpy random in QC!
+   RIGHT: import random; random.seed(42)           # Use Python's random module
+
+   WRONG: self.get_history(...)                    # Method is 'history' not 'get_history'
+   RIGHT: self.history(...)
+
+3. NEVER use variable names that conflict with QCAlgorithm base class:
    WRONG: self.alpha = ...           # Conflicts with QCAlgorithm.Alpha (alpha model)
    WRONG: self.universe = ...        # Conflicts with QCAlgorithm.Universe
    WRONG: self.securities = ...      # Conflicts with QCAlgorithm.Securities
@@ -524,17 +542,17 @@ CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
    RIGHT: self._universe = ...
    RIGHT: self._my_securities = ...
 
-2. NEVER access non-existent attributes:
+4. NEVER access non-existent attributes:
    WRONG: self.transactions_manager  # Does not exist!
    WRONG: self.order_manager         # Does not exist!
    RIGHT: Use self.transactions for transaction history
 
-3. ALWAYS check for None before arithmetic:
+5. ALWAYS check for None before arithmetic:
    WRONG: return_value = price / prev_price - 1  # prev_price could be None!
    RIGHT: if prev_price is None or prev_price == 0: return
           return_value = price / prev_price - 1
 
-4. KEEP ARRAYS SYNCHRONIZED - when tracking multiple time series:
+6. KEEP ARRAYS SYNCHRONIZED - when tracking multiple time series (Issue #48):
    WRONG:
        self.returns.append(ret)       # In one code path
        self.benchmark.append(bench)   # In different code path - arrays get out of sync!
@@ -554,11 +572,11 @@ CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
        benchmark = np.array(self.benchmark_returns[-min_len:])
        excess = returns - benchmark  # Now safe!
 
-5. NEVER mix datetime and int in arithmetic:
+7. NEVER mix datetime and int in arithmetic:
    WRONG: days_held = self.time - entry_date  # Returns timedelta, not int
    RIGHT: days_held = (self.time - entry_date).days
 
-6. NEVER use ratio symbols for crypto trading (Issue #37):
+8. NEVER use ratio symbols for crypto trading (Issue #37):
    WRONG: self.create_ratio_symbol("ETHUSD", "BTCUSD")  # Creates invalid "ETHUSD/BTCUSD"
    WRONG: self.add_crypto("ETHUSD/BTCUSD")             # Ratio symbols don't exist!
    RIGHT: Subscribe to each crypto separately and calculate ratio manually:
@@ -566,12 +584,14 @@ CRITICAL LESSONS LEARNED (these errors caused real failures - AVOID them):
        self.btc = self.add_crypto("BTCUSD", Resolution.DAILY).symbol
        # In on_data: ratio = eth_price / btc_price
 
-7. NEVER assign to read-only portfolio properties (Issue #39):
+9. NEVER assign to read-only portfolio properties (Issues #39, #50):
    The following are READ-ONLY - QuantConnect manages them automatically:
    WRONG: self.portfolio.cash = 50000          # Read-only property!
    WRONG: self.portfolio.cash -= cost          # Read-only property!
    WRONG: self.portfolio.invested_capital = x  # Read-only property!
    WRONG: self.portfolio.total_portfolio_value = x  # Read-only property!
+   WRONG: security.price = x                   # Read-only!
+   WRONG: security.volume = x                  # Read-only!
    RIGHT: To READ current cash: cash = self.portfolio.cash
    RIGHT: To set initial capital in initialize(): self.set_cash(100000)
    RIGHT: Let QC manage cash automatically via trades - don't track it manually
@@ -996,6 +1016,12 @@ Common fixes:
         # Fix array synchronization issues (Issue #36)
         code = self._fix_array_sync_issues(code)
 
+        # Fix non-existent methods (Issue #52)
+        code = self._fix_nonexistent_methods(code)
+
+        # Fix iteration over MethodBinding (Issue #51)
+        code = self._fix_method_iteration(code)
+
         return code
 
     def _fix_unsafe_data_access(self, code: str) -> str:
@@ -1194,6 +1220,57 @@ Common fixes:
         # Fix 3: Direct array operations - sync before subtraction/addition
         # Pattern: np.array(self.xxx) - np.array(self.yyy)
         # This is harder to fix automatically, but we can add a guard
+
+        return code
+
+    def _fix_nonexistent_methods(self, code: str) -> str:
+        """
+        Fix calls to methods that don't exist in QuantConnect API (Issue #52).
+
+        Common hallucinated methods:
+        - self.set_seed() / self.SetRandomSeed() -> import random; random.seed()
+        - self.get_history() -> self.history()
+        """
+        # Fix set_seed variations -> Python's random.seed
+        nonexistent_method_fixes = [
+            # set_seed patterns
+            (r'self\.set_seed\((\d+)\)', r'import random; random.seed(\1)'),
+            (r'self\.SetSeed\((\d+)\)', r'import random; random.seed(\1)'),
+            (r'self\.SetRandomSeed\((\d+)\)', r'import random; random.seed(\1)'),
+            (r'self\.set_random_seed\((\d+)\)', r'import random; random.seed(\1)'),
+            # np.random.seed in QC context (can be problematic)
+            (r'np\.random\.seed\((\d+)\)', r'import random; random.seed(\1)'),
+            # get_history -> history
+            (r'self\.get_history\(', r'self.history('),
+            (r'self\.GetHistory\(', r'self.history('),
+        ]
+
+        for pattern, replacement in nonexistent_method_fixes:
+            code = re.sub(pattern, replacement, code)
+
+        return code
+
+    def _fix_method_iteration(self, code: str) -> str:
+        """
+        Fix iteration over MethodBinding objects (Issue #51).
+
+        Common errors:
+        - for x in self.securities -> for x in self.securities.keys
+        - for x in self.active_securities -> for x in self.active_securities.keys
+        """
+        # Fix direct iteration over securities (causes MethodBinding error)
+        iteration_fixes = [
+            # for symbol in self.securities: -> for symbol in self.securities.keys:
+            (r'for\s+(\w+)\s+in\s+self\.securities\s*:', r'for \1 in self.securities.keys:'),
+            (r'for\s+(\w+)\s+in\s+self\.Securities\s*:', r'for \1 in self.securities.keys:'),
+            # for symbol in self.active_securities: -> for symbol in self.active_securities.keys:
+            (r'for\s+(\w+)\s+in\s+self\.active_securities\s*:', r'for \1 in self.active_securities.keys:'),
+            (r'for\s+(\w+)\s+in\s+self\.ActiveSecurities\s*:', r'for \1 in self.active_securities.keys:'),
+            # if symbol in self.securities: should remain, but iteration needs .keys
+        ]
+
+        for pattern, replacement in iteration_fixes:
+            code = re.sub(pattern, replacement, code)
 
         return code
 
