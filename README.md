@@ -264,6 +264,31 @@ research analyze show IND-002            # Show results
 - **contrarian** - Challenges consensus
 - **report-synthesizer** - Integrates all perspectives
 
+### `research synthesize`
+
+Run cross-strategy synthesis with an expert panel. Analyzes all validated strategies to identify portfolio construction opportunities, instrument expansion, and creative combinations.
+
+```bash
+research synthesize                      # Full synthesis with all personas
+research synthesize --dry-run            # Preview what would be analyzed
+research synthesize --persona creative-maverick  # Run single persona
+research synthesize --create-entries     # Create catalog entries from recommendations
+research synthesize --top 25             # Limit to top 25 by Sharpe
+research synthesize --min-sharpe 0.5     # Filter by minimum Sharpe
+```
+
+**Personas:**
+- **portfolio-architect** - Correlation, allocation, portfolio construction
+- **instrument-specialist** - Options, futures, ETF opportunities
+- **data-integrator** - Alternative data enhancement
+- **regime-strategist** - Market regime analysis
+- **creative-maverick** - Unconventional ideas and combinations
+- **synthesis-director** - Integrates all perspectives
+
+**Output:**
+- Markdown report saved to `synthesis/` directory
+- Optional: New catalog entries created from recommendations
+
 ### `research migrate <action>`
 
 Import from external sources.

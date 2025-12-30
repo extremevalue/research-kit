@@ -12,6 +12,7 @@ Complete reference for all research-kit CLI commands.
 | `research ingest process` | Process inbox files | Occasionally |
 | `research data add` | Add custom data | Occasionally |
 | `research run` | **The core validation + expert loop** | Daily |
+| `research synthesize` | Cross-strategy synthesis with expert panel | Periodically |
 | `research catalog list/show/stats` | Query catalog | As needed |
 
 ---
@@ -235,6 +236,100 @@ research catalog stats
 │ TOTAL          │  50                │
 │ DERIVED IDEAS  │  31  (pending)     │
 └─────────────────────────────────────┘
+```
+
+---
+
+## Synthesis Commands (Meta-Review)
+
+### `research synthesize`
+
+Run cross-strategy synthesis with an expert panel. Analyzes validated strategies to identify portfolio construction opportunities, instrument expansion, and creative combinations.
+
+```bash
+research synthesize                      # Full synthesis with all personas
+research synthesize --dry-run            # Preview what would be analyzed
+research synthesize --persona creative-maverick  # Run single persona
+research synthesize --create-entries     # Create catalog entries from recommendations
+research synthesize --top 25             # Limit to top 25 by Sharpe
+research synthesize --min-sharpe 0.5     # Filter by minimum Sharpe
+research synthesize --max-drawdown 0.4   # Filter by max drawdown
+research synthesize --save               # Save raw JSON results
+```
+
+**What happens:**
+
+```
+1. AGGREGATE
+   └── Collect all validated strategies with metrics
+
+2. ANALYZE (Parallel)
+   ├── Portfolio Architect: "What combinations work together?"
+   ├── Instrument Specialist: "Can we use options/futures?"
+   ├── Data Integrator: "What alternative data could help?"
+   ├── Regime Strategist: "How do these perform across regimes?"
+   └── Creative Maverick: "What's the unconventional angle?"
+
+3. SYNTHESIZE
+   └── Synthesis Director integrates all perspectives
+
+4. OUTPUT
+   ├── Markdown report saved to synthesis/
+   └── (Optional) New catalog entries created
+```
+
+**Personas:**
+
+| Persona | Focus |
+|---------|-------|
+| portfolio-architect | Correlation, allocation, portfolio construction |
+| instrument-specialist | Options, futures, ETF opportunities |
+| data-integrator | Alternative data enhancement |
+| regime-strategist | Market regime analysis |
+| creative-maverick | Unconventional ideas and combinations |
+| synthesis-director | Integrates all perspectives |
+
+**Example output:**
+
+```
+$ research synthesize
+
+Running multi-persona synthesis...
+Personas: portfolio-architect, instrument-specialist, data-integrator,
+          regime-strategist, creative-maverick, synthesis-director
+
+============================================================
+SYNTHESIS COMPLETE
+============================================================
+Entries analyzed: 47
+  Strategies: 23
+  Ideas: 24
+
+Persona Analysis:
+  portfolio-architect: OK
+  instrument-specialist: OK
+  data-integrator: OK
+  regime-strategist: OK
+  creative-maverick: OK
+  synthesis-director: OK
+
+Consensus Points:
+  - Low correlation between momentum and mean-reversion strategies
+  - VIX-based position sizing could improve most strategies
+  - Crypto strategies need regime filtering
+
+Top Opportunities (5 found):
+  1. Portfolio: Momentum + Mean Reversion Blend
+     Benefit: High, Complexity: Low
+  2. Instrument: Covered calls on STRAT-128
+     Benefit: Medium, Complexity: Medium
+
+Recommended New Entries (3):
+  - Momentum-MeanReversion Blend Portfolio (strategy)
+  - VIX-Adjusted Position Sizing Filter (idea)
+  - Crypto Bear Market Filter (idea)
+
+Report saved to: synthesis/synthesis_report_20251230_123456.md
 ```
 
 ---
