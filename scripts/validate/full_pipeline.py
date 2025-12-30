@@ -1253,6 +1253,36 @@ Common fixes:
 
         code = re.sub(dangerous_slice_local, fix_dangerous_slice_local, code)
 
+        # Fix 5: Bootstrap indexing with multiple arrays (Issue #65 continued)
+        # Pattern: indices = np.random.randint(0, len(arr1), ...) then arr2[indices]
+        # Problem: If arr2 is shorter than arr1, indices will be out of bounds for arr2
+        # Fix: Clip indices to the smaller array's length when indexing
+
+        # Match pattern: xxx = yyy[bootstrap_indices] or xxx = yyy[indices]
+        # where yyy doesn't end with _array (already handled above)
+        def fix_general_bootstrap_indexing(match):
+            var_name = match.group(1)
+            array_name = match.group(2)
+            idx_name = match.group(3)
+            # Don't double-fix if already using np.clip
+            if 'np.clip' in match.group(0):
+                return match.group(0)
+            return f'{var_name} = {array_name}[np.clip({idx_name}, 0, len({array_name}) - 1)]'
+
+        # Match: var = array[indices] or var = array[bootstrap_indices]
+        code = re.sub(
+            r'(\w+)\s*=\s*(\w+)\[(bootstrap_indices|indices)\]',
+            fix_general_bootstrap_indexing,
+            code
+        )
+
+        # Also handle direct indexing without assignment: array[bootstrap_indices]
+        code = re.sub(
+            r'(\w+)\[(bootstrap_indices|indices)\](?!\s*=)',
+            lambda m: f'{m.group(1)}[np.clip({m.group(2)}, 0, len({m.group(1)}) - 1)]' if 'np.clip' not in m.group(0) else m.group(0),
+            code
+        )
+
         return code
 
     def _fix_nonexistent_methods(self, code: str) -> str:
