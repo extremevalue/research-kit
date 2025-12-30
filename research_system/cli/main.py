@@ -16,6 +16,7 @@ Commands:
     combine     Generate and manage combinations
     analyze     Run persona-based analysis
     ideate      Generate strategy ideas using multiple personas
+    synthesize  Run cross-strategy synthesis with expert panel
     migrate     Migrate from external sources
 
 Run 'research <command> --help' for more information on a command.
@@ -89,6 +90,7 @@ For more information, visit: https://github.com/your-repo/research-system
     _add_combine_parser(subparsers)
     _add_analyze_parser(subparsers)
     _add_ideate_parser(subparsers)  # Multi-persona ideation
+    _add_synthesize_parser(subparsers)  # Cross-strategy synthesis
     _add_migrate_parser(subparsers)
 
     return parser
@@ -489,6 +491,77 @@ Output: 3-6 new IDEA entries added to the catalog.
         help="Save raw ideation results to file"
     )
     parser.set_defaults(func=cmd_ideate)
+
+
+def _add_synthesize_parser(subparsers):
+    """Add synthesize command parser."""
+    parser = subparsers.add_parser(
+        "synthesize",
+        help="Run cross-strategy synthesis with expert panel",
+        description="""
+Run multi-persona synthesis on validated strategies to identify:
+- Portfolio construction opportunities
+- Instrument expansion (options, futures)
+- Data enhancement recommendations
+- Regime-based combinations
+- Creative/unconventional ideas
+
+Personas:
+  - portfolio-architect   : Correlation, allocation, portfolio construction
+  - instrument-specialist : Options, futures, ETF opportunities
+  - data-integrator       : Alternative data enhancement
+  - regime-strategist     : Market regime analysis
+  - creative-maverick     : Unconventional ideas and combinations
+  - synthesis-director    : Integrates all perspectives
+
+Output: Both a detailed report and optional new catalog entries.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "--min-sharpe",
+        type=float,
+        help="Minimum Sharpe ratio filter for strategies"
+    )
+    parser.add_argument(
+        "--max-drawdown",
+        type=float,
+        help="Maximum drawdown filter (e.g., 0.3 for 30%%)"
+    )
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=50,
+        help="Limit to top N strategies by Sharpe (default: 50)"
+    )
+    parser.add_argument(
+        "--create-entries",
+        action="store_true",
+        help="Create new catalog entries from recommendations"
+    )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Generate report without running synthesis (uses cached results)"
+    )
+    parser.add_argument(
+        "--persona",
+        choices=["portfolio-architect", "instrument-specialist", "data-integrator",
+                 "regime-strategist", "creative-maverick"],
+        help="Run only a specific persona"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be analyzed without running"
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save raw synthesis results to file"
+    )
+    parser.set_defaults(func=cmd_synthesize)
 
 
 def _add_migrate_parser(subparsers):
@@ -1670,6 +1743,166 @@ def cmd_ideate(args):
                 print(f"  - {entry_id}")
         else:
             print("[DRY-RUN] Ideas not added to catalog")
+
+    return 0
+
+
+def cmd_synthesize(args):
+    """Run cross-strategy synthesis with expert panel."""
+    ws = require_workspace(args.workspace)
+
+    # Initialize LLM client
+    llm_client = None
+    try:
+        from research_system.llm.client import LLMClient, Backend
+        llm_client = LLMClient()
+        if llm_client.is_offline:
+            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI)")
+            print("Synthesis will return prompts only, no actual analysis.")
+            print()
+        elif llm_client.backend == Backend.CLI:
+            print("Using Claude CLI backend.")
+        elif llm_client.backend == Backend.API:
+            print("Using Anthropic API backend.")
+    except Exception as e:
+        print(f"Warning: Could not initialize LLM client: {e}")
+        print("Running in offline mode.")
+
+    from agents.synthesis import (
+        SynthesisRunner,
+        ContextAggregator,
+        save_synthesis_result,
+        generate_synthesis_report
+    )
+
+    runner = SynthesisRunner(ws, llm_client)
+
+    # Dry run - just show what would be analyzed
+    if args.dry_run:
+        aggregator = ContextAggregator(ws)
+        context = aggregator.aggregate(
+            min_sharpe=args.min_sharpe,
+            max_drawdown=args.max_drawdown,
+            top_n=args.top
+        )
+
+        print(f"[DRY-RUN] Would analyze {context.summary_stats['total_validated']} entries:")
+        print(f"  Strategies: {context.summary_stats['strategies']}")
+        print(f"  Ideas: {context.summary_stats['ideas']}")
+        print(f"  Indicators: {context.summary_stats['indicators']}")
+        print(f"  Avg Sharpe: {context.summary_stats['avg_sharpe']:.2f}")
+        print()
+        print("Top entries by Sharpe:")
+        all_entries = context.validated_strategies + context.validated_ideas
+        for entry in sorted(all_entries, key=lambda x: x.sharpe or 0, reverse=True)[:10]:
+            print(f"  {entry.id}: {entry.name[:40]} (Sharpe={entry.sharpe:.2f})")
+        return 0
+
+    # Single persona mode
+    if args.persona:
+        print(f"Running synthesis with {args.persona}...")
+        print()
+
+        aggregator = ContextAggregator(ws)
+        context = aggregator.aggregate(
+            min_sharpe=args.min_sharpe,
+            max_drawdown=args.max_drawdown,
+            top_n=args.top
+        )
+
+        response = runner.run_persona(args.persona, context)
+
+        if response.error:
+            print(f"Error: {response.error}")
+            return 1
+
+        print(f"Response from {args.persona}:")
+        print()
+        if response.structured_response:
+            print(json.dumps(response.structured_response, indent=2))
+        else:
+            print("Raw response:")
+            print(response.raw_response[:2000])
+
+        return 0
+
+    # Full synthesis
+    print("Running multi-persona synthesis...")
+    print("Personas: portfolio-architect, instrument-specialist, data-integrator,")
+    print("          regime-strategist, creative-maverick, synthesis-director")
+    print()
+
+    result = runner.run(
+        min_sharpe=args.min_sharpe,
+        max_drawdown=args.max_drawdown,
+        top_n=args.top
+    )
+
+    if result.errors:
+        print("Errors encountered:")
+        for err in result.errors:
+            print(f"  - {err}")
+        print()
+
+    # Summary
+    print("=" * 60)
+    print("SYNTHESIS COMPLETE")
+    print("=" * 60)
+    print(f"Entries analyzed: {result.context_summary.get('total_validated', 0)}")
+    print(f"  Strategies: {result.context_summary.get('strategies', 0)}")
+    print(f"  Ideas: {result.context_summary.get('ideas', 0)}")
+    print()
+
+    # Show persona status
+    print("Persona Analysis:")
+    for persona, response in result.responses.items():
+        status = "OK" if response.structured_response else "Parse Error" if response.raw_response else "Error"
+        print(f"  {persona}: {status}")
+    print()
+
+    # Show consensus
+    if result.consensus_points:
+        print("Consensus Points:")
+        for point in result.consensus_points[:5]:
+            print(f"  - {point}")
+        print()
+
+    # Show opportunities
+    if result.prioritized_opportunities:
+        print(f"Top Opportunities ({len(result.prioritized_opportunities)} found):")
+        for i, opp in enumerate(result.prioritized_opportunities[:5], 1):
+            name = opp.get('name', 'Opportunity')
+            benefit = opp.get('expected_benefit', 'N/A')
+            complexity = opp.get('implementation_complexity', 'N/A')
+            print(f"  {i}. {name}")
+            print(f"     Benefit: {benefit}, Complexity: {complexity}")
+        print()
+
+    # Show recommended entries
+    if result.recommended_entries:
+        print(f"Recommended New Entries ({len(result.recommended_entries)}):")
+        for entry in result.recommended_entries[:5]:
+            print(f"  - {entry.get('name', 'Entry')} ({entry.get('type', 'idea')})")
+        print()
+
+    # Save results
+    output_dir = ws.path / "synthesis"
+    if args.save:
+        output_file = save_synthesis_result(result, output_dir)
+        print(f"Raw results saved to: {output_file}")
+
+    # Generate report
+    report_file = generate_synthesis_report(result, output_dir)
+    print(f"Report saved to: {report_file}")
+
+    # Create catalog entries if requested
+    if args.create_entries and result.recommended_entries:
+        print()
+        print("Creating catalog entries...")
+        created_ids = runner.create_catalog_entries(result)
+        print(f"Created {len(created_ids)} entries:")
+        for entry_id in created_ids:
+            print(f"  - {entry_id}")
 
     return 0
 
