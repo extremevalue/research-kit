@@ -1228,28 +1228,31 @@ Common fixes:
         # Fix: Replace with min-length sync
 
         # Match: var = np.array(self.xxx[:len(self.yyy)])
-        dangerous_slice_pattern = r'(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\(self\.(\w+)\)\]\)'
+        # Capture leading whitespace to preserve indentation
+        dangerous_slice_pattern = r'([ \t]*)(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\(self\.(\w+)\)\]\)'
 
         def fix_dangerous_slice(match):
-            var_name = match.group(1)
-            slice_arr = match.group(2)
-            len_arr = match.group(3)
-            # Return safe min-length sync
-            return f'_sync_len_{var_name} = min(len(self.{slice_arr}), len(self.{len_arr}))\n        {var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
+            indent = match.group(1)
+            var_name = match.group(2)
+            slice_arr = match.group(3)
+            len_arr = match.group(4)
+            # Return safe min-length sync with preserved indentation
+            return f'{indent}_sync_len_{var_name} = min(len(self.{slice_arr}), len(self.{len_arr}))\n{indent}{var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
 
         code = re.sub(dangerous_slice_pattern, fix_dangerous_slice, code)
 
         # Also match: var = np.array(self.xxx[:len(yyy)]) where yyy is a local variable
-        dangerous_slice_local = r'(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\((\w+)\)\]\)'
+        dangerous_slice_local = r'([ \t]*)(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\((\w+)\)\]\)'
 
         def fix_dangerous_slice_local(match):
-            var_name = match.group(1)
-            slice_arr = match.group(2)
-            len_var = match.group(3)
+            indent = match.group(1)
+            var_name = match.group(2)
+            slice_arr = match.group(3)
+            len_var = match.group(4)
             # Only fix if len_var doesn't start with self. (handled above)
             if len_var.startswith('self.'):
                 return match.group(0)  # Already handled
-            return f'_sync_len_{var_name} = min(len(self.{slice_arr}), len({len_var}))\n        {var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
+            return f'{indent}_sync_len_{var_name} = min(len(self.{slice_arr}), len({len_var}))\n{indent}{var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
 
         code = re.sub(dangerous_slice_local, fix_dangerous_slice_local, code)
 
