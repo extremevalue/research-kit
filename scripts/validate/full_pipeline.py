@@ -1227,34 +1227,24 @@ Common fixes:
         # the slice does nothing and arrays remain mismatched.
         # Fix: Replace with min-length sync
 
-        # Match: var = np.array(self.xxx[:len(self.yyy)])
-        # Capture leading whitespace to preserve indentation
-        dangerous_slice_pattern = r'([ \t]*)(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\(self\.(\w+)\)\]\)'
+        # Match: var = np.array(self.xxx[:len(self.yyy)]) or var = np.array(self.xxx[:len(yyy)])
+        # Use inline min() fix to avoid indentation issues with multi-line replacement
 
-        def fix_dangerous_slice(match):
-            indent = match.group(1)
-            var_name = match.group(2)
-            slice_arr = match.group(3)
-            len_arr = match.group(4)
-            # Return safe min-length sync with preserved indentation
-            return f'{indent}_sync_len_{var_name} = min(len(self.{slice_arr}), len(self.{len_arr}))\n{indent}{var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
+        # Pattern for self.yyy: var = np.array(self.xxx[:len(self.yyy)])
+        # Fix: var = np.array(self.xxx[:min(len(self.xxx), len(self.yyy))])
+        code = re.sub(
+            r'(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\(self\.(\w+)\)\]\)',
+            lambda m: f'{m.group(1)} = np.array(self.{m.group(2)}[:min(len(self.{m.group(2)}), len(self.{m.group(3)}))])',
+            code
+        )
 
-        code = re.sub(dangerous_slice_pattern, fix_dangerous_slice, code)
-
-        # Also match: var = np.array(self.xxx[:len(yyy)]) where yyy is a local variable
-        dangerous_slice_local = r'([ \t]*)(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\((\w+)\)\]\)'
-
-        def fix_dangerous_slice_local(match):
-            indent = match.group(1)
-            var_name = match.group(2)
-            slice_arr = match.group(3)
-            len_var = match.group(4)
-            # Only fix if len_var doesn't start with self. (handled above)
-            if len_var.startswith('self.'):
-                return match.group(0)  # Already handled
-            return f'{indent}_sync_len_{var_name} = min(len(self.{slice_arr}), len({len_var}))\n{indent}{var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
-
-        code = re.sub(dangerous_slice_local, fix_dangerous_slice_local, code)
+        # Pattern for local var: var = np.array(self.xxx[:len(yyy)])
+        # Fix: var = np.array(self.xxx[:min(len(self.xxx), len(yyy))])
+        code = re.sub(
+            r'(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\((\w+)\)\]\)',
+            lambda m: f'{m.group(1)} = np.array(self.{m.group(2)}[:min(len(self.{m.group(2)}), len({m.group(3)}))])' if not m.group(3).startswith('self') else m.group(0),
+            code
+        )
 
         # Fix 5: Bootstrap indexing with multiple arrays (Issue #65 continued)
         # Pattern: indices = np.random.randint(0, len(arr1), ...) then arr2[indices]
