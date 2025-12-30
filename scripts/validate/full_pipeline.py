@@ -1221,6 +1221,38 @@ Common fixes:
         # Pattern: np.array(self.xxx) - np.array(self.yyy)
         # This is harder to fix automatically, but we can add a guard
 
+        # Fix 4: Dangerous slicing pattern (Issue #65)
+        # Pattern: np.array(self.xxx[:len(self.yyy)]) or np.array(self.xxx[:len(yyy)])
+        # Problem: This only truncates if xxx is LONGER than yyy. If xxx is shorter,
+        # the slice does nothing and arrays remain mismatched.
+        # Fix: Replace with min-length sync
+
+        # Match: var = np.array(self.xxx[:len(self.yyy)])
+        dangerous_slice_pattern = r'(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\(self\.(\w+)\)\]\)'
+
+        def fix_dangerous_slice(match):
+            var_name = match.group(1)
+            slice_arr = match.group(2)
+            len_arr = match.group(3)
+            # Return safe min-length sync
+            return f'_sync_len_{var_name} = min(len(self.{slice_arr}), len(self.{len_arr}))\n        {var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
+
+        code = re.sub(dangerous_slice_pattern, fix_dangerous_slice, code)
+
+        # Also match: var = np.array(self.xxx[:len(yyy)]) where yyy is a local variable
+        dangerous_slice_local = r'(\w+)\s*=\s*np\.array\(self\.(\w+)\[:len\((\w+)\)\]\)'
+
+        def fix_dangerous_slice_local(match):
+            var_name = match.group(1)
+            slice_arr = match.group(2)
+            len_var = match.group(3)
+            # Only fix if len_var doesn't start with self. (handled above)
+            if len_var.startswith('self.'):
+                return match.group(0)  # Already handled
+            return f'_sync_len_{var_name} = min(len(self.{slice_arr}), len({len_var}))\n        {var_name} = np.array(self.{slice_arr}[:_sync_len_{var_name}])'
+
+        code = re.sub(dangerous_slice_local, fix_dangerous_slice_local, code)
+
         return code
 
     def _fix_nonexistent_methods(self, code: str) -> str:
