@@ -250,7 +250,8 @@ Completed:
 - [x] All open questions finalized
 - [x] Technology stack decided (Python, SQLite hybrid, Pydantic, Typer, Jinja2)
 - [x] GitHub issues created for Phase 0 and Phase 1
-- [ ] Implementation started
+- [x] Phase 0: CI/CD pipeline, issue templates
+- [x] Phase 1: Pydantic schemas, SQLite schema, CatalogManager
 
 ## GitHub Issues
 
