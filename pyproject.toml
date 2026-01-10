@@ -72,7 +72,7 @@ addopts = "-v --tb=short"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-# Exclude legacy v1 code - will be replaced by v2
+# Exclude legacy v1 code and generated golden files
 exclude = [
     "agents/",
     "scripts/",
@@ -81,6 +81,7 @@ exclude = [
     "research_system/ingest/",
     "research_system/llm/",
     "tests/",
+    "tests_v2/fixtures/golden/codegen/",  # Generated QuantConnect code
 ]
 
 [tool.ruff.lint]
