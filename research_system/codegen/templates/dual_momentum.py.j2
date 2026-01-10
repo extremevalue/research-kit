@@ -1,0 +1,114 @@
+{# Dual Momentum Strategy Template #}
+{# Combines absolute momentum (trend filter) with relative momentum (asset selection) #}
+{% extends "base.py.j2" %}
+
+{% block signal_params %}
+{% if signal %}
+        self._lookback_days = {{ signal.lookback_days }}
+{% if signal.selection_n %}
+        self._selection_n = {{ signal.selection_n }}
+{% endif %}
+{% if signal.threshold is not none %}
+        self._abs_momentum_threshold = {{ signal.threshold }}
+{% else %}
+        self._abs_momentum_threshold = 0.0  # Must be positive
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block calculate_weights %}
+        # Step 1: Calculate relative momentum for all symbols
+        momentum_scores = {}
+        for symbol in self._symbols:
+            if not self.Securities[symbol].HasData:
+                continue
+            momentum = self.GetHistoricalReturns(symbol, self._lookback_days)
+            momentum_scores[symbol] = momentum
+
+        if not momentum_scores:
+{% if universe.defensive_symbols %}
+            return self.GetDefensiveWeights()
+{% else %}
+            return {}
+{% endif %}
+
+        # Step 2: Rank by relative momentum
+        ranked = sorted(momentum_scores.items(), key=lambda x: x[1], reverse=True)
+        top_n = ranked[:self._selection_n]
+
+        # Step 3: Apply absolute momentum filter
+        # Only invest if the selected asset has positive absolute momentum
+        selected = []
+        for symbol, momentum in top_n:
+            if momentum > self._abs_momentum_threshold:
+                selected.append(symbol)
+
+        if not selected:
+{% if universe.defensive_symbols %}
+            return self.GetDefensiveWeights()
+{% else %}
+            return {}
+{% endif %}
+
+        # Step 4: Weight allocation
+{% if position_sizing.method == "equal_weight" %}
+        weight = 1.0 / len(selected)
+        return {symbol: weight for symbol in selected}
+{% elif position_sizing.method == "risk_parity" %}
+        return self.GetRiskParityWeights(selected)
+{% else %}
+        weight = 1.0 / len(selected)
+        return {symbol: weight for symbol in selected}
+{% endif %}
+{% endblock %}
+
+{% block additional_methods %}
+{% if universe.defensive_symbols %}
+    def GetDefensiveWeights(self) -> dict:
+        """Get weights for defensive allocation.
+
+        Used when no assets pass the dual momentum filter.
+        """
+        if not self._defensive_symbols:
+            return {}
+
+        # Check if defensive assets have positive momentum too
+        valid_defensive = []
+        for symbol in self._defensive_symbols:
+            if not self.Securities[symbol].HasData:
+                continue
+            momentum = self.GetHistoricalReturns(symbol, self._lookback_days)
+            if momentum > 0:
+                valid_defensive.append(symbol)
+
+        # If no defensive assets have positive momentum, use all of them
+        if not valid_defensive:
+            valid_defensive = [s for s in self._defensive_symbols
+                              if self.Securities[s].HasData]
+
+        if not valid_defensive:
+            return {}
+
+        weight = 1.0 / len(valid_defensive)
+        return {symbol: weight for symbol in valid_defensive}
+{% endif %}
+
+{% if position_sizing.method == "risk_parity" %}
+    def GetRiskParityWeights(self, symbols: list) -> dict:
+        """Calculate risk parity weights (inverse volatility)."""
+        volatilities = {}
+        for symbol in symbols:
+            vol = self.GetVolatility(symbol, self._lookback_days)
+            if vol > 0 and vol != float('inf'):
+                volatilities[symbol] = vol
+
+        if not volatilities:
+            weight = 1.0 / len(symbols)
+            return {s: weight for s in symbols}
+
+        inv_vols = {s: 1.0 / v for s, v in volatilities.items()}
+        total_inv_vol = sum(inv_vols.values())
+
+        return {s: iv / total_inv_vol for s, iv in inv_vols.items()}
+{% endif %}
+{% endblock %}
