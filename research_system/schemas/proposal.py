@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,16 +31,10 @@ class ProposalStatus(str, Enum):
 class ProposalRationale(BaseModel):
     """Rationale for a proposal."""
 
-    gap_identified: Optional[str] = Field(
-        None, description="What gap or opportunity was identified"
-    )
+    gap_identified: str | None = Field(None, description="What gap or opportunity was identified")
     proposed_solution: str = Field(..., description="How this proposal addresses it")
-    expected_improvement: Optional[str] = Field(
-        None, description="Expected benefit"
-    )
-    evidence: Optional[str] = Field(
-        None, description="Evidence supporting the proposal"
-    )
+    expected_improvement: str | None = Field(None, description="Expected benefit")
+    evidence: str | None = Field(None, description="Evidence supporting the proposal")
 
 
 class SwitchingRule(BaseModel):
@@ -63,8 +56,8 @@ class DataRequirementDelta(BaseModel):
 
     needed: str = Field(..., description="What data is needed")
     unblocks: str = Field(..., description="What this data enables")
-    source: Optional[str] = Field(None, description="Potential data source")
-    priority: Optional[str] = Field(None, description="Priority level")
+    source: str | None = Field(None, description="Potential data source")
+    priority: str | None = Field(None, description="Priority level")
 
 
 class Proposal(BaseModel):
@@ -85,15 +78,11 @@ class Proposal(BaseModel):
     component_strategies: list[str] = Field(
         default_factory=list, description="Strategy IDs being combined"
     )
-    switching_logic: Optional[SwitchingLogic] = None
+    switching_logic: SwitchingLogic | None = None
 
     # For enhancements
-    parent_strategy: Optional[str] = Field(
-        None, description="Strategy being enhanced"
-    )
-    enhancement_params: Optional[dict] = Field(
-        None, description="Parameters for enhancement"
-    )
+    parent_strategy: str | None = Field(None, description="Strategy being enhanced")
+    enhancement_params: dict | None = Field(None, description="Parameters for enhancement")
 
     # For data acquisition
     data_requirements_delta: list[DataRequirementDelta] = Field(
@@ -101,15 +90,13 @@ class Proposal(BaseModel):
     )
 
     # Review fields
-    review_notes: Optional[str] = None
-    reviewed_at: Optional[datetime] = None
-    reviewed_by: Optional[str] = None
-    decision: Optional[str] = None
+    review_notes: str | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
+    decision: str | None = None
 
     # Outcome
-    resulting_entry_id: Optional[str] = Field(
-        None, description="Entry created if approved"
-    )
+    resulting_entry_id: str | None = Field(None, description="Entry created if approved")
 
 
 class Observation(BaseModel):
@@ -129,19 +116,13 @@ class Observation(BaseModel):
 
     # What we learned
     finding: str = Field(..., description="The key finding")
-    implication: Optional[str] = Field(
-        None, description="What this means for future strategies"
-    )
+    implication: str | None = Field(None, description="What this means for future strategies")
 
     # Conditions
-    regime_conditions: Optional[dict] = Field(
-        None, description="Regime conditions where this applies"
-    )
+    regime_conditions: dict | None = Field(None, description="Regime conditions where this applies")
 
     # Links
-    related_strategies: list[str] = Field(
-        default_factory=list, description="Related strategy IDs"
-    )
+    related_strategies: list[str] = Field(default_factory=list, description="Related strategy IDs")
     spawned_proposals: list[str] = Field(
         default_factory=list, description="Proposals created from this observation"
     )

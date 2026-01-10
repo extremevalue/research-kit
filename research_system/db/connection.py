@@ -1,9 +1,9 @@
 """Database connection management for research-kit."""
 
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 # Get the schema SQL file path
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
@@ -155,9 +155,7 @@ def get_schema_version(db: DatabaseConnection) -> int:
         Current schema version number
     """
     try:
-        result = db.execute(
-            "SELECT MAX(version) FROM schema_version"
-        ).fetchone()
+        result = db.execute("SELECT MAX(version) FROM schema_version").fetchone()
         return result[0] if result and result[0] else 0
     except sqlite3.OperationalError:
         return 0

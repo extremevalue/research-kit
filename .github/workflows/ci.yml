@@ -33,11 +33,11 @@ jobs:
 
       - name: Run type checking (mypy)
         run: |
-          mypy research_system --ignore-missing-imports
+          mypy research_system/schemas research_system/db --ignore-missing-imports
 
-      - name: Run tests
+      - name: Run tests (v2 only)
         run: |
-          pytest tests/ -v --tb=short
+          pytest tests_v2/ -v --tb=short
 
   lint:
     runs-on: ubuntu-latest

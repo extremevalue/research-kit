@@ -3,13 +3,12 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from research_system.db.connection import DatabaseConnection, init_database
+from research_system.db.connection import init_database
 from research_system.schemas.common import EntryStatus, EntryType
+from research_system.schemas.proposal import Proposal, ProposalStatus
 from research_system.schemas.strategy import StrategyDefinition
 from research_system.schemas.validation import ValidationResult
-from research_system.schemas.proposal import Proposal, ProposalStatus
 
 
 class CatalogEntry:
@@ -21,16 +20,16 @@ class CatalogEntry:
         type: EntryType,
         name: str,
         status: EntryStatus = EntryStatus.UNTESTED,
-        description: Optional[str] = None,
-        tier: Optional[int] = None,
-        strategy_type: Optional[str] = None,
-        definition_hash: Optional[str] = None,
-        parent_id: Optional[str] = None,
-        source_document: Optional[str] = None,
-        created_at: Optional[datetime] = None,
-        updated_at: Optional[datetime] = None,
-        blocking_reason: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        description: str | None = None,
+        tier: int | None = None,
+        strategy_type: str | None = None,
+        definition_hash: str | None = None,
+        parent_id: str | None = None,
+        source_document: str | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        blocking_reason: str | None = None,
+        tags: list[str] | None = None,
     ):
         self.id = id
         self.type = type
@@ -143,7 +142,7 @@ class CatalogManager:
 
         return entry_id
 
-    def get_entry(self, entry_id: str) -> Optional[CatalogEntry]:
+    def get_entry(self, entry_id: str) -> CatalogEntry | None:
         """Get an entry by ID.
 
         Args:
@@ -152,9 +151,7 @@ class CatalogManager:
         Returns:
             CatalogEntry or None if not found
         """
-        row = self._db.execute(
-            "SELECT * FROM entries WHERE id = ?", (entry_id,)
-        ).fetchone()
+        row = self._db.execute("SELECT * FROM entries WHERE id = ?", (entry_id,)).fetchone()
 
         if not row:
             return None
@@ -182,7 +179,7 @@ class CatalogManager:
             tags=tags,
         )
 
-    def get_strategy_definition(self, entry_id: str) -> Optional[StrategyDefinition]:
+    def get_strategy_definition(self, entry_id: str) -> StrategyDefinition | None:
         """Get the full strategy definition JSON.
 
         Args:
@@ -211,7 +208,7 @@ class CatalogManager:
         self,
         entry_id: str,
         status: EntryStatus,
-        blocking_reason: Optional[str] = None,
+        blocking_reason: str | None = None,
     ) -> bool:
         """Update entry status.
 
@@ -254,7 +251,7 @@ class CatalogManager:
         self,
         entry_id: str,
         reason: str,
-        canonical_id: Optional[str] = None,
+        canonical_id: str | None = None,
     ) -> bool:
         """Archive an entry (for deduplication).
 
@@ -289,10 +286,10 @@ class CatalogManager:
 
     def list_entries(
         self,
-        status: Optional[EntryStatus] = None,
-        entry_type: Optional[EntryType] = None,
-        min_sharpe: Optional[float] = None,
-        tag: Optional[str] = None,
+        status: EntryStatus | None = None,
+        entry_type: EntryType | None = None,
+        min_sharpe: float | None = None,
+        tag: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[CatalogEntry]:
@@ -360,7 +357,9 @@ class CatalogManager:
                     strategy_type=row["strategy_type"],
                     definition_hash=row["definition_hash"],
                     parent_id=row["parent_id"],
-                    created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
+                    created_at=datetime.fromisoformat(row["created_at"])
+                    if row["created_at"]
+                    else None,
                     blocking_reason=row["blocking_reason"],
                 )
             )
@@ -369,8 +368,8 @@ class CatalogManager:
 
     def count_entries(
         self,
-        status: Optional[EntryStatus] = None,
-        entry_type: Optional[EntryType] = None,
+        status: EntryStatus | None = None,
+        entry_type: EntryType | None = None,
     ) -> int:
         """Count entries matching filters.
 
@@ -452,6 +451,7 @@ class CatalogManager:
                 ),
             )
             validation_id = cursor.lastrowid
+            assert validation_id is not None  # SQLite guarantees this after INSERT
 
             # Insert window results
             for window in result.walk_forward_results:
@@ -484,17 +484,17 @@ class CatalogManager:
                         window.regime_tags.direction.value,
                         window.regime_tags.volatility.value,
                         window.regime_tags.rate_environment.value,
-                        window.regime_tags.sector_leader.value if window.regime_tags.sector_leader else None,
-                        window.regime_tags.cap_leadership.value if window.regime_tags.cap_leadership else None,
+                        window.regime_tags.sector_leader.value
+                        if window.regime_tags.sector_leader
+                        else None,
+                        window.regime_tags.cap_leadership.value
+                        if window.regime_tags.cap_leadership
+                        else None,
                     ),
                 )
 
             # Update entry status based on validation
-            new_status = (
-                EntryStatus.VALIDATED
-                if result.is_valid()
-                else EntryStatus.INVALIDATED
-            )
+            new_status = EntryStatus.VALIDATED if result.is_valid() else EntryStatus.INVALIDATED
             cursor.execute(
                 "UPDATE entries SET status = ?, updated_at = ? WHERE id = ?",
                 (new_status.value, datetime.utcnow().isoformat(), entry_id),
@@ -502,7 +502,7 @@ class CatalogManager:
 
             return validation_id
 
-    def get_latest_validation(self, entry_id: str) -> Optional[ValidationResult]:
+    def get_latest_validation(self, entry_id: str) -> ValidationResult | None:
         """Get the most recent validation for an entry.
 
         Args:
@@ -560,7 +560,7 @@ class CatalogManager:
 
     def list_proposals(
         self,
-        status: Optional[ProposalStatus] = None,
+        status: ProposalStatus | None = None,
         limit: int = 100,
     ) -> list[Proposal]:
         """List proposals.
@@ -643,25 +643,23 @@ class CatalogManager:
         Returns:
             Dictionary with counts by status and type
         """
-        stats = {
-            "total": 0,
-            "by_status": {},
-            "by_type": {},
-        }
+        by_status: dict[str, int] = {}
+        by_type: dict[str, int] = {}
+        total = 0
 
         # Count by status
         rows = self._db.execute(
             "SELECT status, COUNT(*) as count FROM entries GROUP BY status"
         ).fetchall()
         for row in rows:
-            stats["by_status"][row["status"]] = row["count"]
-            stats["total"] += row["count"]
+            by_status[row["status"]] = row["count"]
+            total += row["count"]
 
         # Count by type
         rows = self._db.execute(
             "SELECT type, COUNT(*) as count FROM entries GROUP BY type"
         ).fetchall()
         for row in rows:
-            stats["by_type"][row["type"]] = row["count"]
+            by_type[row["type"]] = row["count"]
 
-        return stats
+        return {"total": total, "by_status": by_status, "by_type": by_type}

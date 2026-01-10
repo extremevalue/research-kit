@@ -1,39 +1,40 @@
 """Pydantic schemas for research-kit v2.0."""
 
 from research_system.schemas.common import (
+    ConfidenceLevel,
     EntryStatus,
     EntryType,
-    ConfidenceLevel,
     ValidationStatus,
 )
+from research_system.schemas.proposal import (
+    Proposal,
+    ProposalStatus,
+    ProposalType,
+)
+from research_system.schemas.regime import (
+    MarketDirection,
+    RateEnvironment,
+    RegimeDefinition,
+    RegimePerformanceSummary,
+    RegimeTags,
+    VolatilityLevel,
+)
 from research_system.schemas.strategy import (
-    StrategyDefinition,
-    StrategyMetadata,
-    UniverseConfig,
-    SignalConfig,
     FilterConfig,
     PositionSizingConfig,
     RebalanceConfig,
     RiskManagementConfig,
+    SignalConfig,
+    StrategyDefinition,
+    StrategyMetadata,
+    UniverseConfig,
 )
 from research_system.schemas.validation import (
-    ValidationResult,
-    WindowResult,
-    WindowMetrics,
     AggregateMetrics,
     PerformanceFingerprint,
-)
-from research_system.schemas.regime import RegimeTags, RegimePerformanceSummary
-from research_system.schemas.proposal import (
-    Proposal,
-    ProposalType,
-    ProposalStatus,
-)
-from research_system.schemas.regime import (
-    MarketDirection,
-    VolatilityLevel,
-    RateEnvironment,
-    RegimeDefinition,
+    ValidationResult,
+    WindowMetrics,
+    WindowResult,
 )
 
 __all__ = [

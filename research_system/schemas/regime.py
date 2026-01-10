@@ -1,7 +1,6 @@
 """Regime definitions and tagging schemas."""
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -58,12 +57,8 @@ class RegimeDefinition(BaseModel):
     """Configuration for how regimes are determined."""
 
     # Direction thresholds (SPY vs 200-day SMA)
-    direction_bull_threshold: float = Field(
-        0.05, description="Percent above SMA for bull"
-    )
-    direction_bear_threshold: float = Field(
-        -0.05, description="Percent below SMA for bear"
-    )
+    direction_bull_threshold: float = Field(0.05, description="Percent above SMA for bull")
+    direction_bear_threshold: float = Field(-0.05, description="Percent below SMA for bear")
 
     # Volatility thresholds (VIX levels)
     volatility_low_threshold: float = Field(15.0, description="VIX below this = low")
@@ -88,8 +83,8 @@ class RegimeTags(BaseModel):
     direction: MarketDirection
     volatility: VolatilityLevel
     rate_environment: RateEnvironment
-    sector_leader: Optional[SectorLeadership] = None
-    cap_leadership: Optional[CapLeadership] = None
+    sector_leader: SectorLeadership | None = None
+    cap_leadership: CapLeadership | None = None
 
     def to_dict(self) -> dict[str, str]:
         """Convert to simple dict for storage."""
@@ -111,7 +106,7 @@ class RegimePerformanceEntry(BaseModel):
     mean_sharpe: float
     mean_cagr: float
     n_windows: int
-    win_rate: Optional[float] = None
+    win_rate: float | None = None
 
 
 class RegimePerformanceSummary(BaseModel):
