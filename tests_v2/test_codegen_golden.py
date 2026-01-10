@@ -274,9 +274,7 @@ class TestCodegenValidation:
             try:
                 ast.parse(code)
             except SyntaxError as e:
-                pytest.fail(
-                    f"Strategy {strategy.metadata.id} generated invalid Python: {e}"
-                )
+                pytest.fail(f"Strategy {strategy.metadata.id} generated invalid Python: {e}")
 
     def test_no_hardcoded_dates_in_generated_code(self, engine, all_strategies):
         """Test that generated code has no hardcoded dates.
@@ -323,9 +321,7 @@ class TestCodegenValidation:
         """Test that generated code sets warmup period."""
         for strategy in all_strategies:
             code = engine.render(strategy)
-            assert "SetWarmUp" in code, (
-                f"Strategy {strategy.metadata.id} missing SetWarmUp call"
-            )
+            assert "SetWarmUp" in code, f"Strategy {strategy.metadata.id} missing SetWarmUp call"
 
     def test_no_hardcoded_capital(self, engine, all_strategies):
         """Test that SetCash has a comment about framework override.
