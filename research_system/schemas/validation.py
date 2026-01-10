@@ -1,12 +1,11 @@
 """Validation result schemas."""
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from research_system.schemas.common import ValidationStatus, ConfidenceLevel
-from research_system.schemas.regime import RegimeTags, RegimePerformanceSummary
+from research_system.schemas.common import ConfidenceLevel, ValidationStatus
+from research_system.schemas.regime import RegimePerformanceSummary, RegimeTags
 
 
 class WindowMetrics(BaseModel):
@@ -14,12 +13,12 @@ class WindowMetrics(BaseModel):
 
     cagr: float = Field(..., description="Compound annual growth rate")
     sharpe: float = Field(..., description="Sharpe ratio")
-    sortino: Optional[float] = Field(None, description="Sortino ratio")
+    sortino: float | None = Field(None, description="Sortino ratio")
     max_drawdown: float = Field(..., description="Maximum drawdown (as positive number)")
-    win_rate: Optional[float] = Field(None, description="Win rate of trades")
-    profit_factor: Optional[float] = Field(None, description="Profit factor")
-    trades: Optional[int] = Field(None, description="Number of trades")
-    volatility: Optional[float] = Field(None, description="Annualized volatility")
+    win_rate: float | None = Field(None, description="Win rate of trades")
+    profit_factor: float | None = Field(None, description="Profit factor")
+    trades: int | None = Field(None, description="Number of trades")
+    volatility: float | None = Field(None, description="Annualized volatility")
 
 
 class WindowResult(BaseModel):
@@ -30,8 +29,8 @@ class WindowResult(BaseModel):
     end_date: str = Field(..., description="Window end date (YYYY-MM-DD)")
     metrics: WindowMetrics
     regime_tags: RegimeTags
-    benchmark_cagr: Optional[float] = Field(None, description="Benchmark CAGR for comparison")
-    benchmark_sharpe: Optional[float] = Field(None, description="Benchmark Sharpe for comparison")
+    benchmark_cagr: float | None = Field(None, description="Benchmark CAGR for comparison")
+    benchmark_sharpe: float | None = Field(None, description="Benchmark Sharpe for comparison")
 
 
 class AggregateMetrics(BaseModel):
@@ -69,7 +68,7 @@ class PerformanceFingerprint(BaseModel):
         default_factory=list, description="Regimes with insufficient data"
     )
     recommended_use: str = Field(..., description="Natural language recommendation")
-    avoid_when: Optional[str] = Field(None, description="When to avoid using strategy")
+    avoid_when: str | None = Field(None, description="When to avoid using strategy")
 
 
 class ValidationResult(BaseModel):
@@ -95,10 +94,8 @@ class ValidationResult(BaseModel):
     confidence: ConfidenceLevel
 
     # Optional notes
-    notes: Optional[str] = None
-    blocking_reason: Optional[str] = Field(
-        None, description="Reason if status is BLOCKED"
-    )
+    notes: str | None = None
+    blocking_reason: str | None = Field(None, description="Reason if status is BLOCKED")
 
     def is_valid(self) -> bool:
         """Check if strategy passed validation."""

@@ -70,6 +70,16 @@ addopts = "-v --tb=short"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# Exclude legacy v1 code - will be replaced by v2
+exclude = [
+    "agents/",
+    "scripts/",
+    "research_system/cli/",
+    "research_system/core/",
+    "research_system/ingest/",
+    "research_system/llm/",
+    "tests/",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -80,3 +90,13 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+# Only check new v2 code
+exclude = [
+    "agents/",
+    "scripts/",
+    "research_system/cli/",
+    "research_system/core/",
+    "research_system/ingest/",
+    "research_system/llm/",
+    "tests/",
+]

@@ -1,16 +1,15 @@
 """Strategy definition schemas for Tier 1, 2, and 3 strategies."""
 
-from datetime import datetime
-from typing import Literal, Optional
-
-from pydantic import BaseModel, Field, computed_field
 import hashlib
 import json
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from research_system.schemas.common import (
-    StrategyTier,
-    RebalanceFrequency,
     PositionSizingMethod,
+    RebalanceFrequency,
     SignalType,
     UniverseType,
 )
@@ -21,11 +20,11 @@ class StrategyMetadata(BaseModel):
 
     id: str = Field(..., description="Unique identifier (e.g., STRAT-001)")
     name: str = Field(..., description="Human-readable name")
-    description: Optional[str] = Field(None, description="Detailed description")
-    source_document: Optional[str] = Field(None, description="Path to source document")
+    description: str | None = Field(None, description="Detailed description")
+    source_document: str | None = Field(None, description="Path to source document")
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
-    parent_id: Optional[str] = Field(None, description="Parent strategy for variants")
+    updated_at: datetime | None = None
+    parent_id: str | None = Field(None, description="Parent strategy for variants")
     tags: list[str] = Field(default_factory=list)
 
 
@@ -37,10 +36,10 @@ class UniverseConfig(BaseModel):
     defensive_symbols: list[str] = Field(
         default_factory=list, description="Symbols to use in risk-off"
     )
-    index: Optional[str] = Field(None, description="Index for constituents-based universe")
-    sector: Optional[str] = Field(None, description="Sector filter")
-    min_market_cap: Optional[float] = Field(None, description="Minimum market cap filter")
-    min_volume: Optional[float] = Field(None, description="Minimum volume filter")
+    index: str | None = Field(None, description="Index for constituents-based universe")
+    sector: str | None = Field(None, description="Sector filter")
+    min_market_cap: float | None = Field(None, description="Minimum market cap filter")
+    min_volume: float | None = Field(None, description="Minimum volume filter")
 
 
 class SignalConfig(BaseModel):
@@ -50,7 +49,7 @@ class SignalConfig(BaseModel):
     lookback_days: int = Field(..., ge=1, description="Lookback period in days")
     selection_method: str = Field("top_n", description="How to select from ranked assets")
     selection_n: int = Field(1, ge=1, description="Number to select")
-    threshold: Optional[float] = Field(None, description="Threshold for signal generation")
+    threshold: float | None = Field(None, description="Threshold for signal generation")
 
 
 class FilterConfig(BaseModel):
@@ -58,20 +57,16 @@ class FilterConfig(BaseModel):
 
     type: str = Field(..., description="Filter type")
     condition: str = Field(..., description="Condition to apply")
-    lookback_days: Optional[int] = Field(None, description="Lookback for filter")
-    threshold: Optional[float] = Field(None, description="Threshold value")
+    lookback_days: int | None = Field(None, description="Lookback for filter")
+    threshold: float | None = Field(None, description="Threshold value")
 
 
 class PositionSizingConfig(BaseModel):
     """Configuration for position sizing."""
 
     method: PositionSizingMethod = Field(..., description="Sizing methodology")
-    target_volatility: Optional[float] = Field(
-        None, description="Target volatility for vol targeting"
-    )
-    max_position_size: Optional[float] = Field(
-        None, ge=0, le=1, description="Max weight per position"
-    )
+    target_volatility: float | None = Field(None, description="Target volatility for vol targeting")
+    max_position_size: float | None = Field(None, ge=0, le=1, description="Max weight per position")
     leverage: float = Field(1.0, ge=0, description="Leverage multiplier")
 
 
@@ -79,12 +74,8 @@ class RebalanceConfig(BaseModel):
     """Configuration for rebalancing."""
 
     frequency: RebalanceFrequency = Field(..., description="Rebalance frequency")
-    on_signal_change: bool = Field(
-        False, description="Also rebalance when signal changes"
-    )
-    threshold: Optional[float] = Field(
-        None, description="Drift threshold to trigger rebalance"
-    )
+    on_signal_change: bool = Field(False, description="Also rebalance when signal changes")
+    threshold: float | None = Field(None, description="Drift threshold to trigger rebalance")
 
 
 class RegimeFilterConfig(BaseModel):
@@ -99,11 +90,9 @@ class RegimeFilterConfig(BaseModel):
 class RiskManagementConfig(BaseModel):
     """Configuration for risk management."""
 
-    regime_filter: Optional[RegimeFilterConfig] = None
-    stop_loss: Optional[float] = Field(None, ge=0, le=1, description="Stop loss percentage")
-    max_drawdown: Optional[float] = Field(
-        None, ge=0, le=1, description="Max drawdown before reducing"
-    )
+    regime_filter: RegimeFilterConfig | None = None
+    stop_loss: float | None = Field(None, ge=0, le=1, description="Stop loss percentage")
+    max_drawdown: float | None = Field(None, ge=0, le=1, description="Max drawdown before reducing")
 
 
 class DerivedSignal(BaseModel):
@@ -141,11 +130,11 @@ class StrategyDefinition(BaseModel):
 
     # Core components (Tier 1)
     universe: UniverseConfig
-    signal: Optional[SignalConfig] = None
+    signal: SignalConfig | None = None
     filters: list[FilterConfig] = Field(default_factory=list)
     position_sizing: PositionSizingConfig
     rebalance: RebalanceConfig
-    risk_management: Optional[RiskManagementConfig] = None
+    risk_management: RiskManagementConfig | None = None
 
     # Extended components (Tier 2)
     data_requirements: list[DataRequirement] = Field(default_factory=list)
@@ -153,10 +142,10 @@ class StrategyDefinition(BaseModel):
     allocation_rules: list[AllocationRule] = Field(default_factory=list)
 
     # Custom code (Tier 3)
-    custom_code: Optional[str] = Field(None, description="Custom code for Tier 3")
+    custom_code: str | None = Field(None, description="Custom code for Tier 3")
     review_required: bool = Field(False, description="Whether human review needed")
-    reviewed_by: Optional[str] = None
-    reviewed_at: Optional[datetime] = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
 
     def compute_hash(self) -> str:
         """Compute hash of definition for versioning."""
