@@ -35,9 +35,9 @@ jobs:
         run: |
           mypy research_system/schemas research_system/db --ignore-missing-imports
 
-      - name: Run tests (v2 only)
+      - name: Run tests with coverage
         run: |
-          pytest tests_v2/ -v --tb=short
+          pytest tests_v2/ -v --tb=short --cov=research_system.schemas --cov=research_system.db --cov-report=term-missing --cov-fail-under=90
 
   lint:
     runs-on: ubuntu-latest

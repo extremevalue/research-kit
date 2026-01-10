@@ -100,3 +100,18 @@ exclude = [
     "research_system/llm/",
     "tests/",
 ]
+
+[tool.coverage.run]
+source = ["research_system/schemas", "research_system/db"]
+branch = true
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+fail_under = 90
+show_missing = true
