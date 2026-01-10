@@ -1,0 +1,50 @@
+{
+  "schema_version": "2.0",
+  "tier": 1,
+  "metadata": {
+    "id": "STRAT-TEST-001",
+    "name": "Test Momentum Rotation",
+    "description": "A simple momentum rotation strategy for testing",
+    "source_document": null,
+    "updated_at": null,
+    "parent_id": null,
+    "tags": ["momentum", "rotation", "test"]
+  },
+  "strategy_type": "momentum_rotation",
+  "universe": {
+    "type": "fixed",
+    "symbols": ["SPY", "TLT", "GLD"],
+    "defensive_symbols": ["SHY", "BIL"],
+    "index": null,
+    "sector": null,
+    "min_market_cap": null,
+    "min_volume": null
+  },
+  "signal": {
+    "type": "relative_momentum",
+    "lookback_days": 126,
+    "selection_method": "top_n",
+    "selection_n": 1,
+    "threshold": null
+  },
+  "filters": [],
+  "position_sizing": {
+    "method": "equal_weight",
+    "target_volatility": null,
+    "max_position_size": null,
+    "leverage": 1.0
+  },
+  "rebalance": {
+    "frequency": "monthly",
+    "on_signal_change": false,
+    "threshold": null
+  },
+  "risk_management": null,
+  "data_requirements": [],
+  "derived_signals": [],
+  "allocation_rules": [],
+  "custom_code": null,
+  "review_required": false,
+  "reviewed_by": null,
+  "reviewed_at": null
+}
