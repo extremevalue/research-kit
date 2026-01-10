@@ -2,6 +2,8 @@
 
 A systematic framework for validating trading strategies and indicators with proper statistical rigor, mandatory quality gates, and multi-perspective analysis.
 
+> **V2 Development Status**: See [docs/V2-STATUS.md](docs/V2-STATUS.md) for current progress on the v2 rebuild (schemas, code generation, walk-forward validation).
+
 ## What This Tool Does
 
 This tool helps you:
