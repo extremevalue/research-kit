@@ -1,6 +1,5 @@
 """Basic tests for v2 schemas."""
 
-
 from research_system.schemas.proposal import Proposal, ProposalRationale, ProposalType
 from research_system.schemas.regime import (
     MarketDirection,
