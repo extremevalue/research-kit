@@ -318,14 +318,14 @@ class TestCLIHelp:
 
     def test_help(self):
         """Test main help message."""
-        result = runner.invoke(app, ["--help"])
+        result = runner.invoke(app, ["--help"], color=False)
 
         assert result.exit_code == 0
         assert "Generate QuantConnect-compatible strategy code" in result.stdout
 
     def test_generate_help(self):
         """Test generate command help."""
-        result = runner.invoke(app, ["generate", "--help"])
+        result = runner.invoke(app, ["generate", "--help"], color=False)
 
         assert result.exit_code == 0
         assert "Generate code for a strategy from the catalog" in result.stdout
@@ -334,21 +334,21 @@ class TestCLIHelp:
 
     def test_validate_help(self):
         """Test validate command help."""
-        result = runner.invoke(app, ["validate", "--help"])
+        result = runner.invoke(app, ["validate", "--help"], color=False)
 
         assert result.exit_code == 0
         assert "Validate generated code" in result.stdout
 
     def test_demo_help(self):
         """Test demo command help."""
-        result = runner.invoke(app, ["demo", "--help"])
+        result = runner.invoke(app, ["demo", "--help"], color=False)
 
         assert result.exit_code == 0
         assert "Generate demo code" in result.stdout
 
     def test_list_templates_help(self):
         """Test list-templates command help."""
-        result = runner.invoke(app, ["list-templates", "--help"])
+        result = runner.invoke(app, ["list-templates", "--help"], color=False)
 
         assert result.exit_code == 0
         assert "List available strategy templates" in result.stdout
