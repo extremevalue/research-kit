@@ -1,0 +1,85 @@
+{# Mean Reversion Strategy Template #}
+{# Buys when price drops below Z-score threshold #}
+{% extends "base.py.j2" %}
+
+{% block custom_init %}
+        # Mean reversion specific tracking
+        self._positions = {}  # Track current mean reversion positions
+{% endblock %}
+
+{% block calculate_weights %}
+        target_weights = {}
+
+        for symbol in self._symbols:
+            if not self.Securities[symbol].HasData:
+                continue
+
+            # Calculate Z-score
+            zscore = self.CalculateZScore(symbol)
+
+            if zscore is None:
+                continue
+
+            # Entry: Z-score below negative threshold (oversold)
+            if zscore < self._threshold:
+{% if position_sizing.method == "equal_weight" %}
+                target_weights[symbol] = 1.0 / len(self._symbols)
+{% elif position_sizing.method == "volatility_target" %}
+                target_weights[symbol] = self.GetVolatilityAdjustedWeight(symbol)
+{% else %}
+                target_weights[symbol] = 1.0 / len(self._symbols)
+{% endif %}
+
+            # Exit: Z-score above zero (returned to mean)
+            elif zscore > 0 and symbol in self._positions:
+                # Will be liquidated by ExecuteTargetWeights
+                pass
+
+            # Hold existing positions that haven't mean-reverted
+            elif symbol in self._positions and self._positions[symbol]:
+                target_weights[symbol] = self._positions[symbol]
+
+        # Track positions for next iteration
+        self._positions = dict(target_weights)
+
+        return target_weights
+{% endblock %}
+
+{% block additional_methods %}
+    def CalculateZScore(self, symbol: Symbol) -> float:
+        """Calculate Z-score of current price vs historical mean.
+
+        Args:
+            symbol: The symbol to calculate Z-score for
+
+        Returns:
+            Z-score value, or None if insufficient data
+        """
+        history = self.History(symbol, self._lookback_days, Resolution.Daily)
+        if history.empty or len(history) < self._lookback_days // 2:
+            return None
+
+        close_prices = history['close']
+        mean = close_prices.mean()
+        std = close_prices.std()
+
+        if std == 0:
+            return None
+
+        current_price = self.Securities[symbol].Price
+        return (current_price - mean) / std
+
+{% if position_sizing.method == "volatility_target" %}
+    def GetVolatilityAdjustedWeight(self, symbol: Symbol) -> float:
+        """Calculate weight adjusted for volatility targeting."""
+        vol = self.GetVolatility(symbol, self._lookback_days)
+        if vol == 0 or vol == float('inf'):
+            return 1.0 / len(self._symbols)
+
+        target_vol = self._target_volatility
+        weight = target_vol / vol
+        weight = min(weight, 1.0 / len(self._symbols) * self._leverage)
+
+        return weight
+{% endif %}
+{% endblock %}

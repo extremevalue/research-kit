@@ -32,6 +32,7 @@ dependencies = [
     "anthropic>=0.30.0",
     "pydantic>=2.0.0",
     "typer>=0.9.0",
+    "jinja2>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -51,7 +52,7 @@ research = "research_system.cli.main:main"
 "Bug Tracker" = "https://github.com/your-repo/research-kit/issues"
 
 [tool.setuptools]
-packages = ["research_system", "research_system.cli", "research_system.core", "research_system.ingest", "research_system.llm", "research_system.schemas", "research_system.db", "agents", "agents.personas", "agents.prompts", "scripts", "scripts.validate", "scripts.utils", "scripts.data", "scripts.catalog", "scripts.backtest", "scripts.combinations"]
+packages = ["research_system", "research_system.cli", "research_system.core", "research_system.ingest", "research_system.llm", "research_system.schemas", "research_system.db", "research_system.codegen", "research_system.codegen.templates", "agents", "agents.personas", "agents.prompts", "scripts", "scripts.validate", "scripts.utils", "scripts.data", "scripts.catalog", "scripts.backtest", "scripts.combinations"]
 include-package-data = true
 
 [tool.setuptools.package-data]
@@ -102,7 +103,7 @@ exclude = [
 ]
 
 [tool.coverage.run]
-source = ["research_system/schemas", "research_system/db"]
+source = ["research_system/schemas", "research_system/db", "research_system/codegen"]
 branch = true
 omit = ["*/tests/*", "*/__pycache__/*"]
 

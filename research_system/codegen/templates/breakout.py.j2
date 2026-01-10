@@ -1,0 +1,94 @@
+{# Breakout Strategy Template #}
+{# Enters when price breaks above recent high, exits on trailing stop or time #}
+{% extends "base.py.j2" %}
+
+{% block custom_init %}
+        # Track entry prices for trailing stop
+        self._entry_prices = {}
+        self._highest_since_entry = {}
+        self._positions = {}
+{% endblock %}
+
+{% block calculate_weights %}
+        target_weights = {}
+
+        for symbol in self._symbols:
+            if not self.Securities[symbol].HasData:
+                continue
+
+            current_price = self.Securities[symbol].Price
+
+            # Check for breakout entry
+            if symbol not in self._entry_prices:
+                if self.IsBreakout(symbol):
+{% if position_sizing.method == "equal_weight" %}
+                    target_weights[symbol] = 1.0 / len(self._symbols)
+{% else %}
+                    target_weights[symbol] = 1.0 / len(self._symbols)
+{% endif %}
+                    self._entry_prices[symbol] = current_price
+                    self._highest_since_entry[symbol] = current_price
+            else:
+                # Already in position - check for exit
+                self._highest_since_entry[symbol] = max(
+                    self._highest_since_entry[symbol],
+                    current_price
+                )
+
+                # Trailing stop check
+{% if signal.threshold is not none %}
+                trailing_stop = self._highest_since_entry[symbol] * (1 - abs(self._threshold))
+{% else %}
+                trailing_stop = self._highest_since_entry[symbol] * 0.95  # Default 5% trailing
+{% endif %}
+
+                if current_price > trailing_stop:
+                    # Continue holding
+                    target_weights[symbol] = self._positions.get(symbol, 1.0 / len(self._symbols))
+                else:
+                    # Exit - trailing stop hit
+                    del self._entry_prices[symbol]
+                    del self._highest_since_entry[symbol]
+
+        # Track current positions
+        self._positions = dict(target_weights)
+
+        return target_weights
+{% endblock %}
+
+{% block additional_methods %}
+    def IsBreakout(self, symbol: Symbol) -> bool:
+        """Check if current price breaks above recent high.
+
+        Args:
+            symbol: The symbol to check
+
+        Returns:
+            True if breakout detected
+        """
+        history = self.History(symbol, self._lookback_days, Resolution.Daily)
+        if history.empty or len(history) < self._lookback_days // 2:
+            return False
+
+        # Recent high (excluding today)
+        recent_high = history['high'][:-1].max() if len(history) > 1 else history['high'].max()
+
+        current_price = self.Securities[symbol].Price
+
+        # Breakout if current price exceeds recent high
+        return current_price > recent_high
+
+    def GetRecentHigh(self, symbol: Symbol) -> float:
+        """Get the recent high price.
+
+        Args:
+            symbol: The symbol to get high for
+
+        Returns:
+            Recent high price or None
+        """
+        history = self.History(symbol, self._lookback_days, Resolution.Daily)
+        if history.empty:
+            return None
+        return history['high'].max()
+{% endblock %}

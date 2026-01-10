@@ -1,0 +1,109 @@
+{# Trend Following Strategy Template #}
+{# Enters when price crosses above moving average, exits when crosses below #}
+{% extends "base.py.j2" %}
+
+{% block signal_params %}
+{% if signal %}
+        self._lookback_days = {{ signal.lookback_days }}
+{% if signal.threshold %}
+        self._threshold = {{ signal.threshold }}  # Buffer threshold
+{% else %}
+        self._threshold = 0.0  # No buffer
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block calculate_weights %}
+        target_weights = {}
+        trending_symbols = []
+
+        for symbol in self._symbols:
+            if not self.Securities[symbol].HasData:
+                continue
+
+            # Check if price is above moving average
+            if self.IsTrending(symbol):
+                trending_symbols.append(symbol)
+
+        if not trending_symbols:
+{% if universe.defensive_symbols %}
+            return self.GetDefensiveWeights()
+{% else %}
+            return {}
+{% endif %}
+
+        # Weight allocation
+{% if position_sizing.method == "equal_weight" %}
+        weight = 1.0 / len(trending_symbols)
+        return {symbol: weight for symbol in trending_symbols}
+{% elif position_sizing.method == "risk_parity" %}
+        return self.GetRiskParityWeights(trending_symbols)
+{% else %}
+        weight = 1.0 / len(trending_symbols)
+        return {symbol: weight for symbol in trending_symbols}
+{% endif %}
+{% endblock %}
+
+{% block additional_methods %}
+    def IsTrending(self, symbol: Symbol) -> bool:
+        """Check if symbol is in uptrend (price > SMA).
+
+        Args:
+            symbol: The symbol to check
+
+        Returns:
+            True if in uptrend, False otherwise
+        """
+        history = self.History(symbol, self._lookback_days, Resolution.Daily)
+        if history.empty or len(history) < self._lookback_days // 2:
+            return False
+
+        sma = history['close'].mean()
+        current_price = self.Securities[symbol].Price
+
+        # Price must be above SMA by threshold percentage
+        threshold_price = sma * (1 + self._threshold)
+        return current_price > threshold_price
+
+    def GetMovingAverage(self, symbol: Symbol) -> float:
+        """Get simple moving average.
+
+        Args:
+            symbol: The symbol to calculate SMA for
+
+        Returns:
+            SMA value or None if insufficient data
+        """
+        history = self.History(symbol, self._lookback_days, Resolution.Daily)
+        if history.empty:
+            return None
+        return history['close'].mean()
+
+{% if universe.defensive_symbols %}
+    def GetDefensiveWeights(self) -> dict:
+        """Get weights for defensive allocation when no trends."""
+        if not self._defensive_symbols:
+            return {}
+        weight = 1.0 / len(self._defensive_symbols)
+        return {symbol: weight for symbol in self._defensive_symbols}
+{% endif %}
+
+{% if position_sizing.method == "risk_parity" %}
+    def GetRiskParityWeights(self, symbols: list) -> dict:
+        """Calculate risk parity weights (inverse volatility)."""
+        volatilities = {}
+        for symbol in symbols:
+            vol = self.GetVolatility(symbol, self._lookback_days)
+            if vol > 0 and vol != float('inf'):
+                volatilities[symbol] = vol
+
+        if not volatilities:
+            weight = 1.0 / len(symbols)
+            return {s: weight for s in symbols}
+
+        inv_vols = {s: 1.0 / v for s, v in volatilities.items()}
+        total_inv_vol = sum(inv_vols.values())
+
+        return {s: iv / total_inv_vol for s, iv in inv_vols.items()}
+{% endif %}
+{% endblock %}

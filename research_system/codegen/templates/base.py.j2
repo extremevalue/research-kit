@@ -1,0 +1,199 @@
+{# Base template for QuantConnect strategies #}
+{# This template provides the common structure for all Tier 1 strategies #}
+{# IMPORTANT: Dates are NOT set here - they are controlled by the framework #}
+# region imports
+from AlgorithmImports import *
+from datetime import timedelta
+# endregion
+
+
+class {{ class_name }}(QCAlgorithm):
+    """
+    {{ metadata.name }}
+
+    {{ metadata.description | default("Auto-generated strategy from research-kit schema.", true) }}
+
+    Strategy ID: {{ metadata.id }}
+    Strategy Type: {{ strategy_type }}
+    Schema Version: {{ schema_version }}
+    """
+
+    def Initialize(self):
+        """Initialize the algorithm.
+
+        NOTE: Start/end dates are set by the framework, NOT in this code.
+        This ensures proper walk-forward validation without date injection bugs.
+        """
+        # Capital - can be overridden by framework
+        self.SetCash(100000)
+
+        # Warmup period based on signal lookback
+{% if signal and signal.lookback_days %}
+        self.SetWarmUp(timedelta(days={{ signal.lookback_days }}))
+{% else %}
+        self.SetWarmUp(timedelta(days=20))
+{% endif %}
+
+        # Universe setup
+{% block universe_setup %}
+        self._symbols = []
+{% for symbol in universe.symbols %}
+        self._symbols.append(self.AddEquity("{{ symbol }}", Resolution.Daily).Symbol)
+{% endfor %}
+{% if universe.defensive_symbols %}
+
+        # Defensive symbols for risk-off
+        self._defensive_symbols = []
+{% for symbol in universe.defensive_symbols %}
+        self._defensive_symbols.append(self.AddEquity("{{ symbol }}", Resolution.Daily).Symbol)
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+        # Signal parameters
+{% block signal_params %}
+{% if signal %}
+        self._lookback_days = {{ signal.lookback_days }}
+{% if signal.selection_n %}
+        self._selection_n = {{ signal.selection_n }}
+{% endif %}
+{% if signal.threshold is not none %}
+        self._threshold = {{ signal.threshold }}
+{% endif %}
+{% endif %}
+{% endblock %}
+
+        # Position sizing parameters
+{% block position_sizing_params %}
+        self._leverage = {{ position_sizing.leverage | default(1.0, true) }}
+{% if position_sizing.max_position_size %}
+        self._max_position_size = {{ position_sizing.max_position_size }}
+{% endif %}
+{% if position_sizing.target_volatility %}
+        self._target_volatility = {{ position_sizing.target_volatility }}
+{% endif %}
+{% endblock %}
+
+        # Schedule rebalancing
+{% block schedule_rebalance %}
+{% if rebalance.frequency == "daily" %}
+        self.Schedule.On(
+            self.DateRules.EveryDay(),
+            self.TimeRules.AfterMarketOpen("SPY", 30),
+            self.Rebalance
+        )
+{% elif rebalance.frequency == "weekly" %}
+        self.Schedule.On(
+            self.DateRules.Every(DayOfWeek.Monday),
+            self.TimeRules.AfterMarketOpen("SPY", 30),
+            self.Rebalance
+        )
+{% elif rebalance.frequency == "monthly" %}
+        self.Schedule.On(
+            self.DateRules.MonthStart(),
+            self.TimeRules.AfterMarketOpen("SPY", 30),
+            self.Rebalance
+        )
+{% elif rebalance.frequency == "quarterly" %}
+        self.Schedule.On(
+            self.DateRules.MonthStart(),
+            self.TimeRules.AfterMarketOpen("SPY", 30),
+            self.QuarterlyRebalanceCheck
+        )
+{% endif %}
+{% endblock %}
+
+        # Strategy-specific initialization
+{% block custom_init %}{% endblock %}
+
+{% block quarterly_check %}
+{% if rebalance.frequency == "quarterly" %}
+    def QuarterlyRebalanceCheck(self):
+        """Check if this is a quarter start and rebalance if so."""
+        if self.Time.month in [1, 4, 7, 10]:
+            self.Rebalance()
+{% endif %}
+{% endblock %}
+
+    def Rebalance(self):
+        """Execute the rebalancing logic."""
+        if self.IsWarmingUp:
+            return
+
+{% block rebalance_logic %}
+        # Get target weights from signal
+        target_weights = self.CalculateTargetWeights()
+
+        # Execute trades
+        self.ExecuteTargetWeights(target_weights)
+{% endblock %}
+
+    def CalculateTargetWeights(self) -> dict:
+        """Calculate target portfolio weights based on signal.
+
+        Returns:
+            Dictionary mapping Symbol to target weight (0.0 to 1.0)
+        """
+{% block calculate_weights %}
+        # Override in strategy-specific template
+        return {}
+{% endblock %}
+
+    def ExecuteTargetWeights(self, target_weights: dict):
+        """Execute trades to achieve target weights.
+
+        Args:
+            target_weights: Dictionary mapping Symbol to target weight
+        """
+{% block execute_trades %}
+        # Liquidate positions not in target
+        for holding in self.Portfolio.Values:
+            if holding.Invested and holding.Symbol not in target_weights:
+                self.Liquidate(holding.Symbol)
+
+        # Set target weights with leverage
+        for symbol, weight in target_weights.items():
+            adjusted_weight = weight * self._leverage
+{% if position_sizing.max_position_size %}
+            adjusted_weight = min(adjusted_weight, self._max_position_size)
+{% endif %}
+            self.SetHoldings(symbol, adjusted_weight)
+{% endblock %}
+
+{% block helper_methods %}
+    def GetHistoricalReturns(self, symbol: Symbol, lookback: int) -> float:
+        """Calculate total return over lookback period.
+
+        Args:
+            symbol: The symbol to calculate returns for
+            lookback: Number of days to look back
+
+        Returns:
+            Total return as decimal (e.g., 0.05 for 5%)
+        """
+        history = self.History(symbol, lookback, Resolution.Daily)
+        if history.empty or len(history) < 2:
+            return 0.0
+
+        close_prices = history['close']
+        return (close_prices.iloc[-1] / close_prices.iloc[0]) - 1.0
+
+    def GetVolatility(self, symbol: Symbol, lookback: int) -> float:
+        """Calculate annualized volatility over lookback period.
+
+        Args:
+            symbol: The symbol to calculate volatility for
+            lookback: Number of days to look back
+
+        Returns:
+            Annualized volatility as decimal
+        """
+        history = self.History(symbol, lookback, Resolution.Daily)
+        if history.empty or len(history) < 2:
+            return float('inf')
+
+        returns = history['close'].pct_change().dropna()
+        return returns.std() * (252 ** 0.5)
+{% endblock %}
+
+{% block additional_methods %}{% endblock %}

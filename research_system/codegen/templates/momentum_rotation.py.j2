@@ -1,0 +1,111 @@
+{# Momentum Rotation Strategy Template #}
+{# Selects top-N assets based on relative momentum #}
+{% extends "base.py.j2" %}
+
+{% block calculate_weights %}
+        # Calculate momentum for each symbol
+        momentum_scores = {}
+        for symbol in self._symbols:
+            if not self.Securities[symbol].HasData:
+                continue
+            momentum = self.GetHistoricalReturns(symbol, self._lookback_days)
+            momentum_scores[symbol] = momentum
+
+        if not momentum_scores:
+{% if universe.defensive_symbols %}
+            # No valid momentum scores - go to defensive
+            return self.GetDefensiveWeights()
+{% else %}
+            return {}
+{% endif %}
+
+        # Rank by momentum (highest first)
+        ranked = sorted(momentum_scores.items(), key=lambda x: x[1], reverse=True)
+
+        # Select top N
+        selected = ranked[:self._selection_n]
+
+{% if signal.threshold is not none %}
+        # Apply absolute momentum filter
+        selected = [(s, m) for s, m in selected if m > self._threshold]
+
+        if not selected:
+{% if universe.defensive_symbols %}
+            return self.GetDefensiveWeights()
+{% else %}
+            return {}
+{% endif %}
+{% endif %}
+
+        # Equal weight among selected
+{% if position_sizing.method == "equal_weight" %}
+        weight = 1.0 / len(selected)
+        return {symbol: weight for symbol, _ in selected}
+{% elif position_sizing.method == "risk_parity" %}
+        return self.GetRiskParityWeights([s for s, _ in selected])
+{% elif position_sizing.method == "volatility_target" %}
+        return self.GetVolatilityTargetedWeights([s for s, _ in selected])
+{% else %}
+        weight = 1.0 / len(selected)
+        return {symbol: weight for symbol, _ in selected}
+{% endif %}
+{% endblock %}
+
+{% block additional_methods %}
+{% if universe.defensive_symbols %}
+    def GetDefensiveWeights(self) -> dict:
+        """Get weights for defensive allocation."""
+        if not self._defensive_symbols:
+            return {}
+        weight = 1.0 / len(self._defensive_symbols)
+        return {symbol: weight for symbol in self._defensive_symbols}
+{% endif %}
+
+{% if position_sizing.method == "risk_parity" %}
+    def GetRiskParityWeights(self, symbols: list) -> dict:
+        """Calculate risk parity weights (inverse volatility)."""
+        volatilities = {}
+        for symbol in symbols:
+            vol = self.GetVolatility(symbol, self._lookback_days)
+            if vol > 0 and vol != float('inf'):
+                volatilities[symbol] = vol
+
+        if not volatilities:
+            weight = 1.0 / len(symbols)
+            return {s: weight for s in symbols}
+
+        # Inverse volatility weights
+        inv_vols = {s: 1.0 / v for s, v in volatilities.items()}
+        total_inv_vol = sum(inv_vols.values())
+
+        return {s: iv / total_inv_vol for s, iv in inv_vols.items()}
+{% endif %}
+
+{% if position_sizing.method == "volatility_target" %}
+    def GetVolatilityTargetedWeights(self, symbols: list) -> dict:
+        """Calculate weights to target specific volatility."""
+        volatilities = {}
+        for symbol in symbols:
+            vol = self.GetVolatility(symbol, self._lookback_days)
+            if vol > 0 and vol != float('inf'):
+                volatilities[symbol] = vol
+
+        if not volatilities:
+            weight = 1.0 / len(symbols)
+            return {s: weight for s in symbols}
+
+        # Target portfolio volatility
+        target_vol = self._target_volatility
+        equal_weight = 1.0 / len(volatilities)
+
+        # Estimate portfolio vol with equal weights (simplified)
+        avg_vol = sum(volatilities.values()) / len(volatilities)
+
+        # Scale factor to achieve target
+        scale = target_vol / avg_vol if avg_vol > 0 else 1.0
+        scale = min(scale, self._leverage)  # Cap at leverage limit
+
+        weight = equal_weight * scale
+        return {s: weight for s in volatilities.keys()}
+{% endif %}
+{% endblock %}
