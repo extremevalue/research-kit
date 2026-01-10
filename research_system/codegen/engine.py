@@ -3,6 +3,7 @@
 import ast
 import re
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
@@ -156,7 +157,7 @@ class TemplateEngine:
         class_name = self._generate_class_name(strategy)
 
         # Build context with all strategy fields
-        context = {
+        context: dict[str, Any] = {
             "class_name": class_name,
             "schema_version": strategy.schema_version,
             "tier": strategy.tier,

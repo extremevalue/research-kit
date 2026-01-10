@@ -242,16 +242,32 @@ If starting a new session:
 
 ## Current Status
 
-**Phase**: Pre-implementation (architecture finalized)
-**Last Updated**: 2025-01-08
+**Phase**: Phase 2 - Code Generation (in progress)
+**Last Updated**: 2025-01-10
 
-Completed:
-- [x] Architecture document created
-- [x] All open questions finalized
-- [x] Technology stack decided (Python, SQLite hybrid, Pydantic, Typer, Jinja2)
-- [x] GitHub issues created for Phase 0 and Phase 1
-- [x] Phase 0: CI/CD pipeline, issue templates
-- [x] Phase 1: Pydantic schemas, SQLite schema, CatalogManager
+### Completed Phases
+
+#### Phase 0: Setup & Foundation
+- [x] #71 - CI/CD pipeline (PR #78) - lint, format, type check, tests with 97% coverage
+- [ ] #70 - Project board - **REQUIRES USER ACTION** (needs admin access)
+- [ ] #72 - Branch protection - **REQUIRES USER ACTION** (needs admin access)
+
+#### Phase 1: Core Schemas & Data Layer (COMPLETE)
+- [x] #73 - Pydantic models (strategy, validation, proposal schemas)
+- [x] #74 - SQLite database schema
+- [x] #75 - Catalog CRUD operations (CatalogManager)
+- [x] #76 - Schema validation tests (PR #79, #80, #81) - 112 tests, 97% coverage
+
+#### Phase 2: Code Generation (IN PROGRESS)
+- [x] #82 - Template structure (PR #86) - 6 Jinja2 templates
+- [x] #83 - Template engine (PR #87) - TemplateEngine class, filters, validation
+- [ ] #84 - Code generator CLI - **CURRENT WORK**
+- [ ] #85 - Golden tests for code generation
+
+### Test Suite
+- **165 tests** passing
+- **97% code coverage** (minimum 90% enforced in CI)
+- Golden tests for schema stability
 
 ## GitHub Issues
 
@@ -259,23 +275,71 @@ Completed:
 - #77 - [Epic] Research-Kit v2.0 Rebuild (tracks all phases)
 
 ### Phase 0: Setup & Foundation
-- #70 - Project board and issue templates
-- #71 - CI/CD pipeline with pytest
-- #72 - Branch protection rules
+- #70 - Project board and issue templates - **OPEN (user action required)**
+- #71 - CI/CD pipeline with pytest - **CLOSED**
+- #72 - Branch protection rules - **OPEN (user action required)**
 
-### Phase 1: Core Schemas & Data Layer
-- #73 - Pydantic models for all schemas
-- #74 - SQLite database schema
-- #75 - Catalog CRUD operations
-- #76 - Schema validation tests
+### Phase 1: Core Schemas & Data Layer (ALL CLOSED)
+- #73 - Pydantic models - **CLOSED**
+- #74 - SQLite database schema - **CLOSED**
+- #75 - Catalog CRUD operations - **CLOSED**
+- #76 - Schema validation tests - **CLOSED**
+
+### Phase 2: Code Generation
+- #82 - Template structure design - **CLOSED**
+- #83 - Template engine implementation - **CLOSED**
+- #84 - Code generator with framework-controlled dates - **OPEN (current)**
+- #85 - Golden tests for code generation - **OPEN**
+
+---
+
+## Key Files Created
+
+### Schemas (`research_system/schemas/`)
+- `strategy.py` - StrategyDefinition, UniverseConfig, SignalConfig, etc.
+- `validation.py` - ValidationResult, WindowMetrics, RegimeTags
+- `proposal.py` - Proposal for LLM suggestions
+- `common.py` - Shared enums (EntryStatus, EntryType, etc.)
+
+### Database (`research_system/db/`)
+- `connection.py` - DatabaseConnection with transactions
+- `catalog.py` - CatalogManager for CRUD operations
+- `schema.sql` - SQLite schema definition
+
+### Code Generation (`research_system/codegen/`)
+- `templates/base.py.j2` - Base QuantConnect template
+- `templates/momentum_rotation.py.j2` - Top-N momentum selection
+- `templates/mean_reversion.py.j2` - Z-score entry/exit
+- `templates/trend_following.py.j2` - MA trend filter
+- `templates/dual_momentum.py.j2` - Absolute + relative momentum
+- `templates/breakout.py.j2` - Price breakout with trailing stops
+- `engine.py` - TemplateEngine for rendering
+- `filters.py` - Custom Jinja2 filters
+
+### Tests (`tests_v2/`)
+- `test_schemas.py` - Strategy schema tests
+- `test_validation.py` - Validation schema tests
+- `test_common.py` - Enum tests
+- `test_db_connection.py` - Database connection tests
+- `test_catalog_manager.py` - CatalogManager CRUD tests
+- `test_golden.py` - Schema stability tests
+- `test_templates.py` - Template structure tests
+- `test_codegen_engine.py` - Template engine tests
 
 ---
 
 ## Next Actions
 
-1. ~~Finalize open questions~~ DONE
-2. ~~Create GitHub issues for Phase 0 and Phase 1~~ DONE
-3. Begin implementation (start with #73 - Pydantic models)
+1. **Current**: Implement code generator CLI (#84)
+   - CLI command: `research codegen STRAT-001 --output ./output/`
+   - Integration with CatalogManager (lookup by ID)
+   - Ensure no hardcoded dates in output
+
+2. **Next**: Add golden tests for code generation (#85)
+
+3. **User Action Required**:
+   - #70 - Create GitHub project board
+   - #72 - Configure branch protection rules
 
 ---
 
