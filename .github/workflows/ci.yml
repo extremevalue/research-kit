@@ -33,11 +33,11 @@ jobs:
 
       - name: Run type checking (mypy)
         run: |
-          mypy research_system/schemas research_system/db --ignore-missing-imports
+          mypy research_system/schemas research_system/db research_system/codegen --ignore-missing-imports
 
       - name: Run tests with coverage
         run: |
-          pytest tests_v2/ -v --tb=short --cov=research_system.schemas --cov=research_system.db --cov-report=term-missing --cov-fail-under=90
+          pytest tests_v2/ -v --tb=short --cov=research_system.schemas --cov=research_system.db --cov=research_system.codegen --cov-report=term-missing --cov-fail-under=90
 
   lint:
     runs-on: ubuntu-latest
