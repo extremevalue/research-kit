@@ -133,6 +133,21 @@ class DataRegistry:
     # These don't need explicit registry entries - QC has comprehensive coverage
     QC_STANDARD_DATA_SUFFIXES = {"_prices", "_data", "_ohlcv", "_price", "_returns"}
 
+    # Suffixes for derivable/calculated data (computed from price data)
+    # These are NOT directly available but can be calculated from available data
+    QC_DERIVABLE_SUFFIXES = {
+        "_volatility", "_returns", "_momentum", "_trend", "_signal",
+        "_indicator", "_oscillator", "_ratio", "_spread", "_correlation",
+    }
+
+    # Patterns for technical indicators (derivable from price data)
+    # Matches: ema_20, sma_50_day, rsi_14, macd_12_26, atr_14, etc.
+    QC_INDICATOR_PATTERNS = {
+        "ema", "sma", "rsi", "macd", "atr", "adx", "cci", "stoch",
+        "bollinger", "keltner", "donchian", "ichimoku", "vwap",
+        "obv", "mfi", "williams", "momentum", "roc", "trix",
+    }
+
     # Special data sources always available in QuantConnect
     QC_NATIVE_SPECIAL = {
         "risk_free_rate",      # Available via RiskFreeInterestRateModel
@@ -141,6 +156,20 @@ class DataRegistry:
         "futures_data",        # QC has comprehensive futures data
         "forex_data",          # QC has forex data
         "crypto_data",         # QC has crypto data
+        # Options-related (derivable from options chain data)
+        "implied_volatility",  # Derivable from options chain
+        "option_premiums",     # Derivable from options chain
+        "option_greeks",       # Derivable from options chain
+        "iv_percentile",       # Derivable from options chain
+        "iv_rank",             # Derivable from options chain
+        "put_call_ratio",      # Derivable from options chain
+        # Returns and volatility (derivable from price data)
+        "historical_returns",  # Derivable from price data
+        "historical_volatility", # Derivable from price data
+        "realized_volatility", # Derivable from price data
+        # Breadth indicators
+        "market_breadth",      # Derivable from constituent data
+        "advance_decline",     # Derivable from constituent data
     }
 
     # Mapping of semantic data requirement names to QC Native symbols/data types
@@ -397,6 +426,21 @@ class DataRegistry:
                 ticker = source_id[:-len(suffix)]
                 # Basic validation: ticker should be 1-6 alphanumeric chars
                 if ticker and len(ticker) <= 6 and ticker.replace("_", "").isalnum():
+                    return True
+
+        # Check for derivable data patterns (historical_volatility, daily_returns, etc.)
+        for suffix in cls.QC_DERIVABLE_SUFFIXES:
+            if source_id.endswith(suffix):
+                return True
+
+        # Check for technical indicator patterns (ema_20, sma_50_day, rsi_14, etc.)
+        for indicator in cls.QC_INDICATOR_PATTERNS:
+            if source_id.startswith(indicator + "_"):
+                return True
+            # Also check without underscore (ema20, sma50)
+            if source_id.startswith(indicator) and len(source_id) > len(indicator):
+                rest = source_id[len(indicator):]
+                if rest.replace("_", "").replace("day", "").isdigit():
                     return True
 
         return False
