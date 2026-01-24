@@ -31,6 +31,22 @@ pip3 install git+https://github.com/extremevalue/research-kit.git
 
 > **Note:** If you see "externally managed environment" error on macOS, use `uv` or create a virtual environment first.
 
+**Development install (from local clone):**
+
+```bash
+git clone https://github.com/extremevalue/research-kit.git
+cd research-kit
+
+# Create virtual environment and install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Or with uv
+uv sync
+source .venv/bin/activate
+```
+
 ### 2. Initialize a V4 Workspace
 
 ```bash
