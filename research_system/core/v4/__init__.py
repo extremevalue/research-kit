@@ -1,10 +1,13 @@
-"""V4 Configuration System.
+"""V4 Core Module.
 
-This package provides configuration loading and validation for the V4 research-kit
-system. Configuration is loaded from research-kit.yaml files with sensible defaults.
+This package provides the core components for the V4 research-kit system:
+
+- Configuration loading and validation (research-kit.yaml)
+- Workspace management (directories, ID generation)
 
 Example usage:
     from research_system.core.v4 import load_config, get_default_config, V4Config
+    from research_system.core.v4 import V4Workspace, get_v4_workspace
 
     # Load config from file or use defaults
     config = load_config()
@@ -20,6 +23,14 @@ Example usage:
     errors = validate_config(config)
     if errors:
         print(f"Configuration errors: {errors}")
+
+    # Initialize a V4 workspace
+    workspace = V4Workspace("/path/to/workspace")
+    workspace.init(name="My Research")
+
+    # Generate IDs
+    strat_id = workspace.next_strategy_id()  # STRAT-001
+    idea_id = workspace.next_idea_id()       # IDEA-001
 """
 
 from research_system.core.v4.config import (
@@ -40,6 +51,19 @@ from research_system.core.v4.config import (
     ConfigurationError,
 )
 
+from research_system.core.v4.workspace import (
+    # Workspace class
+    V4Workspace,
+    # Helper functions
+    get_v4_workspace,
+    require_v4_workspace,
+    # Exceptions
+    V4WorkspaceError,
+    # Constants
+    DEFAULT_V4_WORKSPACE,
+    WORKSPACE_ENV_VAR,
+)
+
 __all__ = [
     # Configuration models
     "V4Config",
@@ -56,4 +80,12 @@ __all__ = [
     "validate_config",
     # Exceptions
     "ConfigurationError",
+    # Workspace
+    "V4Workspace",
+    "get_v4_workspace",
+    "require_v4_workspace",
+    "V4WorkspaceError",
+    # Constants
+    "DEFAULT_V4_WORKSPACE",
+    "WORKSPACE_ENV_VAR",
 ]
