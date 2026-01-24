@@ -922,6 +922,17 @@ Statuses:
         help="Filter by status"
     )
     parser.add_argument(
+        "--tags",
+        metavar="TAGS",
+        help="Filter by tags (comma-separated)"
+    )
+    parser.add_argument(
+        "--format", "-f",
+        choices=["table", "json"],
+        default="table",
+        help="Output format (default: table)"
+    )
+    parser.add_argument(
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
@@ -1290,10 +1301,59 @@ def cmd_v4_list(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 list command not implemented yet.")
-    print(f"Workspace: {workspace.path}")
-    if args.status:
-        print(f"Filter by status: {args.status}")
+    # Get filter options
+    status = getattr(args, 'status', None)
+    tags = getattr(args, 'tags', None)
+    output_format = getattr(args, 'format', 'table')
+
+    # Parse tags if provided
+    tag_list = None
+    if tags:
+        tag_list = [t.strip() for t in tags.split(',')]
+
+    # Get strategies
+    strategies = workspace.list_strategies(status=status, tags=tag_list)
+
+    if not strategies:
+        if status:
+            print(f"No strategies with status '{status}'")
+        else:
+            print("No strategies in workspace")
+        return 0
+
+    # Output based on format
+    if output_format == 'json':
+        import json
+        # Convert datetime to string for JSON
+        for s in strategies:
+            if s['created'] and hasattr(s['created'], 'isoformat'):
+                s['created'] = s['created'].isoformat()
+        print(json.dumps(strategies, indent=2))
+    else:
+        # Table format
+        print(f"\n{'ID':<12} {'Name':<35} {'Status':<12} {'Created':<20}")
+        print("-" * 80)
+        for s in strategies:
+            name = s['name'][:33] + '..' if len(s['name']) > 35 else s['name']
+            created = ''
+            if s['created']:
+                if hasattr(s['created'], 'strftime'):
+                    created = s['created'].strftime('%Y-%m-%d %H:%M')
+                else:
+                    created = str(s['created'])[:16]
+            print(f"{s['id']:<12} {name:<35} {s['status']:<12} {created:<20}")
+
+        print("-" * 80)
+        print(f"Total: {len(strategies)} strategies")
+
+        # Show status summary
+        status_counts = {}
+        for s in strategies:
+            st = s['status']
+            status_counts[st] = status_counts.get(st, 0) + 1
+        summary = ', '.join(f"{k}: {v}" for k, v in sorted(status_counts.items()))
+        print(f"By status: {summary}")
+
     return 0
 
 

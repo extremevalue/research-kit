@@ -522,6 +522,114 @@ class V4Workspace:
             "counters": counters,
         }
 
+    def list_strategies(
+        self,
+        status: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """List strategies in the workspace.
+
+        Args:
+            status: Filter by status (pending, validated, invalidated, blocked).
+                    If None, lists all strategies.
+            tags: Filter by tags (strategies must have all specified tags).
+                  If None, no tag filtering.
+
+        Returns:
+            List of strategy summaries with id, name, status, created, tags.
+        """
+        self.require_initialized()
+
+        strategies = []
+        statuses_to_check = [status] if status else list(self.VALID_STATUSES)
+
+        for check_status in statuses_to_check:
+            status_dir = self.strategies_path / check_status
+            if not status_dir.exists():
+                continue
+
+            for yaml_file in status_dir.glob("*.yaml"):
+                try:
+                    with open(yaml_file) as f:
+                        data = yaml.safe_load(f) or {}
+
+                    # Extract summary fields
+                    strategy_id = data.get("id", yaml_file.stem)
+                    name = data.get("name", "Unknown")
+                    created = data.get("created")
+                    strategy_tags = data.get("tags", {})
+
+                    # Handle tags - could be dict with 'custom' key or list
+                    if isinstance(strategy_tags, dict):
+                        tag_list = strategy_tags.get("custom", [])
+                    elif isinstance(strategy_tags, list):
+                        tag_list = strategy_tags
+                    else:
+                        tag_list = []
+
+                    # Apply tag filter
+                    if tags:
+                        if not all(t in tag_list for t in tags):
+                            continue
+
+                    # Parse created date if string
+                    if isinstance(created, str):
+                        try:
+                            created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                        except ValueError:
+                            pass
+
+                    strategies.append({
+                        "id": strategy_id,
+                        "name": name,
+                        "status": check_status,
+                        "created": created,
+                        "tags": tag_list,
+                        "file": str(yaml_file),
+                    })
+
+                except Exception as e:
+                    # Skip malformed files but log them
+                    strategies.append({
+                        "id": yaml_file.stem,
+                        "name": f"<error: {e}>",
+                        "status": check_status,
+                        "created": None,
+                        "tags": [],
+                        "file": str(yaml_file),
+                    })
+
+        # Sort by created date (newest first), with None dates at the end
+        strategies.sort(
+            key=lambda s: (s["created"] is None, s["created"] or datetime.min),
+            reverse=True
+        )
+
+        return strategies
+
+    def get_strategy(self, strategy_id: str) -> dict[str, Any] | None:
+        """Get a strategy by ID.
+
+        Args:
+            strategy_id: Strategy ID (e.g., "STRAT-001").
+
+        Returns:
+            Strategy data as dict, or None if not found.
+        """
+        self.require_initialized()
+
+        # Search all status directories
+        for status in self.VALID_STATUSES:
+            yaml_file = self.strategies_path / status / f"{strategy_id}.yaml"
+            if yaml_file.exists():
+                with open(yaml_file) as f:
+                    data = yaml.safe_load(f) or {}
+                data["_file"] = str(yaml_file)
+                data["_status"] = status
+                return data
+
+        return None
+
 
 # =============================================================================
 # HELPER FUNCTIONS
