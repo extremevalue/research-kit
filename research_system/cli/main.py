@@ -803,7 +803,7 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
     # v4-verify command
     parser = subparsers.add_parser(
         "v4-verify",
-        help="Run verification tests on a strategy (V4)",
+        help="[COMING SOON] Run verification tests on a strategy (V4)",
         description="""
 Run verification tests on a strategy to check for biases and issues.
 
@@ -832,7 +832,7 @@ Tests include:
     # v4-validate command
     parser = subparsers.add_parser(
         "v4-validate",
-        help="Run walk-forward validation on a strategy (V4)",
+        help="[COMING SOON] Run walk-forward validation on a strategy (V4)",
         description="""
 Run walk-forward validation (backtesting) on a strategy.
 Applies configured gates (Sharpe, consistency, drawdown).
@@ -858,7 +858,7 @@ strategy robustness across different market regimes.
     # v4-learn command
     parser = subparsers.add_parser(
         "v4-learn",
-        help="Extract learnings from validation results (V4)",
+        help="[COMING SOON] Extract learnings from validation results (V4)",
         description="""
 Extract learnings from validation results for future reference.
 
@@ -1135,27 +1135,42 @@ def cmd_v4_ingest(args):
     if args.files:
         # Process specific files
         results = []
-        for file_arg in args.files:
+        total_files = len(args.files)
+        print(f"Processing {total_files} file(s)...\n")
+        for i, file_arg in enumerate(args.files, 1):
             file_path = Path(file_arg)
             if not file_path.exists():
                 # Try relative to inbox
                 file_path = workspace.inbox_path / file_arg
             if not file_path.exists():
-                print(f"Error: File not found: {file_arg}")
+                print(f"[{i}/{total_files}] Error: File not found: {file_arg}")
                 continue
+            print(f"[{i}/{total_files}] Processing: {file_path.name}...", flush=True)
             result = processor.process_file(file_path, dry_run=dry_run, force=force)
             results.append(result)
     else:
-        # Process entire inbox
-        summary = processor.process_inbox(dry_run=dry_run, force=force)
-        results = summary.results
+        # Process entire inbox - first count files
+        inbox_files = [
+            f for f in workspace.inbox_path.rglob("*")
+            if f.is_file() and not f.name.startswith('.') and f.name != '.gitkeep'
+        ]
+        total_files = len(inbox_files)
 
-        if summary.total_files == 0:
+        if total_files == 0:
             print(f"No files found in inbox: {workspace.inbox_path}")
             print("\nAdd files to the inbox directory and run again.")
             return 0
 
-        print(f"Processing {summary.total_files} file(s) from inbox...\n")
+        print(f"Found {total_files} file(s) in inbox. Processing...\n")
+
+        # Process with progress output
+        results = []
+        for i, file_path in enumerate(sorted(inbox_files), 1):
+            print(f"[{i}/{total_files}] Processing: {file_path.name}...", flush=True)
+            result = processor.process_file(file_path, dry_run=dry_run, force=force)
+            results.append(result)
+
+        print()  # Blank line after progress
 
     # Display results
     for result in results:
@@ -1198,17 +1213,25 @@ def cmd_v4_ingest(args):
 
     # Summary
     if not args.files:
+        # Compute summary from results
+        accepted = sum(1 for r in results if r.decision == IngestionDecision.ACCEPT)
+        queued = sum(1 for r in results if r.decision == IngestionDecision.QUEUE)
+        archived = sum(1 for r in results if r.decision == IngestionDecision.ARCHIVE)
+        rejected = sum(1 for r in results if r.decision == IngestionDecision.REJECT)
+        errors = sum(1 for r in results if r.error and not r.decision)
+        processed = accepted + queued + archived + rejected
+
         print("=" * 50)
         print("SUMMARY")
         print("=" * 50)
-        print(f"Total files:  {summary.total_files}")
-        print(f"Processed:    {summary.processed}")
-        print(f"  Accepted:   {summary.accepted}")
-        print(f"  Queued:     {summary.queued}")
-        print(f"  Archived:   {summary.archived}")
-        print(f"  Rejected:   {summary.rejected}")
-        if summary.errors > 0:
-            print(f"  Errors:     {summary.errors}")
+        print(f"Total files:  {total_files}")
+        print(f"Processed:    {processed}")
+        print(f"  Accepted:   {accepted}")
+        print(f"  Queued:     {queued}")
+        print(f"  Archived:   {archived}")
+        print(f"  Rejected:   {rejected}")
+        if errors > 0:
+            print(f"  Errors:     {errors}")
 
     return 0
 
@@ -1224,13 +1247,11 @@ def cmd_v4_verify(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 verify command not implemented yet.")
+    print("\n[COMING SOON] v4-verify is not yet implemented.")
+    print("This command will run verification tests to check for biases and issues.\n")
     print(f"Workspace: {workspace.path}")
     if args.strategy_id:
         print(f"Strategy ID: {args.strategy_id}")
-    else:
-        print("No strategy ID specified.")
-        print("Usage: research v4-verify STRAT-001")
     return 0
 
 
@@ -1245,13 +1266,11 @@ def cmd_v4_validate(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 validate command not implemented yet.")
+    print("\n[COMING SOON] v4-validate is not yet implemented.")
+    print("This command will run walk-forward validation (backtesting).\n")
     print(f"Workspace: {workspace.path}")
     if args.strategy_id:
         print(f"Strategy ID: {args.strategy_id}")
-    else:
-        print("No strategy ID specified.")
-        print("Usage: research v4-validate STRAT-001")
     return 0
 
 
@@ -1266,13 +1285,11 @@ def cmd_v4_learn(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 learn command not implemented yet.")
+    print("\n[COMING SOON] v4-learn is not yet implemented.")
+    print("This command will extract learnings from validation results.\n")
     print(f"Workspace: {workspace.path}")
     if args.strategy_id:
         print(f"Strategy ID: {args.strategy_id}")
-    else:
-        print("No strategy ID specified.")
-        print("Usage: research v4-learn STRAT-001")
     return 0
 
 
@@ -1503,46 +1520,78 @@ def _print_strategy_details(strategy: dict) -> None:
             created = created.strftime('%Y-%m-%d %H:%M:%S')
         print(f"Created: {created}")
 
-    # Source
+    # Source (supports both simple and V4 schema formats)
     source = strategy.get('source', {})
     if source:
         print(f"\n--- Source ---")
+        # Simple format: source.type, source.author
         if source.get('type'):
-            print(f"Type:   {source['type']}")
+            print(f"Type:      {source['type']}")
         if source.get('author'):
-            print(f"Author: {source['author']}")
+            print(f"Author:    {source['author']}")
+        # V4 format: source.reference, source.credibility
+        if source.get('reference'):
+            print(f"Reference: {source['reference']}")
         if source.get('url'):
-            print(f"URL:    {source['url']}")
+            print(f"URL:       {source['url']}")
         if source.get('track_record'):
             print(f"Track Record: {source['track_record']}")
+        # V4 credibility info (nested)
+        cred = source.get('credibility', {})
+        if cred:
+            if cred.get('type') and not source.get('type'):
+                print(f"Type:      {cred['type']}")
+            if cred.get('author') and not source.get('author'):
+                print(f"Author:    {cred['author']}")
+            if cred.get('track_record') and not source.get('track_record'):
+                print(f"Track Record: {cred['track_record']}")
+        # Show excerpt if available
+        if source.get('excerpt'):
+            excerpt = source['excerpt']
+            if len(excerpt) > 200:
+                excerpt = excerpt[:200] + "..."
+            print(f"Excerpt:   {excerpt}")
 
-    # Hypothesis
+    # Hypothesis (supports both simple and V4 schema formats)
     hypothesis = strategy.get('hypothesis', {})
     if hypothesis:
         print(f"\n--- Hypothesis ---")
+        # Simple format: thesis, type, testable_prediction
         if hypothesis.get('thesis'):
             print(f"Thesis: {hypothesis['thesis']}")
         if hypothesis.get('type'):
             print(f"Type:   {hypothesis['type']}")
         if hypothesis.get('testable_prediction'):
-            print(f"Testable Prediction: {hypothesis['testable_prediction']}")
+            print(f"Testable: {hypothesis['testable_prediction']}")
         if hypothesis.get('expected_sharpe'):
             exp = hypothesis['expected_sharpe']
             if isinstance(exp, dict):
                 print(f"Expected Sharpe: {exp.get('min', '?')} - {exp.get('max', '?')}")
             else:
                 print(f"Expected Sharpe: {exp}")
+        # V4 format: summary, detail
+        if hypothesis.get('summary') and not hypothesis.get('thesis'):
+            print(f"Summary: {hypothesis['summary']}")
+        if hypothesis.get('detail'):
+            detail = hypothesis['detail']
+            if len(detail) > 300:
+                detail = detail[:300] + "..."
+            print(f"Detail:  {detail}")
 
-    # Edge
-    edge = strategy.get('edge', {})
+    # Edge (can be top-level or nested under hypothesis)
+    edge = hypothesis.get('edge', {}) or strategy.get('edge', {})
     if edge:
         print(f"\n--- Edge ---")
+        if edge.get('mechanism'):
+            print(f"Mechanism:    {edge['mechanism']}")
         if edge.get('category'):
-            print(f"Category: {edge['category']}")
+            print(f"Category:     {edge['category']}")
         if edge.get('why_exists'):
-            print(f"Why It Exists: {edge['why_exists']}")
+            print(f"Why Exists:   {edge['why_exists']}")
+        if edge.get('counterparty'):
+            print(f"Counterparty: {edge['counterparty']}")
         if edge.get('why_persists'):
-            print(f"Why It Persists: {edge['why_persists']}")
+            print(f"Why Persists: {edge['why_persists']}")
 
     # Universe
     universe = strategy.get('universe', {})
@@ -1558,27 +1607,62 @@ def _print_strategy_details(strategy: dict) -> None:
                 else:
                     print(f"Symbols: {', '.join(symbols[:5])} ... (+{len(symbols)-5} more)")
 
-    # Entry
+    # Entry (supports both simple and V4 schema formats)
     entry = strategy.get('entry', {})
     if entry:
         print(f"\n--- Entry ---")
         if entry.get('type'):
             print(f"Type: {entry['type']}")
+        # Simple format: signals array
         signals = entry.get('signals', [])
         for i, sig in enumerate(signals[:3], 1):
             if isinstance(sig, dict):
                 print(f"Signal {i}: {sig.get('name', 'unnamed')} - {sig.get('condition', '')}")
         if len(signals) > 3:
             print(f"  ... and {len(signals)-3} more signals")
+        # V4 format: technical config
+        tech = entry.get('technical', {})
+        if tech and not signals:
+            if tech.get('indicator'):
+                print(f"Indicator: {tech['indicator']}")
+            if tech.get('condition'):
+                print(f"Condition: {tech['condition']}")
+        # Fundamental config
+        fund = entry.get('fundamental', {})
+        if fund:
+            if fund.get('metric'):
+                print(f"Metric: {fund['metric']}")
 
-    # Exit
+    # Position (V4 schema)
+    position = strategy.get('position', {})
+    if position:
+        print(f"\n--- Position ---")
+        if position.get('type'):
+            print(f"Type: {position['type']}")
+        legs = position.get('legs', [])
+        for leg in legs[:3]:
+            if isinstance(leg, dict):
+                name = leg.get('name', 'unnamed')
+                direction = leg.get('direction', '')
+                asset_type = leg.get('asset_type', '')
+                print(f"  - {name}: {direction} {asset_type}")
+        sizing = position.get('sizing', {})
+        if sizing and sizing.get('method'):
+            print(f"Sizing: {sizing['method']}")
+
+    # Exit (V4 schema: paths, priority)
     exit_info = strategy.get('exit', {})
     if exit_info:
         print(f"\n--- Exit ---")
+        if exit_info.get('priority'):
+            print(f"Priority: {exit_info['priority']}")
         paths = exit_info.get('paths', [])
         for path in paths[:3]:
             if isinstance(path, dict):
-                print(f"- {path.get('name', 'unnamed')}: {path.get('condition', '')}")
+                name = path.get('name', 'unnamed')
+                exit_type = path.get('type', '')
+                condition = path.get('condition_description', path.get('condition', ''))
+                print(f"  - {name} ({exit_type}): {condition}")
 
     # Data requirements
     data_reqs = strategy.get('data_requirements', {})

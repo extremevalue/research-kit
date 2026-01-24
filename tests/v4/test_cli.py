@@ -295,7 +295,7 @@ class TestV4NotImplemented:
             cwd=Path(__file__).parent.parent.parent
         )
         assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert "coming soon" in result.stdout.lower()
 
     def test_v4_validate_not_implemented(self, tmp_path):
         """Test v4-validate prints not implemented message."""
@@ -315,7 +315,7 @@ class TestV4NotImplemented:
             cwd=Path(__file__).parent.parent.parent
         )
         assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert "coming soon" in result.stdout.lower()
 
     def test_v4_learn_not_implemented(self, tmp_path):
         """Test v4-learn prints not implemented message."""
@@ -335,7 +335,7 @@ class TestV4NotImplemented:
             cwd=Path(__file__).parent.parent.parent
         )
         assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert "coming soon" in result.stdout.lower()
 
     def test_v4_status_not_implemented(self, tmp_path):
         """Test v4-status prints not implemented message."""
