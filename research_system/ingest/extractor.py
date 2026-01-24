@@ -254,6 +254,14 @@ class MetadataExtractor:
                 metadata=metadata
             )
 
+        # Fallback for null/empty name - use source filename
+        if not metadata.get("name") or metadata.get("name") in ("null", "None", ""):
+            # Generate name from source or use placeholder
+            fallback_name = filename.replace("_", " ").replace("-", " ")
+            fallback_name = fallback_name.rsplit(".", 1)[0]  # Remove extension
+            fallback_name = fallback_name[:50]  # Truncate to max length
+            metadata["name"] = fallback_name if fallback_name else "Untitled"
+
         # Normalize type
         valid_types = ["indicator", "strategy", "idea", "learning", "tool", "data"]
         if metadata.get("type") not in valid_types:
