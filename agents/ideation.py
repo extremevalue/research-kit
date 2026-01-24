@@ -292,9 +292,13 @@ Generate 1-2 high-quality strategy ideas matching your persona's perspective.
             logger.warning(f"Failed to parse ideas from {persona}: {e}")
             return ideas
 
-    def run_persona(self, persona: str) -> tuple[List[GeneratedIdea], Dict[str, Any]]:
+    def run_persona(self, persona: str, max_retries: int = 3) -> tuple[List[GeneratedIdea], Dict[str, Any]]:
         """
-        Run ideation for a single persona.
+        Run ideation for a single persona with retry on JSON parse failures.
+
+        Args:
+            persona: The persona to run
+            max_retries: Maximum number of retries on JSON parse failure
 
         Returns:
             Tuple of (list of ideas, metadata dict)
@@ -304,26 +308,43 @@ Generate 1-2 high-quality strategy ideas matching your persona's perspective.
         system_prompt = self._build_system_prompt(persona)
         user_prompt = self._render_prompt(persona)
 
-        try:
-            response = self._call_llm(system_prompt, user_prompt)
-            ideas = self._parse_ideas(response, persona)
-
-            # Extract metadata
-            meta = {}
+        last_error = None
+        for attempt in range(max_retries):
             try:
-                if "{" in response:
-                    start = response.index("{")
-                    end = response.rindex("}") + 1
-                    data = json.loads(response[start:end])
-                    meta = data.get("meta", {})
-            except:
-                pass
+                response = self._call_llm(system_prompt, user_prompt)
+                ideas = self._parse_ideas(response, persona)
 
-            return ideas, meta
+                # If we got ideas, return them
+                if ideas:
+                    # Extract metadata
+                    meta = {}
+                    try:
+                        if "{" in response:
+                            start = response.index("{")
+                            end = response.rindex("}") + 1
+                            data = json.loads(response[start:end])
+                            meta = data.get("meta", {})
+                    except:
+                        pass
 
-        except Exception as e:
-            logger.error(f"Ideation failed for {persona}: {e}")
-            return [], {"error": str(e)}
+                    return ideas, meta
+
+                # No ideas parsed - likely JSON error, retry
+                if attempt < max_retries - 1:
+                    logger.warning(f"No ideas parsed for {persona} (attempt {attempt + 1}/{max_retries}), retrying...")
+                    continue
+
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"Ideation attempt {attempt + 1} failed for {persona}: {e}, retrying...")
+                    continue
+                break
+
+        # All retries exhausted
+        error_msg = str(last_error) if last_error else "JSON parsing failed after retries"
+        logger.error(f"Ideation failed for {persona} after {max_retries} attempts: {error_msg}")
+        return [], {"error": error_msg, "retries": max_retries}
 
     def run(self, count: int = 2) -> IdeationResult:
         """
