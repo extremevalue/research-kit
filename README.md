@@ -7,8 +7,10 @@ A structured workflow for ingesting, organizing, and validating trading strategy
 Research-Kit V4 helps you:
 
 1. **Ingest research** - Drop transcripts, papers, and notes into your inbox
-2. **Organize strategies** - Strategies are organized by status (pending, validated, invalidated, blocked)
-3. **Track progress** - View your workspace status, list strategies, and see detailed information
+2. **Verify strategies** - Check for look-ahead bias, survivorship bias, and other issues
+3. **Validate strategies** - Apply validation gates (Sharpe ratio, max drawdown, win rate)
+4. **Extract learnings** - Document what worked and what didn't for future reference
+5. **Track progress** - View your workspace status, list strategies, and see detailed information
 
 ## Requirements
 
@@ -124,19 +126,28 @@ I use a trailing stop of 5% and exit if VIX goes above 30 again.
 Position size is 10% of portfolio. Sharpe ratio has been around 1.2.
 EOF
 
-# 4. Check status - should show 1 file in inbox
-research v4-status
-
-# 5. Ingest the file
+# 4. Ingest the file
 research v4-ingest --force
 
-# 6. List strategies - should show STRAT-001
-research v4-list
-
-# 7. View strategy details
+# 5. View the strategy
 research v4-show STRAT-001
 
-# 8. Check final status
+# 6. Run verification tests
+research v4-verify STRAT-001
+
+# 7. Generate backtest config (for external backtesting)
+research v4-validate STRAT-001 --generate-config
+
+# 8. After running backtest externally, apply validation gates
+cat > backtest_results.json << 'EOF'
+{"sharpe_ratio": 1.5, "max_drawdown": 0.15, "win_rate": 0.55}
+EOF
+research v4-validate STRAT-001 --results backtest_results.json
+
+# 9. Extract learnings
+research v4-learn STRAT-001
+
+# 10. Check final status
 research v4-status
 ```
 
@@ -198,6 +209,65 @@ research v4-show STRAT-001              # Human-readable format
 research v4-show STRAT-001 --format yaml  # Raw YAML
 research v4-show STRAT-001 --format json  # JSON output
 ```
+
+### `research v4-verify <strategy_id>`
+
+Run verification tests to check for common issues before backtesting.
+
+```bash
+research v4-verify STRAT-001            # Run all verification tests
+research v4-verify STRAT-001 --dry-run  # Preview without saving results
+```
+
+**Tests include:**
+- `look_ahead_bias` - Check for future information leakage
+- `survivorship_bias` - Check for survivorship bias in universe
+- `position_sizing` - Validate position sizing is defined
+- `data_requirements` - Verify data requirements are specified
+- `entry_defined` - Check entry conditions are complete
+- `exit_defined` - Check exit conditions include stop loss
+- `universe_defined` - Verify universe is properly defined
+
+### `research v4-validate <strategy_id>`
+
+Run validation with configurable gates after backtesting.
+
+```bash
+# Generate backtest configuration
+research v4-validate STRAT-001 --generate-config
+
+# Apply validation gates to backtest results
+research v4-validate STRAT-001 --results backtest_results.json
+```
+
+**Validation gates (configurable in research-kit.yaml):**
+- `sharpe_ratio` - Minimum Sharpe ratio (default: 1.0)
+- `max_drawdown` - Maximum drawdown (default: 25%)
+- `win_rate` - Minimum win rate (default: 40%)
+
+**Results file format (JSON):**
+```json
+{
+  "sharpe_ratio": 1.5,
+  "max_drawdown": 0.15,
+  "win_rate": 0.55
+}
+```
+
+### `research v4-learn <strategy_id>`
+
+Extract learnings from verification and validation results.
+
+```bash
+research v4-learn STRAT-001             # Extract and save learnings
+research v4-learn STRAT-001 --dry-run   # Preview without saving
+```
+
+**Learnings include:**
+- Verification test outcomes and recommendations
+- Validation gate results
+- Strategy definition quality assessment
+- Actionable insights for improvement
 
 ## Workspace Structure
 
@@ -273,6 +343,9 @@ This enables:
 ```bash
 research --help                     # General help
 research v4-ingest --help           # Command help
+research v4-verify --help
+research v4-validate --help
+research v4-learn --help
 research v4-list --help
 research v4-show --help
 research v4-status --help
