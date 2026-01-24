@@ -302,7 +302,9 @@ class IngestProcessor:
 
         if dry_run:
             result.success = True
-            result.entry_id = f"[DRY-RUN] Would create {result.entry_type.upper()}-XXX"
+            # Use actual ID prefix from catalog for accurate dry-run message
+            prefix = self.catalog.TYPE_PREFIXES.get(result.entry_type, result.entry_type.upper())
+            result.entry_id = f"[DRY-RUN] Would create {prefix}-XXX"
             return result
 
         # Create catalog entry
@@ -430,7 +432,36 @@ class IngestProcessor:
                 blocked_reason=f"Missing data: {', '.join(missing_data)}"
             )
 
+        # Classify maturity for strategies and ideas (R2)
+        if entry_type in ("strategy", "idea"):
+            self._classify_maturity(entry, metadata)
+
         return entry
+
+    def _classify_maturity(self, entry, metadata: Dict[str, Any]):
+        """Classify idea maturity and store in catalog (R2)."""
+        try:
+            from scripts.develop.classifier import classify_idea
+
+            # Get idea text
+            idea_text = metadata.get("hypothesis") or metadata.get("summary") or ""
+            if not idea_text:
+                return
+
+            # Classify
+            maturity = classify_idea(idea_text, self.llm_client)
+
+            # Store in catalog
+            self.catalog.set_maturity(
+                entry.id,
+                maturity_level=maturity.level.value,
+                maturity_score=maturity.score,
+                missing_elements=maturity.missing,
+                steps_needed=maturity.steps_needed
+            )
+        except Exception as e:
+            # Don't fail ingest if classification fails
+            pass
 
     def _move_to_sources(self, file_path: Path, content_hash: str):
         """Move file to catalog/sources/ with preserved subdirectory structure."""
@@ -659,7 +690,9 @@ class IngestProcessor:
 
         if dry_run:
             result.success = True
-            result.entry_id = f"[DRY-RUN] Would create {result.entry_type.upper()}-XXX"
+            # Use actual ID prefix from catalog for accurate dry-run message
+            prefix = self.catalog.TYPE_PREFIXES.get(result.entry_type, result.entry_type.upper())
+            result.entry_id = f"[DRY-RUN] Would create {prefix}-XXX"
             return result
 
         # Create catalog entry (no file to archive)
