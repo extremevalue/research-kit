@@ -1277,22 +1277,87 @@ def cmd_v4_status(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 status command not implemented yet.")
-    print(f"Workspace: {workspace.path}")
-    print()
-
-    # Show basic status info using workspace.status()
     status = workspace.status()
-    print("Workspace Status:")
-    print(f"  Path: {status['path']}")
+
+    # Header
     print()
-    print("Strategies:")
-    for s, count in status['strategies'].items():
-        print(f"  {s}: {count}")
+    print("=" * 60)
+    print("  Research-Kit V4 Workspace Status")
+    print("=" * 60)
+
+    # Workspace info
+    print(f"\nWorkspace: {status['path']}")
+
+    # Strategy counts
+    print("\n--- Strategies ---")
+    total_strategies = sum(status['strategies'].values())
+    if total_strategies == 0:
+        print("  No strategies yet")
+    else:
+        for s, count in sorted(status['strategies'].items()):
+            indicator = "*" if count > 0 else " "
+            print(f"  {indicator} {s:<12}: {count:>3}")
+        print(f"    {'Total':<12}: {total_strategies:>3}")
+
+    # Other counts
+    print(f"\n--- Other Items ---")
+    print(f"  Ideas:       {status['ideas']:>3}")
+    print(f"  Validations: {status['validations']:>3}")
+
+    # Inbox
+    print(f"\n--- Inbox ---")
+    inbox_count = status['inbox_files']
+    if inbox_count == 0:
+        print("  Inbox is empty")
+    else:
+        print(f"  {inbox_count} file(s) ready to ingest")
+
+    # ID counters
+    print(f"\n--- Next IDs ---")
+    counters = status.get('counters', {})
+    next_strat = counters.get('strategy', 0) + 1
+    next_idea = counters.get('idea', 0) + 1
+    print(f"  Next strategy: STRAT-{next_strat:03d}")
+    print(f"  Next idea:     IDEA-{next_idea:03d}")
+
+    # Recent strategies
+    recent = workspace.list_strategies()[:5]
+    if recent:
+        print(f"\n--- Recent Strategies ---")
+        for s in recent:
+            created = ""
+            if s['created']:
+                if hasattr(s['created'], 'strftime'):
+                    created = s['created'].strftime('%Y-%m-%d')
+                else:
+                    created = str(s['created'])[:10]
+            print(f"  {s['id']:<10} {s['name'][:30]:<30} {s['status']:<12} {created}")
+
+    # Actions / Next steps
+    print(f"\n--- Suggested Actions ---")
+    actions = []
+
+    if inbox_count > 0:
+        actions.append(f"Run 'research v4-ingest' to process {inbox_count} inbox file(s)")
+
+    pending_count = status['strategies'].get('pending', 0)
+    if pending_count > 0:
+        actions.append(f"Run 'research v4-list --status pending' to see {pending_count} pending strategy(ies)")
+
+    blocked_count = status['strategies'].get('blocked', 0)
+    if blocked_count > 0:
+        actions.append(f"Check {blocked_count} blocked strategy(ies) for missing data")
+
+    if not actions:
+        if total_strategies == 0:
+            actions.append("Add research documents to inbox/ and run 'research v4-ingest'")
+        else:
+            actions.append("All caught up!")
+
+    for action in actions:
+        print(f"  > {action}")
+
     print()
-    print(f"Ideas: {status['ideas']}")
-    print(f"Validations: {status['validations']}")
-    print(f"Inbox files: {status['inbox_files']}")
     return 0
 
 
