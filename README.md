@@ -37,14 +37,32 @@ uvx --from git+https://github.com/your-repo/research-kit.git research --help
 **Alternative: Install with pip**
 
 ```bash
-pip install git+https://github.com/your-repo/research-kit.git
+# Use pip3 or python -m pip (works on all systems)
+pip3 install git+https://github.com/your-repo/research-kit.git
+
+# Or explicitly with python
+python3 -m pip install git+https://github.com/your-repo/research-kit.git
 ```
+
+> **Note:** If you see "externally managed environment" error (common on macOS with Homebrew Python), use `uv` instead or create a virtual environment first:
+> ```bash
+> python3 -m venv .venv && source .venv/bin/activate
+> pip install git+https://github.com/your-repo/research-kit.git
+> ```
 
 **Development install**
 
 ```bash
 git clone https://github.com/your-repo/research-kit.git
 cd research-kit
+
+# Option 1: Activate existing .venv (if present)
+source .venv/bin/activate
+
+# Option 2: Create new venv
+python3 -m venv .venv && source .venv/bin/activate
+
+# Install in editable mode with dev dependencies
 pip install -e ".[dev]"
 ```
 
@@ -55,7 +73,7 @@ pip install -e ".[dev]"
 uv tool install research-kit --force --from git+https://github.com/your-repo/research-kit.git
 
 # With pip
-pip install --upgrade git+https://github.com/your-repo/research-kit.git
+pip3 install --upgrade git+https://github.com/your-repo/research-kit.git
 ```
 
 ### 2. Initialize a Workspace

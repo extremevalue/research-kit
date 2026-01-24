@@ -122,13 +122,14 @@ def _add_init_parser(subparsers):
 Initialize a new research workspace at the specified path.
 
 Standard workspace:
-  - inbox/         Files to be ingested
-  - archive/       Ingested source files
-  - catalog/       Research entries (indicators, strategies, etc.)
-  - data-registry/ Data source definitions
-  - validations/   Validation results
-  - combinations/  Generated combinations
-  - config.json    Workspace configuration
+  - inbox/           Files to be ingested
+  - reviewed/        Processed files that didn't create entries (purgeable)
+  - catalog/entries/ Catalog entry metadata (JSON)
+  - catalog/sources/ Original files that created entries
+  - data-registry/   Data source definitions
+  - validations/     Validation results
+  - combinations/    Generated combinations
+  - config.json      Workspace configuration
 
 V4 workspace (--v4):
   - inbox/                Files to be ingested
@@ -1002,13 +1003,15 @@ def cmd_init(args):
     print()
     print("Workspace structure:")
     print(f"  {workspace.path}/")
-    print(f"  ├── inbox/          # Drop files here to ingest")
-    print(f"  ├── archive/        # Ingested source files")
-    print(f"  ├── catalog/        # Research entries")
-    print(f"  ├── data-registry/  # Data source definitions")
-    print(f"  ├── validations/    # Validation results")
-    print(f"  ├── combinations/   # Generated combinations")
-    print(f"  └── config.json     # Configuration")
+    print(f"  ├── inbox/           # Drop files here to ingest")
+    print(f"  ├── reviewed/        # Processed files (purgeable)")
+    print(f"  ├── catalog/")
+    print(f"  │   ├── entries/     # Catalog entry metadata")
+    print(f"  │   └── sources/     # Original source files")
+    print(f"  ├── data-registry/   # Data source definitions")
+    print(f"  ├── validations/     # Validation results")
+    print(f"  ├── combinations/    # Generated combinations")
+    print(f"  └── config.json      # Configuration")
     print()
     print("Next steps:")
     print(f"  1. Add files to {workspace.inbox_path}/")
