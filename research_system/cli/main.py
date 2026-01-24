@@ -13,6 +13,8 @@ Commands:
     data        Manage data registry
     run         Run the full validation + expert review loop
     validate    Run validation pipeline (step-by-step)
+    status      View dashboard and reports
+    develop     Develop vague ideas into testable strategies
     combine     Generate and manage combinations
     analyze     Run persona-based analysis
     ideate      Generate strategy ideas using multiple personas
@@ -37,6 +39,16 @@ from research_system.core.workspace import (
 )
 from research_system.core.catalog import Catalog
 from research_system.core.data_registry import DataRegistry
+
+# V4 imports
+from research_system.core.v4 import (
+    V4Workspace,
+    get_v4_workspace,
+    V4WorkspaceError,
+    load_config,
+    get_default_config,
+    validate_config,
+)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -87,11 +99,16 @@ For more information, visit: https://github.com/your-repo/research-system
     _add_data_parser(subparsers)
     _add_run_parser(subparsers)  # The core validation + expert loop
     _add_validate_parser(subparsers)
+    _add_status_parser(subparsers)  # Dashboard and reports
+    _add_develop_parser(subparsers)  # Idea development workflow (R2)
     _add_combine_parser(subparsers)
     _add_analyze_parser(subparsers)
     _add_ideate_parser(subparsers)  # Multi-persona ideation
     _add_synthesize_parser(subparsers)  # Cross-strategy synthesis
     _add_migrate_parser(subparsers)
+
+    # Add V4 commands
+    _add_v4_commands(subparsers)
 
     return parser
 
@@ -104,7 +121,7 @@ def _add_init_parser(subparsers):
         description="""
 Initialize a new research workspace at the specified path.
 
-The workspace will contain:
+Standard workspace:
   - inbox/         Files to be ingested
   - archive/       Ingested source files
   - catalog/       Research entries (indicators, strategies, etc.)
@@ -112,6 +129,14 @@ The workspace will contain:
   - validations/   Validation results
   - combinations/  Generated combinations
   - config.json    Workspace configuration
+
+V4 workspace (--v4):
+  - inbox/                Files to be ingested
+  - strategies/           Strategy documents by status
+  - validations/          Walk-forward validation results
+  - learnings/            Extracted learnings
+  - ideas/                Strategy ideas (pre-formalization)
+  - research-kit.yaml     Configuration file
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -119,7 +144,7 @@ The workspace will contain:
         "path",
         nargs="?",
         default=None,
-        help="Path for new workspace (default: ~/.research-workspace)"
+        help="Path for new workspace (default: ~/.research-workspace or ~/.research-workspace-v4 with --v4)"
     )
     parser.add_argument(
         "--name",
@@ -130,6 +155,11 @@ The workspace will contain:
         "--force",
         action="store_true",
         help="Overwrite existing workspace"
+    )
+    parser.add_argument(
+        "--v4",
+        action="store_true",
+        help="Initialize a V4 workspace with the new directory structure"
     )
     parser.set_defaults(func=cmd_init)
 
@@ -300,6 +330,11 @@ Usage:
         action="store_true",
         help="Use local Docker backtest instead of cloud (downloads data from QC)"
     )
+    parser.add_argument(
+        "--walk-forward",
+        action="store_true",
+        help="Use walk-forward validation (12 windows from 2008-2024) instead of single IS/OOS"
+    )
     parser.set_defaults(func=cmd_run)
 
 
@@ -377,6 +412,129 @@ Pipeline stages:
     check_parser.set_defaults(func=cmd_validate_check)
 
     parser.set_defaults(func=lambda args: parser.print_help())
+
+
+def _add_status_parser(subparsers):
+    """Add status command parser - dashboard and reports."""
+    parser = subparsers.add_parser(
+        "status",
+        help="View dashboard and reports",
+        description="""
+View strategy status, leaderboard, and pipeline reports.
+
+This command generates markdown reports with links to detailed data:
+  - dashboard.md  - Quick stats, top strategies, funnel, blockers
+  - leaderboard.md - Full rankings of validated strategies
+  - funnel.md - Detailed pipeline status
+  - blockers.md - Data gaps and issues
+
+Usage:
+  research status              Show quick terminal summary
+  research status --refresh    Regenerate all reports
+  research status --open       Open dashboard in default viewer
+  research status leaderboard  Show leaderboard in terminal
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "report",
+        nargs="?",
+        choices=["dashboard", "leaderboard", "funnel", "blockers"],
+        help="Specific report to show (default: quick summary)"
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Regenerate all reports from current data"
+    )
+    parser.add_argument(
+        "--open",
+        action="store_true",
+        help="Open dashboard.md in default application"
+    )
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        help="Number of top strategies to show (default: 10)"
+    )
+    parser.add_argument(
+        "--sort",
+        choices=["sharpe", "return", "consistency", "drawdown"],
+        default="sharpe",
+        help="Sort leaderboard by metric (default: sharpe)"
+    )
+
+    parser.set_defaults(func=cmd_status)
+
+
+def _add_develop_parser(subparsers):
+    """Add develop command parser - idea development workflow (R2)."""
+    parser = subparsers.add_parser(
+        "develop",
+        help="Develop vague ideas into testable strategies",
+        description="""
+Develop ideas through a structured 10-step framework.
+
+This command guides you through turning a vague idea into a fully
+specified, testable strategy:
+
+  1. Hypothesis       - What are we trying to prove?
+  2. Success Criteria - How do we know it works?
+  3. Universe         - What assets?
+  4. Diversification  - Do they actually diversify?
+  5. Structure        - Core+satellite, regime, or rotation?
+  6. Signals          - Selection + timing signals
+  7. Risk Management  - Position sizing, risk-off, limits
+  8. Testing Protocol - Walk-forward methodology
+  9. Implementation   - Data sources, schedule
+  10. Monitoring      - Decay detection, stop criteria
+
+Usage:
+  research develop IDEA-001           Start/continue development
+  research develop IDEA-001 --status  Show development progress
+  research develop IDEA-001 --back    Go back to previous step
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "id",
+        help="Entry ID to develop (e.g., IDEA-001)"
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show development progress without advancing"
+    )
+    parser.add_argument(
+        "--back",
+        action="store_true",
+        help="Go back to previous step"
+    )
+    parser.add_argument(
+        "--classify",
+        action="store_true",
+        help="Show maturity classification without starting development"
+    )
+    parser.add_argument(
+        "--complete",
+        action="store_true",
+        help="Mark development complete and generate strategy spec"
+    )
+    parser.add_argument(
+        "--finalize",
+        action="store_true",
+        help="Create strategy entry from development and optionally run validation"
+    )
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="With --finalize: also run walk-forward validation on created strategy"
+    )
+
+    parser.set_defaults(func=cmd_develop)
 
 
 def _add_combine_parser(subparsers):
@@ -585,11 +743,252 @@ def _add_migrate_parser(subparsers):
 
 
 # ============================================================================
+# V4 Command Parsers
+# ============================================================================
+
+
+def _add_v4_commands(subparsers):
+    """Add V4-related subcommands.
+
+    V4 commands support the new research workflow:
+    - init --v4: Initialize V4 workspace
+    - v4-ingest: Ingest files from inbox with quality scoring
+    - v4-verify: Run verification tests (bias detection)
+    - v4-validate: Run walk-forward validation
+    - v4-learn: Extract learnings from validation results
+    - v4-status: Show workspace status dashboard
+    - v4-list: List strategies with filtering
+    - v4-show: Show strategy details
+    - v4-config: Show/validate configuration
+    """
+    # v4-ingest command
+    parser = subparsers.add_parser(
+        "v4-ingest",
+        help="Ingest files from inbox into strategies (V4)",
+        description="""
+Process files from the inbox directory and create strategy documents.
+Runs quality scoring (specificity, trust) and red flag detection.
+
+Files are processed from the inbox/ directory. Each file is analyzed
+to extract strategy details, scored for quality, and checked for red flags.
+Strategies meeting minimum thresholds are created in strategies/pending/.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "files",
+        nargs="*",
+        help="Specific files to ingest (default: all files in inbox)"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace (default: RESEARCH_WORKSPACE or ~/.research-workspace-v4)"
+    )
+    parser.set_defaults(func=cmd_v4_ingest)
+
+    # v4-verify command
+    parser = subparsers.add_parser(
+        "v4-verify",
+        help="Run verification tests on a strategy (V4)",
+        description="""
+Run verification tests on a strategy to check for biases and issues.
+
+Tests include:
+  - look_ahead_bias: Check for future information leakage
+  - survivorship_bias: Check for survivorship bias in data
+  - position_sizing: Validate position sizing logic
+  - data_availability: Verify all required data is available
+  - parameter_sanity: Check parameter values are reasonable
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "strategy_id",
+        nargs="?",
+        help="Strategy ID to verify (e.g., STRAT-001)"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_verify)
+
+    # v4-validate command
+    parser = subparsers.add_parser(
+        "v4-validate",
+        help="Run walk-forward validation on a strategy (V4)",
+        description="""
+Run walk-forward validation (backtesting) on a strategy.
+Applies configured gates (Sharpe, consistency, drawdown).
+
+Walk-forward validation uses multiple time windows to test
+strategy robustness across different market regimes.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "strategy_id",
+        nargs="?",
+        help="Strategy ID to validate (e.g., STRAT-001)"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_validate)
+
+    # v4-learn command
+    parser = subparsers.add_parser(
+        "v4-learn",
+        help="Extract learnings from validation results (V4)",
+        description="""
+Extract learnings from validation results for future reference.
+
+Analyzes validation results to identify:
+  - What worked and why
+  - What failed and why
+  - Patterns that could inform future strategies
+  - Data gaps that need to be filled
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "strategy_id",
+        nargs="?",
+        help="Strategy ID to extract learnings from (e.g., STRAT-001)"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_learn)
+
+    # v4-status command
+    parser = subparsers.add_parser(
+        "v4-status",
+        help="Show workspace status dashboard (V4)",
+        description="""
+Show workspace status: strategy counts by status, recent activity.
+
+Displays a summary of the workspace including:
+  - Strategies by status (pending, validated, invalidated, blocked)
+  - Ideas count
+  - Inbox files waiting to be processed
+  - Recent activity
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_status)
+
+    # v4-list command
+    parser = subparsers.add_parser(
+        "v4-list",
+        help="List strategies (V4)",
+        description="""
+List strategies, optionally filtered by status.
+
+Statuses:
+  - pending: Awaiting validation
+  - validated: Passed all validation gates
+  - invalidated: Failed validation gates
+  - blocked: Missing data or dependencies
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--status",
+        choices=["pending", "validated", "invalidated", "blocked"],
+        help="Filter by status"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_list)
+
+    # v4-show command
+    parser = subparsers.add_parser(
+        "v4-show",
+        help="Show strategy details (V4)",
+        description="""
+Display full details of a strategy document.
+
+Shows all strategy metadata including:
+  - Name and description
+  - Hypothesis and test parameters
+  - Data requirements
+  - Validation results (if available)
+  - Learnings extracted
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "strategy_id",
+        help="Strategy ID to show (e.g., STRAT-001)"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_show)
+
+    # v4-config command
+    parser = subparsers.add_parser(
+        "v4-config",
+        help="Show/validate V4 configuration",
+        description="""
+Show current configuration, or validate with --validate flag.
+
+Configuration includes:
+  - Gate thresholds (Sharpe, consistency, drawdown)
+  - Ingestion settings (specificity, trust scores)
+  - Verification tests enabled
+  - Red flag detection settings
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate configuration and show any warnings"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_config)
+
+
+# ============================================================================
 # Command Implementations
 # ============================================================================
 
 def cmd_init(args):
     """Initialize a new workspace."""
+    # Check if V4 mode
+    if getattr(args, 'v4', False):
+        return cmd_init_v4(args)
+
     path = Path(args.path) if args.path else None
     workspace = get_workspace(str(path) if path else None)
 
@@ -615,6 +1014,254 @@ def cmd_init(args):
     print(f"  1. Add files to {workspace.inbox_path}/")
     print("  2. Run 'research ingest process' to create catalog entries")
     print("  3. Run 'research validate start <ID>' to validate an entry")
+    return 0
+
+
+def cmd_init_v4(args):
+    """Initialize a new V4 workspace."""
+    path = Path(args.path) if args.path else None
+    workspace = get_v4_workspace(path)
+
+    if workspace.exists and not args.force:
+        print(f"V4 workspace already exists at {workspace.path}")
+        print("Use --force to reinitialize")
+        return 1
+
+    workspace.init(name=args.name, force=args.force)
+    print(f"Initialized V4 workspace at {workspace.path}")
+    print()
+    print("Workspace structure:")
+    print(f"  {workspace.path}/")
+    print(f"  ├── inbox/                # Drop files here to ingest")
+    print(f"  ├── strategies/")
+    print(f"  │   ├── pending/          # Awaiting validation")
+    print(f"  │   ├── validated/        # Passed validation gates")
+    print(f"  │   ├── invalidated/      # Failed validation gates")
+    print(f"  │   └── blocked/          # Missing data/dependencies")
+    print(f"  ├── validations/          # Walk-forward validation results")
+    print(f"  ├── learnings/            # Extracted learnings")
+    print(f"  ├── ideas/                # Strategy ideas")
+    print(f"  ├── personas/             # Persona configurations")
+    print(f"  ├── archive/              # Archived strategies")
+    print(f"  ├── logs/                 # Daily rotating logs")
+    print(f"  ├── .state/               # Internal state (counters)")
+    print(f"  ├── research-kit.yaml     # Configuration")
+    print(f"  └── .env.template         # Environment template")
+    print()
+    print("Next steps:")
+    print(f"  1. Copy .env.template to .env and add your API keys")
+    print(f"  2. Add files to {workspace.inbox_path}/")
+    print("  3. Run 'research v4-ingest' to create strategy documents")
+    print("  4. Run 'research v4-verify STRAT-001' to run verification tests")
+    print("  5. Run 'research v4-validate STRAT-001' to run walk-forward validation")
+    return 0
+
+
+# ============================================================================
+# V4 Command Implementations
+# ============================================================================
+
+
+def cmd_v4_ingest(args):
+    """Ingest files from inbox into strategies (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 ingest command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    if args.files:
+        print(f"Files: {args.files}")
+    else:
+        # List inbox files
+        inbox_files = list(workspace.inbox_path.rglob("*"))
+        inbox_files = [f for f in inbox_files if f.is_file() and not f.name.startswith(".")]
+        print(f"Inbox files: {len(inbox_files)}")
+        for f in inbox_files[:10]:
+            print(f"  - {f.name}")
+        if len(inbox_files) > 10:
+            print(f"  ... and {len(inbox_files) - 10} more")
+    return 0
+
+
+def cmd_v4_verify(args):
+    """Run verification tests on a strategy (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 verify command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    if args.strategy_id:
+        print(f"Strategy ID: {args.strategy_id}")
+    else:
+        print("No strategy ID specified.")
+        print("Usage: research v4-verify STRAT-001")
+    return 0
+
+
+def cmd_v4_validate(args):
+    """Run walk-forward validation on a strategy (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 validate command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    if args.strategy_id:
+        print(f"Strategy ID: {args.strategy_id}")
+    else:
+        print("No strategy ID specified.")
+        print("Usage: research v4-validate STRAT-001")
+    return 0
+
+
+def cmd_v4_learn(args):
+    """Extract learnings from validation results (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 learn command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    if args.strategy_id:
+        print(f"Strategy ID: {args.strategy_id}")
+    else:
+        print("No strategy ID specified.")
+        print("Usage: research v4-learn STRAT-001")
+    return 0
+
+
+def cmd_v4_status(args):
+    """Show workspace status dashboard (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 status command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    print()
+
+    # Show basic status info using workspace.status()
+    status = workspace.status()
+    print("Workspace Status:")
+    print(f"  Path: {status['path']}")
+    print()
+    print("Strategies:")
+    for s, count in status['strategies'].items():
+        print(f"  {s}: {count}")
+    print()
+    print(f"Ideas: {status['ideas']}")
+    print(f"Validations: {status['validations']}")
+    print(f"Inbox files: {status['inbox_files']}")
+    return 0
+
+
+def cmd_v4_list(args):
+    """List strategies (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 list command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    if args.status:
+        print(f"Filter by status: {args.status}")
+    return 0
+
+
+def cmd_v4_show(args):
+    """Show strategy details (V4)."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    print("V4 show command not implemented yet.")
+    print(f"Workspace: {workspace.path}")
+    print(f"Strategy ID: {args.strategy_id}")
+    return 0
+
+
+def cmd_v4_config(args):
+    """Show/validate V4 configuration."""
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    config = workspace.config
+
+    if args.validate:
+        print("Validating configuration...")
+        errors = validate_config(config)
+        if errors:
+            print()
+            print("Configuration warnings:")
+            for err in errors:
+                print(f"  - {err}")
+            return 1
+        else:
+            print("Configuration is valid.")
+            return 0
+
+    # Show configuration
+    print("V4 Configuration:")
+    print(f"  Version: {config.version}")
+    print()
+    print("Gates (validation thresholds):")
+    print(f"  min_sharpe: {config.gates.min_sharpe}")
+    print(f"  min_consistency: {config.gates.min_consistency}")
+    print(f"  max_drawdown: {config.gates.max_drawdown}")
+    print(f"  min_trades: {config.gates.min_trades}")
+    print()
+    print("Ingestion (quality thresholds):")
+    print(f"  min_specificity_score: {config.ingestion.min_specificity_score}")
+    print(f"  min_trust_score: {config.ingestion.min_trust_score}")
+    print()
+    print("Verification:")
+    print(f"  enabled: {config.verification.enabled}")
+    print(f"  tests: {', '.join(config.verification.tests)}")
+    print()
+    print(f"Configuration file: {workspace.path / 'research-kit.yaml'}")
     return 0
 
 
@@ -1384,6 +2031,388 @@ def cmd_validate_check(args):
         return 0
 
 
+def cmd_status(args):
+    """View dashboard and reports."""
+    import subprocess
+    from scripts.status.generate_reports import (
+        scan_strategies,
+        refresh_all_reports,
+    )
+
+    ws = require_workspace(args.workspace)
+
+    # Refresh reports if requested
+    if args.refresh:
+        print("Refreshing all reports...")
+        files = refresh_all_reports(ws.path)
+        print()
+        print("Generated reports:")
+        for name, path in files.items():
+            print(f"  {name}: {path}")
+        print()
+        print(f"Dashboard: {ws.path / 'reports' / 'dashboard.md'}")
+        return 0
+
+    # Open dashboard if requested
+    if args.open:
+        dashboard = ws.path / "reports" / "dashboard.md"
+        if not dashboard.exists():
+            print("Dashboard not found. Run 'research status --refresh' first.")
+            return 1
+        # Use 'open' on macOS, 'xdg-open' on Linux
+        import platform
+        if platform.system() == "Darwin":
+            subprocess.run(["open", str(dashboard)])
+        else:
+            subprocess.run(["xdg-open", str(dashboard)])
+        print(f"Opened: {dashboard}")
+        return 0
+
+    # Show quick terminal summary or specific report
+    strategies = scan_strategies(ws.path)
+
+    if not strategies:
+        print("No strategies found.")
+        print("Run some validations first, then use 'research status --refresh'.")
+        return 0
+
+    validated = [s for s in strategies if s["status"] == "VALIDATED"]
+    invalidated = [s for s in strategies if s["status"] == "INVALIDATED"]
+    pending = [s for s in strategies if s["status"] not in ["VALIDATED", "INVALIDATED"]]
+
+    if args.report == "leaderboard":
+        # Show full leaderboard
+        print("=" * 70)
+        print("STRATEGY LEADERBOARD")
+        print("=" * 70)
+        print()
+
+        if not validated:
+            print("No validated strategies yet.")
+            return 0
+
+        # Sort
+        sort_key = {
+            "sharpe": lambda x: x.get("sharpe") or 0,
+            "return": lambda x: x.get("median_return") or 0,
+            "consistency": lambda x: x.get("consistency") or 0,
+            "drawdown": lambda x: -(x.get("max_drawdown") or 1),
+        }.get(args.sort, lambda x: x.get("sharpe") or 0)
+
+        sorted_strats = sorted(validated, key=sort_key, reverse=True)
+
+        print(f"{'Rank':<5} {'Entry':<12} {'Type':<18} {'Sharpe':>8} {'Return':>10} {'Cons':>8} {'MaxDD':>8}")
+        print("-" * 70)
+
+        for i, s in enumerate(sorted_strats[:args.top], 1):
+            sharpe = f"{s.get('sharpe', 0):.2f}" if s.get('sharpe') else "-"
+            ret = f"{s.get('median_return', 0)*100:.1f}%" if s.get('median_return') else "-"
+            cons = f"{s.get('consistency', 0)*100:.0f}%" if s.get('consistency') else "-"
+            dd = f"{s.get('max_drawdown', 0)*100:.1f}%" if s.get('max_drawdown') else "-"
+            print(f"{i:<5} {s['entry_id']:<12} {s['strategy_type']:<18} {sharpe:>8} {ret:>10} {cons:>8} {dd:>8}")
+
+        print()
+        print(f"Showing top {min(args.top, len(sorted_strats))} of {len(validated)} validated strategies")
+        print("Run 'research status --refresh' to generate full markdown reports.")
+        return 0
+
+    # Default: quick summary
+    print("=" * 50)
+    print("RESEARCH KIT STATUS")
+    print("=" * 50)
+    print()
+    print(f"Total Strategies:  {len(strategies)}")
+    print(f"  Validated:       {len(validated)} ({len(validated)*100//len(strategies) if strategies else 0}%)")
+    print(f"  Invalidated:     {len(invalidated)} ({len(invalidated)*100//len(strategies) if strategies else 0}%)")
+    print(f"  Pending:         {len(pending)}")
+    print()
+
+    if validated:
+        print("Top 5 by Sharpe:")
+        sorted_by_sharpe = sorted(validated, key=lambda x: x.get("sharpe") or 0, reverse=True)
+        for i, s in enumerate(sorted_by_sharpe[:5], 1):
+            sharpe = f"{s.get('sharpe', 0):.2f}" if s.get('sharpe') else "?"
+            print(f"  {i}. {s['entry_id']} ({s['strategy_type']}): Sharpe {sharpe}")
+        print()
+
+    reports_dir = ws.path / "reports"
+    if (reports_dir / "dashboard.md").exists():
+        print(f"Reports: {reports_dir}/dashboard.md")
+    else:
+        print("Run 'research status --refresh' to generate full reports.")
+
+    return 0
+
+
+def cmd_develop(args):
+    """Develop ideas through 10-step framework."""
+    from scripts.develop.classifier import classify_idea, MaturityLevel
+    from scripts.develop.workflow import (
+        DevelopmentWorkflow, DevelopmentStep, STEP_DEFINITIONS, STEP_ORDER
+    )
+
+    ws = require_workspace(args.workspace)
+    catalog = Catalog(ws.catalog_path)
+
+    # Get the entry
+    entry = catalog.get(args.id)
+    if not entry:
+        print(f"Error: Entry not found: {args.id}")
+        return 1
+
+    # Get the idea text
+    idea_text = entry.hypothesis or entry.summary or ""
+    if not idea_text:
+        print(f"Error: Entry has no hypothesis or summary to develop")
+        return 1
+
+    # Initialize LLM client
+    llm_client = None
+    try:
+        from research_system.llm.client import LLMClient
+        llm_client = LLMClient()
+    except Exception:
+        pass
+
+    # Classify-only mode
+    if args.classify:
+        print(f"Classifying: {args.id}")
+        print(f"Idea: {idea_text[:200]}...")
+        print()
+
+        maturity = classify_idea(idea_text, llm_client)
+
+        print(f"Maturity Level: {maturity.level.value.upper()}")
+        print(f"Score: {maturity.score:.0%}")
+        print()
+
+        if maturity.missing:
+            print("Missing elements:")
+            for m in maturity.missing:
+                print(f"  - {m}")
+            print()
+
+        if maturity.steps_needed:
+            print("Development steps needed:")
+            for s in maturity.steps_needed:
+                print(f"  - {s}")
+
+        return 0
+
+    # Initialize workflow
+    workflow = DevelopmentWorkflow(ws.path, llm_client)
+
+    # Load or start development
+    state = workflow.load(args.id)
+    if not state:
+        # Check maturity first
+        maturity = classify_idea(idea_text, llm_client)
+        if maturity.level == MaturityLevel.FULL:
+            print(f"Note: {args.id} appears to be fully specified (maturity: FULL)")
+            print("You can run validation directly with: research run {args.id} --walk-forward")
+            print()
+            print("Start development anyway? This will help document the strategy formally.")
+            response = input("Continue? [y/N]: ").strip().lower()
+            if response != 'y':
+                return 0
+
+        state = workflow.start(args.id, idea_text)
+        print(f"Started development for {args.id}")
+        print()
+
+    # Status-only mode
+    if args.status:
+        _show_development_status(state)
+        return 0
+
+    # Go back mode
+    if args.back:
+        if state.current_step == STEP_ORDER[0]:
+            print("Already at first step.")
+            return 0
+
+        current_idx = STEP_ORDER.index(state.current_step)
+        prev_step = STEP_ORDER[current_idx - 1]
+        state = workflow.go_back(state, prev_step)
+        print(f"Went back to: {prev_step.value}")
+        print()
+
+    # Complete mode
+    if args.complete:
+        if not state.is_complete:
+            print(f"Development not complete. Current step: {state.current_step.value}")
+            print(f"Completed: {len(state.completed_steps)}/10 steps")
+            return 1
+
+        spec = workflow.generate_strategy_spec(state)
+        print("Generated strategy specification:")
+        print(json.dumps(spec, indent=2))
+        return 0
+
+    # Finalize mode - create strategy and optionally run validation
+    if args.finalize:
+        if not state.is_complete:
+            print(f"Development not complete. Current step: {state.current_step.value}")
+            print(f"Completed: {len(state.completed_steps)}/10 steps")
+            print("Complete all steps before finalizing.")
+            return 1
+
+        # Create strategy entry
+        print("Creating strategy entry from development...")
+        strategy_id = workflow.create_strategy_entry(state, catalog)
+        print(f"Created: {strategy_id}")
+        print()
+
+        # Optionally run validation
+        if args.run:
+            print(f"Running walk-forward validation for {strategy_id}...")
+            print()
+            # Import and run the pipeline
+            from scripts.validate.full_pipeline import FullPipelineRunner
+            runner = FullPipelineRunner(ws, llm_client, use_walk_forward=True)
+            result = runner.run(strategy_id)
+
+            if result.determination == "VALIDATED":
+                print(f"\n{strategy_id}: VALIDATED")
+            else:
+                print(f"\n{strategy_id}: {result.determination}")
+                if result.error:
+                    print(f"Error: {result.error}")
+        else:
+            print(f"To validate: research run {strategy_id} --walk-forward")
+
+        return 0
+
+    # Interactive development
+    _run_interactive_step(workflow, state, llm_client)
+    return 0
+
+
+def _show_development_status(state):
+    """Show development progress."""
+    from scripts.develop.workflow import STEP_ORDER, STEP_DEFINITIONS
+
+    print(f"Development Status: {state.entry_id}")
+    print("=" * 50)
+    print()
+    print(f"Original idea: {state.original_idea[:100]}...")
+    print()
+    print(f"Progress: {len(state.completed_steps)}/10 steps")
+    print()
+
+    for i, step in enumerate(STEP_ORDER, 1):
+        info = STEP_DEFINITIONS[step]
+        if step.value in state.completed_steps:
+            status = "[x]"
+        elif step == state.current_step:
+            status = "[>]"
+        else:
+            status = "[ ]"
+        print(f"  {status} {i}. {info['name']}")
+
+    print()
+    if state.is_complete:
+        print("Development complete! Run with --complete to generate strategy spec.")
+    else:
+        info = STEP_DEFINITIONS[state.current_step]
+        print(f"Current step: {info['name']}")
+        print(f"Question: {info['question']}")
+
+
+def _run_interactive_step(workflow, state, llm_client):
+    """Run interactive development for current step."""
+    from scripts.develop.workflow import STEP_DEFINITIONS
+
+    step = state.current_step
+    info = STEP_DEFINITIONS[step]
+
+    print(f"Step {list(STEP_DEFINITIONS.keys()).index(step) + 1}: {info['name']}")
+    print("=" * 50)
+    print()
+    print(f"Question: {info['question']}")
+    print()
+    print(info['description'])
+    print()
+    print("Guidance:")
+    print(info['guidance'])
+    print()
+
+    # Show required outputs
+    print(f"Required outputs: {', '.join(info['required_outputs'])}")
+    print()
+
+    # Collect outputs interactively
+    outputs = {}
+    for output_name in info['required_outputs']:
+        print(f"\n{output_name}:")
+        print("  (Enter your response, or 'suggest' for LLM suggestion)")
+        print("  (End with a blank line)")
+        print()
+
+        lines = []
+        while True:
+            line = input("  > ").strip()
+            if not line:
+                break
+            if line.lower() == 'suggest' and llm_client:
+                suggestion = _get_llm_suggestion(
+                    llm_client, state.original_idea, step, output_name, info
+                )
+                print(f"\n  Suggestion: {suggestion}")
+                print("  (Accept with blank line, or type your own)")
+                continue
+            lines.append(line)
+
+        if lines:
+            outputs[output_name] = "\n".join(lines)
+        else:
+            print(f"  Warning: {output_name} is required")
+
+    # Check if all required outputs provided
+    missing = [r for r in info['required_outputs'] if r not in outputs]
+    if missing:
+        print(f"\nMissing required outputs: {missing}")
+        print("Step not completed. Run again to continue.")
+        return
+
+    # Notes
+    print("\nAny additional notes? (optional, blank to skip)")
+    notes = input("  > ").strip()
+
+    # Complete the step
+    state = workflow.complete_step(state, step, outputs, notes)
+    print(f"\n✓ Completed: {info['name']}")
+
+    if state.is_complete:
+        print("\n🎉 All steps complete!")
+        print("Run 'research develop {state.entry_id} --complete' to generate strategy spec.")
+    else:
+        next_info = STEP_DEFINITIONS[state.current_step]
+        print(f"\nNext step: {next_info['name']}")
+        print("Run 'research develop {state.entry_id}' to continue.")
+
+
+def _get_llm_suggestion(llm_client, original_idea, step, output_name, step_info):
+    """Get LLM suggestion for a step output."""
+    prompt = f"""You are helping develop a trading strategy. The original idea is:
+
+"{original_idea}"
+
+We're on step: {step_info['name']}
+Question: {step_info['question']}
+
+Provide a concise suggestion for: {output_name}
+
+{step_info['guidance']}
+
+Be specific and actionable. Keep it to 2-3 sentences."""
+
+    try:
+        return llm_client.generate(prompt, max_tokens=300)
+    except Exception as e:
+        return f"(Could not generate suggestion: {e})"
+
+
 def cmd_combine_generate(args):
     """Generate combination matrix."""
     print("Generating combinations...")
@@ -1980,7 +3009,13 @@ def cmd_run(args):
 
     # Run the pipeline
     use_local = getattr(args, 'local', False)
-    runner = FullPipelineRunner(ws, llm_client, use_local=use_local)
+    use_walk_forward = getattr(args, 'walk_forward', False)
+
+    if use_walk_forward:
+        print("Using walk-forward validation (12 windows from 2008-2024)")
+        print()
+
+    runner = FullPipelineRunner(ws, llm_client, use_local=use_local, use_walk_forward=use_walk_forward)
 
     results = {
         "validated": 0,
@@ -2061,6 +3096,9 @@ def main():
             parser.print_help()
             return 0
     except WorkspaceError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except V4WorkspaceError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
