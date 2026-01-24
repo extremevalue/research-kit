@@ -787,6 +787,12 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
         metavar="PATH",
         help="Path to V4 workspace (default: RESEARCH_WORKSPACE or ~/.research-workspace-v4)"
     )
+    parser.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        dest="dry_run",
+        help="Show what would happen without making changes"
+    )
     parser.set_defaults(func=cmd_v4_ingest)
 
     # v4-verify command
@@ -1076,19 +1082,107 @@ def cmd_v4_ingest(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 ingest command not implemented yet.")
-    print(f"Workspace: {workspace.path}")
+    # Import processor and LLM client
+    from research_system.ingest.v4_processor import V4IngestProcessor
+    from research_system.llm.client import get_client as get_llm_client
+    from research_system.schemas.v4 import IngestionDecision
+
+    # Get configuration and LLM client
+    config = workspace.config
+    try:
+        llm_client = get_llm_client()
+    except Exception:
+        llm_client = None
+
+    # Initialize processor
+    processor = V4IngestProcessor(workspace, config, llm_client)
+
+    # Check dry-run mode
+    dry_run = getattr(args, 'dry_run', False)
+
+    if dry_run:
+        print("=== DRY RUN MODE ===")
+        print("No files will be saved or moved.\n")
+
+    # Process specific files or entire inbox
     if args.files:
-        print(f"Files: {args.files}")
+        # Process specific files
+        results = []
+        for file_arg in args.files:
+            file_path = Path(file_arg)
+            if not file_path.exists():
+                # Try relative to inbox
+                file_path = workspace.inbox_path / file_arg
+            if not file_path.exists():
+                print(f"Error: File not found: {file_arg}")
+                continue
+            result = processor.process_file(file_path, dry_run=dry_run)
+            results.append(result)
     else:
-        # List inbox files
-        inbox_files = list(workspace.inbox_path.rglob("*"))
-        inbox_files = [f for f in inbox_files if f.is_file() and not f.name.startswith(".")]
-        print(f"Inbox files: {len(inbox_files)}")
-        for f in inbox_files[:10]:
-            print(f"  - {f.name}")
-        if len(inbox_files) > 10:
-            print(f"  ... and {len(inbox_files) - 10} more")
+        # Process entire inbox
+        summary = processor.process_inbox(dry_run=dry_run)
+        results = summary.results
+
+        if summary.total_files == 0:
+            print(f"No files found in inbox: {workspace.inbox_path}")
+            print("\nAdd files to the inbox directory and run again.")
+            return 0
+
+        print(f"Processing {summary.total_files} file(s) from inbox...\n")
+
+    # Display results
+    for result in results:
+        print(f"Processing: {result.filename}")
+
+        if result.error and not result.decision:
+            print(f"  Error: {result.error}")
+            print()
+            continue
+
+        if result.strategy_name:
+            print(f"  Extracted: \"{result.strategy_name}\"")
+
+        if result.quality:
+            spec_score = result.quality.specificity.score
+            trust_total = result.quality.trust_score.total
+            print(f"  Quality: specificity={spec_score}/8, trust={trust_total}/100")
+
+            # Show red flags if any
+            if result.quality.red_flags:
+                hard_flags = [rf for rf in result.quality.red_flags if rf.severity.value == "hard"]
+                soft_flags = [rf for rf in result.quality.red_flags if rf.severity.value == "soft"]
+                if hard_flags:
+                    print(f"  Red flags (HARD): {', '.join(rf.flag for rf in hard_flags)}")
+                if soft_flags:
+                    print(f"  Red flags (soft): {', '.join(rf.flag for rf in soft_flags)}")
+
+        if result.decision:
+            decision_str = result.decision.value.upper()
+            print(f"  Decision: {decision_str}")
+
+        if result.success and result.strategy_id:
+            print(f"  Strategy ID: {result.strategy_id}")
+            if result.saved_path:
+                print(f"  Saved: {result.saved_path}")
+        elif result.error:
+            print(f"  Reason: {result.error}")
+
+        print()
+
+    # Summary
+    if not args.files:
+        print("=" * 50)
+        print("SUMMARY")
+        print("=" * 50)
+        print(f"Total files:  {summary.total_files}")
+        print(f"Processed:    {summary.processed}")
+        print(f"  Accepted:   {summary.accepted}")
+        print(f"  Queued:     {summary.queued}")
+        print(f"  Archived:   {summary.archived}")
+        print(f"  Rejected:   {summary.rejected}")
+        if summary.errors > 0:
+            print(f"  Errors:     {summary.errors}")
+
     return 0
 
 
