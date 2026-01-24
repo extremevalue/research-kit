@@ -214,10 +214,31 @@ Run the validation pipeline.
 ```bash
 research validate start IND-002          # Start validation
 research validate status IND-002         # Check status
+research validate hypothesis IND-002     # Submit hypothesis for validation
 research validate audit IND-002          # Run data audit
 research validate run IND-002            # Run next step
 research validate list                   # List all validations
 ```
+
+**Hypothesis File Format:**
+
+After `validate start`, create a `hypothesis.json` in the validation folder:
+
+```json
+{
+  "statement": "SPY with 200-day SMA filter produces higher risk-adjusted returns than buy-and-hold",
+  "null_hypothesis": "The SMA filter provides no improvement over buy-and-hold",
+  "primary_metric": "sharpe_ratio",
+  "success_threshold": 0.1,
+  "parameters": {
+    "sma_period": 200,
+    "asset": "SPY"
+  },
+  "locked": false
+}
+```
+
+Submit with `research validate hypothesis IND-002` (locks parameters before testing).
 
 **Validation Pipeline Stages:**
 1. **HYPOTHESIS** - Define and lock your testable hypothesis
@@ -227,6 +248,29 @@ research validate list                   # List all validations
 5. **REGIME** - Analyze performance by market regime
 6. **OOS_TESTING** - Run out-of-sample backtest (ONE SHOT - no retries!)
 7. **DETERMINATION** - Make final decision (VALIDATED/CONDITIONAL/INVALIDATED)
+
+### `research develop <entry_id>`
+
+Develop a vague idea into a fully-specified strategy through guided questions.
+
+```bash
+research develop IDEA-001                # Start development workflow
+research develop STRAT-003               # Refine an existing strategy
+```
+
+The develop command walks through 10 structured steps:
+1. Hypothesis clarification
+2. Success criteria definition
+3. Universe selection
+4. Diversification check
+5. Structure (core+satellite, regime, rotation)
+6. Signal specification
+7. Risk management
+8. Testing protocol
+9. Implementation details
+10. Monitoring plan
+
+Output is saved to `develop/<entry_id>/` in your workspace.
 
 ### `research data <action>`
 
