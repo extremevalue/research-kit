@@ -110,7 +110,30 @@ For more information, visit: https://github.com/your-repo/research-system
     # Add V4 commands
     _add_v4_commands(subparsers)
 
+    # Add update command
+    _add_update_parser(subparsers)
+
     return parser
+
+
+def _add_update_parser(subparsers):
+    """Add update command parser."""
+    parser = subparsers.add_parser(
+        "update",
+        help="Update research-kit to the latest version",
+        description="""
+Update research-kit to the latest version from GitHub.
+
+Automatically detects installation method and updates accordingly.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check for updates without installing"
+    )
+    parser.set_defaults(func=cmd_update)
 
 
 def _add_init_parser(subparsers):
@@ -4222,6 +4245,123 @@ def main():
         return 130
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_update(args):
+    """Update research-kit to the latest version."""
+    import subprocess
+    import importlib.metadata
+
+    check_only = getattr(args, 'check', False)
+
+    # Get current version
+    try:
+        current_version = importlib.metadata.version("research-kit")
+    except importlib.metadata.PackageNotFoundError:
+        current_version = "unknown"
+
+    print(f"Current version: {current_version}")
+
+    # Find how the package was installed
+    try:
+        # Get package location
+        import research_system
+        pkg_path = Path(research_system.__file__).parent.parent
+
+        # Check if it's an editable install (source directory with .git)
+        git_dir = pkg_path / ".git"
+        is_editable = git_dir.exists()
+
+        if is_editable:
+            print(f"Installation: editable (source at {pkg_path})")
+
+            if check_only:
+                # Just fetch and check
+                result = subprocess.run(
+                    ["git", "fetch"],
+                    cwd=pkg_path,
+                    capture_output=True,
+                    text=True
+                )
+                result = subprocess.run(
+                    ["git", "log", "HEAD..origin/main", "--oneline"],
+                    cwd=pkg_path,
+                    capture_output=True,
+                    text=True
+                )
+                if result.stdout.strip():
+                    print(f"\nUpdates available:")
+                    print(result.stdout)
+                else:
+                    print("\nAlready up to date.")
+                return 0
+
+            # Pull latest
+            print("\nPulling latest changes...")
+            result = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                cwd=pkg_path,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                print(f"Error: {result.stderr}")
+                return 1
+            print(result.stdout)
+
+            # Reinstall
+            print("Reinstalling...")
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", "."],
+                cwd=pkg_path,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                print(f"Error: {result.stderr}")
+                return 1
+
+        else:
+            # Installed via pip from git or PyPI
+            print("Installation: pip package")
+
+            if check_only:
+                print("\nRun 'research update' to update to latest version.")
+                return 0
+
+            print("\nUpdating via pip...")
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade",
+                 "git+https://github.com/extremevalue/research-kit.git"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                print(f"Error: {result.stderr}")
+                return 1
+
+        # Get new version
+        # Need to reload to get new version
+        importlib.invalidate_caches()
+        try:
+            # Re-import to get new version
+            result = subprocess.run(
+                [sys.executable, "-c",
+                 "import importlib.metadata; print(importlib.metadata.version('research-kit'))"],
+                capture_output=True,
+                text=True
+            )
+            new_version = result.stdout.strip() if result.returncode == 0 else "unknown"
+        except Exception:
+            new_version = "unknown"
+
+        print(f"\nUpdated: {current_version} -> {new_version}")
+        print("Restart your terminal or run 'hash -r' to use the new version.")
+        return 0
+
+    except Exception as e:
+        print(f"Error during update: {e}")
         return 1
 
 
