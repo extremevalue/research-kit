@@ -218,7 +218,8 @@ research v4-show STRAT-001 --format json  # JSON output
 Run verification tests to check for common issues before backtesting.
 
 ```bash
-research v4-verify STRAT-001            # Run all verification tests
+research v4-verify STRAT-001            # Verify a single strategy
+research v4-verify --all                # Verify all pending strategies
 research v4-verify STRAT-001 --dry-run  # Preview without saving results
 ```
 
@@ -241,6 +242,9 @@ research v4-validate STRAT-001 --generate-config
 
 # Apply validation gates to backtest results
 research v4-validate STRAT-001 --results backtest_results.json
+
+# Validate all strategies with verification results
+research v4-validate --all --results backtest_results.json
 ```
 
 **Validation gates (configurable in research-kit.yaml):**
@@ -263,6 +267,7 @@ Extract learnings from verification and validation results.
 
 ```bash
 research v4-learn STRAT-001             # Extract and save learnings
+research v4-learn --all                 # Extract learnings from all strategies
 research v4-learn STRAT-001 --dry-run   # Preview without saving
 ```
 

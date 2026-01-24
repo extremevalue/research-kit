@@ -832,6 +832,12 @@ Tests include:
         action="store_true",
         help="Show results without saving"
     )
+    parser.add_argument(
+        "--all", "-a",
+        action="store_true",
+        dest="process_all",
+        help="Verify all pending strategies"
+    )
     parser.set_defaults(func=cmd_v4_verify)
 
     # v4-validate command
@@ -873,6 +879,12 @@ strategy robustness across different market regimes.
         action="store_true",
         help="Show results without saving or updating status"
     )
+    parser.add_argument(
+        "--all", "-a",
+        action="store_true",
+        dest="process_all",
+        help="Validate all strategies that have verification results"
+    )
     parser.set_defaults(func=cmd_v4_validate)
 
     # v4-learn command
@@ -905,6 +917,12 @@ Analyzes validation results to identify:
         "--dry-run",
         action="store_true",
         help="Show learnings without saving"
+    )
+    parser.add_argument(
+        "--all", "-a",
+        action="store_true",
+        dest="process_all",
+        help="Extract learnings from all strategies with validation results"
     )
     parser.set_defaults(func=cmd_v4_learn)
 
@@ -1294,6 +1312,228 @@ def cmd_v4_ingest(args):
     return 0
 
 
+def _cmd_v4_verify_all(workspace, args):
+    """Verify all pending strategies."""
+    from research_system.validation import V4Verifier, VerificationStatus
+
+    dry_run = getattr(args, 'dry_run', False)
+
+    # Get all pending strategies
+    strategies = workspace.list_strategies(status='pending')
+    if not strategies:
+        print("No pending strategies to verify.")
+        return 0
+
+    print(f"\nVerifying {len(strategies)} pending strategy(ies)...")
+    print("=" * 50)
+
+    verifier = V4Verifier(workspace)
+    results = {'passed': 0, 'warnings': 0, 'failed': 0}
+
+    for i, strat_info in enumerate(strategies, 1):
+        strategy_id = strat_info['id']
+        strategy = workspace.get_strategy(strategy_id)
+        if not strategy:
+            print(f"[{i}/{len(strategies)}] {strategy_id}: ERROR - Could not load")
+            continue
+
+        result = verifier.verify(strategy)
+
+        if result.overall_status == VerificationStatus.PASS:
+            status_str = "PASS"
+            results['passed'] += 1
+        elif result.overall_status == VerificationStatus.WARN:
+            status_str = f"WARN ({result.warnings} warnings)"
+            results['warnings'] += 1
+        else:
+            status_str = f"FAIL ({result.failed} failures)"
+            results['failed'] += 1
+
+        print(f"[{i}/{len(strategies)}] {strategy_id}: {status_str}")
+
+        if not dry_run:
+            verifier.save_result(result)
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("BATCH VERIFICATION COMPLETE")
+    print("=" * 50)
+    print(f"  Total:    {len(strategies)}")
+    print(f"  Passed:   {results['passed']}")
+    print(f"  Warnings: {results['warnings']}")
+    print(f"  Failed:   {results['failed']}")
+
+    if dry_run:
+        print("\n[DRY RUN] Results not saved")
+    else:
+        print(f"\nResults saved to: {workspace.validations_path}")
+
+    return 0
+
+
+def _cmd_v4_validate_all(workspace, args):
+    """Validate all strategies that have verification results."""
+    from research_system.validation import V4Verifier, V4Validator, VerificationStatus, GateStatus
+
+    dry_run = getattr(args, 'dry_run', False)
+    results_file = getattr(args, 'results', None)
+
+    # Load backtest results if provided (shared across all strategies)
+    backtest_results = None
+    if results_file:
+        import json
+        import yaml
+        results_path = Path(results_file)
+        if results_path.exists():
+            with open(results_path) as f:
+                if results_path.suffix == '.json':
+                    backtest_results = json.load(f)
+                else:
+                    backtest_results = yaml.safe_load(f)
+            print(f"Using backtest results from: {results_file}")
+        else:
+            print(f"Warning: Results file not found: {results_file}")
+
+    # Find strategies with verification results
+    validations_path = workspace.validations_path
+    if not validations_path.exists():
+        print("No verification results found. Run 'research v4-verify --all' first.")
+        return 0
+
+    # Get unique strategy IDs from verification files
+    verify_files = list(validations_path.glob("*_verify_*.yaml"))
+    strategy_ids = set()
+    for f in verify_files:
+        # Extract STRAT-XXX from filename like STRAT-001_verify_20260124_143945.yaml
+        parts = f.stem.split('_verify_')
+        if parts:
+            strategy_ids.add(parts[0])
+
+    if not strategy_ids:
+        print("No verified strategies found. Run 'research v4-verify --all' first.")
+        return 0
+
+    print(f"\nValidating {len(strategy_ids)} verified strategy(ies)...")
+    print("=" * 50)
+
+    verifier = V4Verifier(workspace)
+    validator = V4Validator(workspace, verifier)
+    results = {'passed': 0, 'failed': 0, 'skipped': 0}
+
+    for i, strategy_id in enumerate(sorted(strategy_ids), 1):
+        strategy = workspace.get_strategy(strategy_id)
+        if not strategy:
+            print(f"[{i}/{len(strategy_ids)}] {strategy_id}: SKIP - Not found")
+            results['skipped'] += 1
+            continue
+
+        result = validator.validate(strategy, backtest_results)
+
+        if backtest_results:
+            if result.overall_passed:
+                status_str = "PASSED"
+                results['passed'] += 1
+            else:
+                failed_gates = [g.gate.value for g in result.gates if g.status == GateStatus.FAIL]
+                status_str = f"FAILED ({', '.join(failed_gates)})"
+                results['failed'] += 1
+
+            print(f"[{i}/{len(strategy_ids)}] {strategy_id}: {status_str}")
+
+            if not dry_run:
+                validator.save_result(result)
+                validator.update_strategy_status(strategy_id, result.overall_passed)
+        else:
+            print(f"[{i}/{len(strategy_ids)}] {strategy_id}: PENDING (no backtest results)")
+            results['skipped'] += 1
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("BATCH VALIDATION COMPLETE")
+    print("=" * 50)
+    print(f"  Total:   {len(strategy_ids)}")
+    print(f"  Passed:  {results['passed']}")
+    print(f"  Failed:  {results['failed']}")
+    print(f"  Skipped: {results['skipped']}")
+
+    if not backtest_results:
+        print("\nNote: No backtest results provided. Use --results <file> to apply gates.")
+    elif dry_run:
+        print("\n[DRY RUN] Results not saved, statuses not updated")
+
+    return 0
+
+
+def _cmd_v4_learn_all(workspace, args):
+    """Extract learnings from all strategies with validation results."""
+    from research_system.validation import V4Learner
+
+    dry_run = getattr(args, 'dry_run', False)
+
+    # Find strategies with validation results
+    validations_path = workspace.validations_path
+    if not validations_path.exists():
+        print("No validation results found. Run 'research v4-validate --all' first.")
+        return 0
+
+    # Get unique strategy IDs from validation files
+    all_files = list(validations_path.glob("STRAT-*_*.yaml"))
+    strategy_ids = set()
+    for f in all_files:
+        # Extract STRAT-XXX from filename
+        parts = f.stem.split('_')
+        if parts and parts[0].startswith('STRAT-'):
+            strategy_ids.add(parts[0])
+
+    if not strategy_ids:
+        print("No validated strategies found.")
+        return 0
+
+    print(f"\nExtracting learnings from {len(strategy_ids)} strategy(ies)...")
+    print("=" * 50)
+
+    learner = V4Learner(workspace)
+    results = {'extracted': 0, 'skipped': 0}
+
+    for i, strategy_id in enumerate(sorted(strategy_ids), 1):
+        strategy = workspace.get_strategy(strategy_id)
+        if not strategy:
+            print(f"[{i}/{len(strategy_ids)}] {strategy_id}: SKIP - Not found")
+            results['skipped'] += 1
+            continue
+
+        verification_results, validation_results = learner.load_results(strategy_id)
+
+        if not verification_results and not validation_results:
+            print(f"[{i}/{len(strategy_ids)}] {strategy_id}: SKIP - No results")
+            results['skipped'] += 1
+            continue
+
+        doc = learner.extract_learnings(strategy, verification_results, validation_results)
+        learning_count = len(doc.learnings)
+
+        print(f"[{i}/{len(strategy_ids)}] {strategy_id}: {learning_count} learning(s)")
+        results['extracted'] += 1
+
+        if not dry_run:
+            learner.save_learnings(doc)
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("BATCH LEARNING EXTRACTION COMPLETE")
+    print("=" * 50)
+    print(f"  Total:     {len(strategy_ids)}")
+    print(f"  Extracted: {results['extracted']}")
+    print(f"  Skipped:   {results['skipped']}")
+
+    if dry_run:
+        print("\n[DRY RUN] Learnings not saved")
+    else:
+        print(f"\nLearnings saved to: {workspace.learnings_path}")
+
+    return 0
+
+
 def cmd_v4_verify(args):
     """Run verification tests on a strategy (V4)."""
     from research_system.validation import V4Verifier, VerificationStatus
@@ -1307,10 +1547,17 @@ def cmd_v4_verify(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
+    process_all = getattr(args, 'process_all', False)
     strategy_id = args.strategy_id
+
+    # Handle --all flag
+    if process_all:
+        return _cmd_v4_verify_all(workspace, args)
+
     if not strategy_id:
         print("Error: Strategy ID required")
         print("Usage: research v4-verify STRAT-001")
+        print("       research v4-verify --all")
         return 1
 
     # Load strategy
@@ -1385,10 +1632,17 @@ def cmd_v4_validate(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
+    process_all = getattr(args, 'process_all', False)
     strategy_id = args.strategy_id
+
+    # Handle --all flag
+    if process_all:
+        return _cmd_v4_validate_all(workspace, args)
+
     if not strategy_id:
         print("Error: Strategy ID required")
         print("Usage: research v4-validate STRAT-001")
+        print("       research v4-validate --all --results backtest.json")
         return 1
 
     # Load strategy
@@ -1524,10 +1778,17 @@ def cmd_v4_learn(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
+    process_all = getattr(args, 'process_all', False)
     strategy_id = args.strategy_id
+
+    # Handle --all flag
+    if process_all:
+        return _cmd_v4_learn_all(workspace, args)
+
     if not strategy_id:
         print("Error: Strategy ID required")
         print("Usage: research v4-learn STRAT-001")
+        print("       research v4-learn --all")
         return 1
 
     # Load strategy
