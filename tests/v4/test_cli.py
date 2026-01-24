@@ -277,8 +277,8 @@ class TestV4NotImplemented:
         assert "processing" in result.stdout.lower()
         assert "test_strategy.txt" in result.stdout
 
-    def test_v4_verify_not_implemented(self, tmp_path):
-        """Test v4-verify prints not implemented message."""
+    def test_v4_verify_runs(self, tmp_path):
+        """Test v4-verify runs verification tests."""
         # First init a v4 workspace
         subprocess.run(
             [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
@@ -294,11 +294,11 @@ class TestV4NotImplemented:
             text=True,
             cwd=Path(__file__).parent.parent.parent
         )
-        assert result.returncode == 0
-        assert "coming soon" in result.stdout.lower()
+        # Returns 1 when strategy not found (which is expected)
+        assert "Strategy ID required" in result.stdout or "not found" in result.stdout
 
-    def test_v4_validate_not_implemented(self, tmp_path):
-        """Test v4-validate prints not implemented message."""
+    def test_v4_validate_runs(self, tmp_path):
+        """Test v4-validate runs validation."""
         # First init a v4 workspace
         subprocess.run(
             [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
@@ -314,11 +314,11 @@ class TestV4NotImplemented:
             text=True,
             cwd=Path(__file__).parent.parent.parent
         )
-        assert result.returncode == 0
-        assert "coming soon" in result.stdout.lower()
+        # Returns error when strategy not found
+        assert "Strategy ID required" in result.stdout or "not found" in result.stdout
 
-    def test_v4_learn_not_implemented(self, tmp_path):
-        """Test v4-learn prints not implemented message."""
+    def test_v4_learn_runs(self, tmp_path):
+        """Test v4-learn extracts learnings."""
         # First init a v4 workspace
         subprocess.run(
             [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
@@ -334,8 +334,8 @@ class TestV4NotImplemented:
             text=True,
             cwd=Path(__file__).parent.parent.parent
         )
-        assert result.returncode == 0
-        assert "coming soon" in result.stdout.lower()
+        # Returns error when strategy not found
+        assert "Strategy ID required" in result.stdout or "not found" in result.stdout
 
     def test_v4_status_not_implemented(self, tmp_path):
         """Test v4-status prints not implemented message."""

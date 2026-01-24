@@ -803,7 +803,7 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
     # v4-verify command
     parser = subparsers.add_parser(
         "v4-verify",
-        help="[COMING SOON] Run verification tests on a strategy (V4)",
+        help="Run verification tests on a strategy (V4)",
         description="""
 Run verification tests on a strategy to check for biases and issues.
 
@@ -827,12 +827,17 @@ Tests include:
         metavar="PATH",
         help="Path to V4 workspace"
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show results without saving"
+    )
     parser.set_defaults(func=cmd_v4_verify)
 
     # v4-validate command
     parser = subparsers.add_parser(
         "v4-validate",
-        help="[COMING SOON] Run walk-forward validation on a strategy (V4)",
+        help="Run walk-forward validation on a strategy (V4)",
         description="""
 Run walk-forward validation (backtesting) on a strategy.
 Applies configured gates (Sharpe, consistency, drawdown).
@@ -853,12 +858,27 @@ strategy robustness across different market regimes.
         metavar="PATH",
         help="Path to V4 workspace"
     )
+    parser.add_argument(
+        "--results", "-r",
+        metavar="FILE",
+        help="JSON/YAML file with backtest results (sharpe_ratio, max_drawdown, win_rate)"
+    )
+    parser.add_argument(
+        "--generate-config",
+        action="store_true",
+        help="Generate backtest configuration file instead of validating"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show results without saving or updating status"
+    )
     parser.set_defaults(func=cmd_v4_validate)
 
     # v4-learn command
     parser = subparsers.add_parser(
         "v4-learn",
-        help="[COMING SOON] Extract learnings from validation results (V4)",
+        help="Extract learnings from validation results (V4)",
         description="""
 Extract learnings from validation results for future reference.
 
@@ -880,6 +900,11 @@ Analyzes validation results to identify:
         dest="v4_workspace",
         metavar="PATH",
         help="Path to V4 workspace"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show learnings without saving"
     )
     parser.set_defaults(func=cmd_v4_learn)
 
@@ -1238,6 +1263,8 @@ def cmd_v4_ingest(args):
 
 def cmd_v4_verify(args):
     """Run verification tests on a strategy (V4)."""
+    from research_system.validation import V4Verifier, VerificationStatus
+
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
@@ -1247,16 +1274,75 @@ def cmd_v4_verify(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("\n[COMING SOON] v4-verify is not yet implemented.")
-    print("This command will run verification tests to check for biases and issues.\n")
-    print(f"Workspace: {workspace.path}")
-    if args.strategy_id:
-        print(f"Strategy ID: {args.strategy_id}")
-    return 0
+    strategy_id = args.strategy_id
+    if not strategy_id:
+        print("Error: Strategy ID required")
+        print("Usage: research v4-verify STRAT-001")
+        return 1
+
+    # Load strategy
+    strategy = workspace.get_strategy(strategy_id)
+    if strategy is None:
+        print(f"Error: Strategy '{strategy_id}' not found")
+        return 1
+
+    dry_run = getattr(args, 'dry_run', False)
+
+    # Run verification
+    print(f"\nVerifying strategy: {strategy_id}")
+    print("=" * 50)
+
+    verifier = V4Verifier(workspace)
+    result = verifier.verify(strategy)
+
+    # Display results
+    for test in result.tests:
+        if test.status == VerificationStatus.PASS:
+            status_icon = "[PASS]"
+        elif test.status == VerificationStatus.FAIL:
+            status_icon = "[FAIL]"
+        elif test.status == VerificationStatus.WARN:
+            status_icon = "[WARN]"
+        else:
+            status_icon = "[SKIP]"
+
+        print(f"{status_icon} {test.name}: {test.message}")
+        if test.details:
+            for key, value in test.details.items():
+                if isinstance(value, list):
+                    for item in value:
+                        print(f"         - {item}")
+                else:
+                    print(f"         {key}: {value}")
+
+    # Summary
+    print("\n" + "=" * 50)
+    print(f"OVERALL: {result.overall_status.value.upper()}")
+    print(f"  Passed:   {result.passed}/{len(result.tests)}")
+    print(f"  Warnings: {result.warnings}")
+    print(f"  Failed:   {result.failed}")
+
+    # Save result
+    if not dry_run:
+        saved_path = verifier.save_result(result)
+        print(f"\nResult saved to: {saved_path}")
+    else:
+        print("\n[DRY RUN] Result not saved")
+
+    return 0 if result.overall_status != VerificationStatus.FAIL else 1
 
 
 def cmd_v4_validate(args):
     """Run walk-forward validation on a strategy (V4)."""
+    import json
+    import yaml
+    from research_system.validation import (
+        V4Verifier,
+        V4Validator,
+        VerificationStatus,
+        GateStatus,
+    )
+
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
@@ -1266,16 +1352,136 @@ def cmd_v4_validate(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("\n[COMING SOON] v4-validate is not yet implemented.")
-    print("This command will run walk-forward validation (backtesting).\n")
-    print(f"Workspace: {workspace.path}")
-    if args.strategy_id:
-        print(f"Strategy ID: {args.strategy_id}")
-    return 0
+    strategy_id = args.strategy_id
+    if not strategy_id:
+        print("Error: Strategy ID required")
+        print("Usage: research v4-validate STRAT-001")
+        return 1
+
+    # Load strategy
+    strategy = workspace.get_strategy(strategy_id)
+    if strategy is None:
+        print(f"Error: Strategy '{strategy_id}' not found")
+        return 1
+
+    dry_run = getattr(args, 'dry_run', False)
+    results_file = getattr(args, 'results', None)
+    generate_config = getattr(args, 'generate_config', False)
+
+    print(f"\nValidating strategy: {strategy_id}")
+    print("=" * 50)
+
+    # Step 1: Run verification first
+    print("\n[Step 1] Running verification...")
+    verifier = V4Verifier(workspace)
+    verify_result = verifier.verify(strategy)
+
+    if verify_result.overall_status == VerificationStatus.FAIL:
+        print(f"  FAILED - Strategy has {verify_result.failed} verification failures")
+        print("  Run 'research v4-verify' to see details")
+        print("\n  Validation cannot proceed until verification passes.")
+        return 1
+    elif verify_result.overall_status == VerificationStatus.WARN:
+        print(f"  PASSED with {verify_result.warnings} warning(s)")
+    else:
+        print("  PASSED")
+
+    # Step 2: Initialize validator
+    validator = V4Validator(workspace, verifier)
+
+    # Step 3: Generate backtest config if requested
+    if generate_config:
+        print("\n[Step 2] Generating backtest configuration...")
+        config = validator.generate_backtest_config(strategy)
+        config_path = workspace.path / "validations" / f"{strategy_id}_backtest_config.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        print(f"  Config saved to: {config_path}")
+        print("\n  Next steps:")
+        print("  1. Run backtest using this configuration")
+        print("  2. Save results to a JSON file with: sharpe_ratio, max_drawdown, win_rate")
+        print(f"  3. Re-run: research v4-validate {strategy_id} --results <results.json>")
+        return 0
+
+    # Step 4: Load backtest results if provided
+    backtest_results = None
+    if results_file:
+        print(f"\n[Step 2] Loading backtest results from {results_file}...")
+        results_path = Path(results_file)
+        if not results_path.exists():
+            print(f"  Error: Results file not found: {results_file}")
+            return 1
+
+        with open(results_path) as f:
+            if results_path.suffix == '.json':
+                backtest_results = json.load(f)
+            else:
+                backtest_results = yaml.safe_load(f)
+
+        print(f"  Loaded metrics: {list(backtest_results.keys())}")
+    else:
+        print("\n[Step 2] No backtest results provided")
+        print("  Use --generate-config to create backtest configuration")
+        print("  Use --results <file> to apply validation gates to results")
+
+    # Step 5: Run validation
+    print("\n[Step 3] Applying validation gates...")
+    result = validator.validate(strategy, backtest_results)
+
+    gates = validator.get_gates()
+    print(f"  Configured gates:")
+    for gate, threshold in gates.items():
+        if gate.value == "max_drawdown":
+            print(f"    - {gate.value}: ≤ {threshold:.1%}")
+        else:
+            print(f"    - {gate.value}: ≥ {threshold}")
+
+    if result.gates:
+        print("\n  Gate results:")
+        for gate_result in result.gates:
+            if gate_result.status == GateStatus.PASS:
+                icon = "[PASS]"
+            elif gate_result.status == GateStatus.FAIL:
+                icon = "[FAIL]"
+            else:
+                icon = "[SKIP]"
+            print(f"    {icon} {gate_result.message}")
+
+    # Step 6: Summary
+    print("\n" + "=" * 50)
+    if backtest_results:
+        if result.overall_passed:
+            print("VALIDATION: PASSED")
+            print("  Strategy meets all validation gates")
+        else:
+            failed = [g for g in result.gates if g.status == GateStatus.FAIL]
+            print("VALIDATION: FAILED")
+            print(f"  Strategy failed {len(failed)} gate(s)")
+    else:
+        print("VALIDATION: PENDING")
+        print("  No backtest results to validate")
+
+    # Step 7: Save result and update status
+    if not dry_run and backtest_results:
+        saved_path = validator.save_result(result)
+        print(f"\nResult saved to: {saved_path}")
+
+        new_path = validator.update_strategy_status(strategy_id, result.overall_passed)
+        if new_path:
+            print(f"Strategy moved to: {new_path}")
+    elif dry_run:
+        print("\n[DRY RUN] Results not saved, status not updated")
+
+    return 0 if result.overall_passed or not backtest_results else 1
 
 
 def cmd_v4_learn(args):
     """Extract learnings from validation results (V4)."""
+    from research_system.validation import V4Learner
+
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
@@ -1285,11 +1491,80 @@ def cmd_v4_learn(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("\n[COMING SOON] v4-learn is not yet implemented.")
-    print("This command will extract learnings from validation results.\n")
-    print(f"Workspace: {workspace.path}")
-    if args.strategy_id:
-        print(f"Strategy ID: {args.strategy_id}")
+    strategy_id = args.strategy_id
+    if not strategy_id:
+        print("Error: Strategy ID required")
+        print("Usage: research v4-learn STRAT-001")
+        return 1
+
+    # Load strategy
+    strategy = workspace.get_strategy(strategy_id)
+    if strategy is None:
+        print(f"Error: Strategy '{strategy_id}' not found")
+        return 1
+
+    dry_run = getattr(args, 'dry_run', False)
+
+    print(f"\nExtracting learnings for: {strategy_id}")
+    print("=" * 50)
+
+    # Initialize learner and load results
+    learner = V4Learner(workspace)
+    verification_results, validation_results = learner.load_results(strategy_id)
+
+    print(f"\nFound {len(verification_results)} verification result(s)")
+    print(f"Found {len(validation_results)} validation result(s)")
+
+    if not verification_results and not validation_results:
+        print("\nNo validation results found for this strategy.")
+        print("Run 'research v4-verify' and 'research v4-validate' first.")
+        return 0
+
+    # Extract learnings
+    doc = learner.extract_learnings(strategy, verification_results, validation_results)
+
+    # Display learnings
+    print("\n" + "-" * 50)
+    print("LEARNINGS")
+    print("-" * 50)
+
+    # Group by category
+    categories = {}
+    for learning in doc.learnings:
+        cat = learning.category
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(learning)
+
+    for category, learnings in categories.items():
+        print(f"\n[{category.upper()}]")
+        for l in learnings:
+            if l.type == "success":
+                icon = "+"
+            elif l.type == "warning":
+                icon = "!"
+            elif l.type == "failure":
+                icon = "X"
+            else:
+                icon = "-"
+
+            print(f"  {icon} {l.insight}")
+            if l.recommendation:
+                print(f"    > Recommendation: {l.recommendation}")
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("SUMMARY")
+    print("=" * 50)
+    print(doc.summary)
+
+    # Save learnings
+    if not dry_run:
+        saved_path = learner.save_learnings(doc)
+        print(f"\nLearnings saved to: {saved_path}")
+    else:
+        print("\n[DRY RUN] Learnings not saved")
+
     return 0
 
 
