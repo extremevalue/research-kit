@@ -74,19 +74,17 @@ This creates:
 └── logs/                 # Daily rotating logs
 ```
 
-### 3. Set Up API Key
+### 3. Set Up API Key (Optional)
 
-Create a `.env` file in your workspace (copy from `.env.template`):
+The API key is needed for LLM-based metadata extraction. Without it, you can still use `--force` to create strategies with minimal metadata.
 
 ```bash
 cd ~/my-research
 cp .env.template .env
+# Edit .env and add: ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Edit `.env` and add your Anthropic API key:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
+**Without API key:** Use `research v4-ingest --force` to bypass quality checks.
 
 ### 4. Ingest Research
 
@@ -185,6 +183,7 @@ Process inbox files into strategy documents.
 ```bash
 research v4-ingest                      # Process all inbox files
 research v4-ingest --dry-run            # Preview without changes
+research v4-ingest --force              # Bypass quality checks (no API key needed)
 research v4-ingest /path/to/file.txt    # Process specific file
 ```
 

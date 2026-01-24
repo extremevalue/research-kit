@@ -793,6 +793,11 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
         dest="dry_run",
         help="Show what would happen without making changes"
     )
+    parser.add_argument(
+        "--force", "-f",
+        action="store_true",
+        help="Skip quality checks and create strategies anyway (useful for testing without API key)"
+    )
     parser.set_defaults(func=cmd_v4_ingest)
 
     # v4-verify command
@@ -1114,12 +1119,17 @@ def cmd_v4_ingest(args):
     # Initialize processor
     processor = V4IngestProcessor(workspace, config, llm_client)
 
-    # Check dry-run mode
+    # Check options
     dry_run = getattr(args, 'dry_run', False)
+    force = getattr(args, 'force', False)
 
     if dry_run:
         print("=== DRY RUN MODE ===")
         print("No files will be saved or moved.\n")
+
+    if force:
+        print("=== FORCE MODE ===")
+        print("Quality checks bypassed - all files will create strategies.\n")
 
     # Process specific files or entire inbox
     if args.files:
@@ -1133,11 +1143,11 @@ def cmd_v4_ingest(args):
             if not file_path.exists():
                 print(f"Error: File not found: {file_arg}")
                 continue
-            result = processor.process_file(file_path, dry_run=dry_run)
+            result = processor.process_file(file_path, dry_run=dry_run, force=force)
             results.append(result)
     else:
         # Process entire inbox
-        summary = processor.process_inbox(dry_run=dry_run)
+        summary = processor.process_inbox(dry_run=dry_run, force=force)
         results = summary.results
 
         if summary.total_files == 0:

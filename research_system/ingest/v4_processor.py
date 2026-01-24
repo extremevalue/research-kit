@@ -283,11 +283,12 @@ class V4IngestProcessor:
         self.config = config
         self.llm_client = llm_client
 
-    def process_inbox(self, dry_run: bool = False) -> V4IngestSummary:
+    def process_inbox(self, dry_run: bool = False, force: bool = False) -> V4IngestSummary:
         """Process all files in the inbox directory.
 
         Args:
             dry_run: If True, show what would happen without saving files.
+            force: If True, bypass quality checks and create strategies anyway.
 
         Returns:
             V4IngestSummary with results for all files.
@@ -304,7 +305,7 @@ class V4IngestProcessor:
         summary.total_files = len(inbox_files)
 
         for file_path in sorted(inbox_files):
-            result = self.process_file(file_path, dry_run=dry_run)
+            result = self.process_file(file_path, dry_run=dry_run, force=force)
             summary.results.append(result)
 
             if result.error:
@@ -323,13 +324,14 @@ class V4IngestProcessor:
         return summary
 
     def process_file(
-        self, file_path: Path, dry_run: bool = False
+        self, file_path: Path, dry_run: bool = False, force: bool = False
     ) -> V4IngestResult:
         """Process a single file into a V4 strategy.
 
         Args:
             file_path: Path to the file to process.
             dry_run: If True, don't save the strategy or move files.
+            force: If True, bypass quality checks and create strategy anyway.
 
         Returns:
             V4IngestResult with processing outcome.
@@ -370,6 +372,12 @@ class V4IngestProcessor:
             specificity_threshold=self.config.ingestion.min_specificity_score,
             trust_threshold=self.config.ingestion.min_trust_score,
         )
+
+        # In force mode, override reject/archive decisions to accept
+        if force and decision in (IngestionDecision.REJECT, IngestionDecision.ARCHIVE):
+            decision = IngestionDecision.ACCEPT
+            quality.warnings.append(f"Force mode: overrode {quality.decision.value} decision")
+
         result.decision = decision
 
         # Handle based on decision

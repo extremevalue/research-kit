@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from scripts.utils.logging_config import get_logger
+from scripts.status.generate_reports import refresh_all_reports
 
 logger = get_logger("full_pipeline")
 
@@ -92,7 +93,7 @@ class FullPipelineRunner:
     OOS_MIN_SHARPE = 0.3  # OOS Sharpe must exceed this
     OOS_MAX_DRAWDOWN = 0.50  # OOS drawdown must be less than 50%
 
-    def __init__(self, workspace, llm_client=None, use_local: bool = False, cleanup_on_start: bool = True):
+    def __init__(self, workspace, llm_client=None, use_local: bool = False, cleanup_on_start: bool = True, use_walk_forward: bool = False):
         """
         Initialize the pipeline runner.
 
@@ -101,10 +102,12 @@ class FullPipelineRunner:
             llm_client: LLMClient instance (optional, but needed for code gen and expert review)
             use_local: If True, use local Docker backtest; if False (default), use cloud
             cleanup_on_start: If True (default), clean up any stuck QC backtests on initialization
+            use_walk_forward: If True, use walk-forward validation (12 windows) instead of single IS/OOS
         """
         self.workspace = workspace
         self.llm_client = llm_client
         self.use_local = use_local
+        self.use_walk_forward = use_walk_forward
         self.catalog = None
 
         # Lazy load catalog
@@ -146,6 +149,10 @@ class FullPipelineRunner:
         # Prevent idea chains: IDEA entries don't generate more ideas
         # Only run expert review on original entries (strategies, indicators)
         self._skip_expert_review = entry.type in ("idea", "task", "action")
+
+        # Use walk-forward validation if enabled (ARCHITECTURE.md v2.0)
+        if self.use_walk_forward:
+            return self._run_walk_forward(entry_id, entry)
 
         # Step 1: Generate backtest code (or load existing)
         print("  Generating backtest code...")
@@ -294,6 +301,117 @@ class FullPipelineRunner:
             oos_results=oos_results,
             expert_reviews=expert_reviews,
             derived_ideas=derived_ideas
+        )
+
+    def _run_walk_forward(self, entry_id: str, entry) -> PipelineResult:
+        """
+        Run walk-forward validation (ARCHITECTURE.md v2.0).
+
+        This runs 12 test windows from 2008-2024 and applies aggregate gates:
+        - Median return > 0%
+        - Consistency >= 60%
+        - Aggregate Sharpe > 0.3
+        - Max drawdown < 30%
+        - Sharpe 95% CI lower bound > 0
+
+        Args:
+            entry_id: The catalog entry ID
+            entry: The catalog entry object
+
+        Returns:
+            PipelineResult with walk-forward determination
+        """
+        from scripts.validate.walk_forward import WalkForwardValidator
+
+        logger.info(f"Starting walk-forward validation for {entry_id}")
+
+        # Step 1: Generate backtest code
+        print("  Generating backtest code...")
+        backtest_code = self._generate_backtest_code(entry)
+        if not backtest_code:
+            return PipelineResult(
+                entry_id=entry_id,
+                determination="FAILED",
+                error="Failed to generate backtest code"
+            )
+
+        # Step 2: Run walk-forward validation
+        validator = WalkForwardValidator(
+            workspace=self.workspace,
+            backtest_runner_func=self._run_backtest
+        )
+
+        try:
+            wf_result = validator.validate(entry_id, backtest_code)
+        except Exception as e:
+            logger.error(f"Walk-forward validation failed: {e}")
+            return PipelineResult(
+                entry_id=entry_id,
+                determination="FAILED",
+                error=f"Walk-forward validation error: {str(e)}"
+            )
+
+        # Step 3: Run expert review if not IDEA/TASK/ACTION
+        expert_reviews = []
+        derived_ideas = []
+
+        if not self._skip_expert_review:
+            # Create a summary BacktestResult for expert review
+            summary_result = BacktestResult(
+                success=True,
+                cagr=wf_result.mean_return,
+                sharpe=wf_result.aggregate_sharpe,
+                max_drawdown=wf_result.max_drawdown,
+                alpha=wf_result.median_return,
+                total_return=wf_result.mean_return,
+            )
+
+            print("  Running expert review...")
+            expert_reviews = self._run_expert_review(entry, summary_result, None)
+            derived_ideas = self._extract_and_classify_improvements(expert_reviews, entry)
+
+            # Print expert summaries
+            for review in expert_reviews:
+                print(f"    [{review.persona}] {review.assessment[:60]}...")
+
+            # Add derived entries to catalog
+            if derived_ideas:
+                self._add_derived_entries(entry, derived_ideas)
+        else:
+            print("  Skipping expert review (IDEA/TASK/ACTION entries don't generate children)")
+
+        # Step 4: Update entry status
+        self._update_entry_status(entry_id, wf_result.determination)
+
+        # Step 5: Save determination
+        val_dir = self.workspace.validations_path / entry_id
+        val_dir.mkdir(parents=True, exist_ok=True)
+        determination_file = val_dir / "determination.json"
+        determination_file.write_text(json.dumps({
+            "entry_id": entry_id,
+            "determination": wf_result.determination,
+            "reason": wf_result.determination_reason,
+            "validation_type": "walk_forward",
+            "timestamp": wf_result.timestamp,
+        }, indent=2))
+
+        print(f"\n  → {wf_result.determination}")
+        if derived_ideas:
+            print(f"  → Added {len(derived_ideas)} derived ideas")
+
+        # Auto-refresh status reports (R1.5)
+        try:
+            logger.info("Refreshing status reports...")
+            refresh_all_reports(self.workspace.path)
+            logger.info("Status reports updated")
+        except Exception as e:
+            logger.warning(f"Failed to refresh status reports: {e}")
+
+        return PipelineResult(
+            entry_id=entry_id,
+            determination=wf_result.determination,
+            expert_reviews=expert_reviews,
+            derived_ideas=derived_ideas,
         )
 
     def _generate_backtest_code(self, entry, previous_error: Optional[str] = None, previous_code: Optional[str] = None) -> Optional[str]:
@@ -1397,7 +1515,7 @@ Common fixes:
         project_dir = self.workspace.validations_path / entry_id / project_name
         project_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write the algorithm code
+        # Write the algorithm code with date injection
         main_py = project_dir / "main.py"
         modified_code = self._inject_dates(code, start_date, end_date)
         main_py.write_text(modified_code)
@@ -1445,8 +1563,10 @@ Common fixes:
                     pass
 
                 # Check for rate limiting / no spare nodes error
+                # Use same extended patterns as in _parse_lean_output for consistency
                 output_lower = (result.stdout + result.stderr).lower()
-                if "no spare nodes" in output_lower or "rate limit" in output_lower:
+                rate_limit_quick_patterns = ["no spare nodes", "rate limit", "too many", "throttl", "quota", "capacity limit"]
+                if any(pattern in output_lower for pattern in rate_limit_quick_patterns):
                     # Clean up ALL running backtests across ALL projects (not just current)
                     # Use aggressive mode: clean any non-completed backtest older than 60s
                     logger.warning("QC nodes busy - scanning all projects for running backtests...")
@@ -1606,25 +1726,42 @@ Common fixes:
         return BacktestResult(success=False, error="Backtest failed after all retries")
 
     def _inject_dates(self, code: str, start_date: str, end_date: str) -> str:
-        """Inject start/end dates into the algorithm code."""
+        """Inject start/end dates into the algorithm code.
+
+        Handles both PascalCase (SetStartDate) and snake_case (set_start_date)
+        method naming conventions used by QuantConnect.
+        """
         # Parse dates
         start_parts = start_date.split("-")
         end_parts = end_date.split("-")
 
-        # Look for SetStartDate and SetEndDate calls and replace them
         import re
 
-        # Replace SetStartDate
+        # Replace SetStartDate (PascalCase)
         code = re.sub(
             r'self\.SetStartDate\([^)]+\)',
             f'self.SetStartDate({start_parts[0]}, {int(start_parts[1])}, {int(start_parts[2])})',
             code
         )
 
-        # Replace SetEndDate
+        # Replace set_start_date (snake_case)
+        code = re.sub(
+            r'self\.set_start_date\([^)]+\)',
+            f'self.set_start_date({start_parts[0]}, {int(start_parts[1])}, {int(start_parts[2])})',
+            code
+        )
+
+        # Replace SetEndDate (PascalCase)
         code = re.sub(
             r'self\.SetEndDate\([^)]+\)',
             f'self.SetEndDate({end_parts[0]}, {int(end_parts[1])}, {int(end_parts[2])})',
+            code
+        )
+
+        # Replace set_end_date (snake_case)
+        code = re.sub(
+            r'self\.set_end_date\([^)]+\)',
+            f'self.set_end_date({end_parts[0]}, {int(end_parts[1])}, {int(end_parts[2])})',
             code
         )
 
@@ -1662,10 +1799,37 @@ Common fixes:
 
             # Check for rate limiting even on non-zero exit (Issue #45)
             # The "no spare nodes" error can appear after 500 chars in the output
-            if "no spare nodes" in combined.lower() or "rate limit" in combined.lower():
+            # Extended patterns for robustness against QC message changes
+            rate_limit_patterns = [
+                # Current known patterns
+                "no spare nodes",
+                "rate limit",
+                "too many backtest requests",
+                # Potential future patterns
+                "too many requests",
+                "quota exceeded",
+                "throttl",  # catches throttle, throttled, throttling
+                "capacity limit",
+                "try again later",
+                "service unavailable",
+                "temporarily unavailable",
+                "node unavailable",
+                "backtest limit",
+                "concurrent backtest",
+                "maximum.*backtest",  # regex-like but using simple 'in' check
+            ]
+            combined_lower = combined.lower()
+            matched_pattern = None
+            for pattern in rate_limit_patterns:
+                if pattern in combined_lower:
+                    matched_pattern = pattern
+                    break
+
+            if matched_pattern:
+                logger.warning(f"Rate limit detected (pattern: '{matched_pattern}')")
                 return BacktestResult(
                     success=False,
-                    error="QC nodes unavailable - no spare nodes in cluster",
+                    error=f"QC nodes unavailable - rate limited (matched: {matched_pattern})",
                     raw_output=stdout,
                     rate_limited=True
                 )

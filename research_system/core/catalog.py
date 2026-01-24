@@ -409,6 +409,44 @@ class Catalog:
 
         return CatalogEntry(entry_data)
 
+    def set_maturity(
+        self,
+        entry_id: str,
+        maturity_level: str,
+        maturity_score: float,
+        missing_elements: List[str],
+        steps_needed: List[str]
+    ) -> CatalogEntry:
+        """
+        Set maturity classification for an entry (R2).
+
+        Args:
+            entry_id: The entry to update
+            maturity_level: raw, partial, or full
+            maturity_score: 0.0 to 1.0
+            missing_elements: List of what's missing
+            steps_needed: Development steps needed
+        """
+        entry_data = self.get_raw(entry_id)
+        if not entry_data:
+            raise ValueError(f"Entry not found: {entry_id}")
+
+        entry_data["maturity"] = {
+            "level": maturity_level,
+            "score": maturity_score,
+            "missing": missing_elements,
+            "steps_needed": steps_needed,
+            "classified_at": datetime.utcnow().isoformat() + "Z"
+        }
+        entry_data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+
+        # Write
+        entry_file = self.entries_path / f"{entry_id}.json"
+        with open(entry_file, 'w') as f:
+            json.dump(entry_data, f, indent=2)
+
+        return CatalogEntry(entry_data)
+
     def add_derived(
         self,
         parent_id: str,

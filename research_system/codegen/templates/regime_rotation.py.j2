@@ -1,0 +1,314 @@
+{# Regime Rotation Strategy Template #}
+{# Supports multiple structures: regime_switch, tactical_rotation, core_satellite #}
+{% extends "base.py.j2" %}
+
+{% block signal_params %}
+        # Signal parameters (set via regime_signal below)
+        self._lookback_days = {{ signal.lookback_days | default(200) }}
+{% endblock %}
+
+{% block custom_init %}
+        # Regime signal parameters
+        self._regime_signal = "{{ regime_signal.type }}"
+        self._regime_lookback = {{ regime_signal.lookback }}
+        self._regime_threshold = {{ regime_signal.threshold }}
+
+        # Re-entry signal parameters
+        self._reentry_signal = "{{ reentry_signal.type }}"
+        self._reentry_lookback = {{ reentry_signal.lookback }}
+        self._reentry_threshold = {{ reentry_signal.threshold }}
+
+        # Structure type
+        self._structure = "{{ structure.type }}"
+        self._aggressiveness = "{{ structure.aggressiveness }}"
+
+        # Weight configurations
+        self._risk_on_weights = {{ structure.risk_on_weights }}
+        self._risk_off_weights = {{ structure.risk_off_weights }}
+
+        # Regime state tracking
+        self._current_regime = "risk_on"
+        self._reentry_triggered = False
+
+{% if use_mcclellan %}
+        # McClellan Oscillator from Object Store
+        self._mcclellan_data = None
+        self._load_mcclellan_data()
+{% endif %}
+
+{% if use_vix %}
+        # Add VIX for volatility regime signal
+        self._vix = self.AddData(CBOE, "VIX", Resolution.Daily).Symbol
+{% endif %}
+{% endblock %}
+
+{% block calculate_weights %}
+        # Determine current regime
+        regime = self._determine_regime()
+
+        # Check for re-entry opportunity in risk-off
+        reentry = self._check_reentry() if regime == "risk_off" else False
+
+        # Get base weights for regime
+        if regime == "risk_on":
+            weights = dict(self._risk_on_weights)
+        else:
+            weights = dict(self._risk_off_weights)
+
+            # Apply re-entry adjustment if triggered
+            if reentry:
+                weights = self._apply_reentry_boost(weights)
+
+        # Store regime for logging
+        if regime != self._current_regime:
+            self.Debug(f"Regime change: {self._current_regime} -> {regime}")
+            self._current_regime = regime
+
+{% if structure.type == "tactical_rotation" %}
+        # Tactical rotation: select top performers within regime weights
+        weights = self._apply_tactical_rotation(weights)
+{% elif structure.type == "core_satellite" %}
+        # Core+satellite: fixed core + tactical overlay
+        weights = self._apply_core_satellite(weights)
+{% endif %}
+
+{% if position_sizing.method == "volatility_adjusted" %}
+        # Apply volatility adjustment
+        weights = self._apply_vol_adjustment(weights)
+{% endif %}
+
+        # Convert symbol strings to Symbol objects
+        return {self._symbol_map.get(k, k): v for k, v in weights.items() if v > 0.001}
+{% endblock %}
+
+{% block universe_setup %}
+        self._symbols = []
+        self._symbol_map = {}
+{% for symbol in universe.symbols %}
+        sym = self.AddEquity("{{ symbol }}", Resolution.Daily).Symbol
+        self._symbols.append(sym)
+        self._symbol_map["{{ symbol }}"] = sym
+{% endfor %}
+{% if universe.leveraged_symbols %}
+        # Leveraged alternatives
+        self._leveraged_map = {}
+{% for symbol, leveraged in universe.leveraged_symbols.items() %}
+        lev_sym = self.AddEquity("{{ leveraged }}", Resolution.Daily).Symbol
+        self._leveraged_map["{{ symbol }}"] = lev_sym
+        self._symbol_map["{{ leveraged }}"] = lev_sym
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block additional_methods %}
+    def _determine_regime(self) -> str:
+        """Determine current market regime based on signal."""
+{% if regime_signal.type == "sma_200" %}
+        # SPY above/below 200-day SMA
+        spy = self._symbol_map.get("SPY")
+        if spy is None:
+            return "risk_on"
+        history = self.History(spy, self._regime_lookback + 10, Resolution.Daily)
+        if history.empty or len(history) < self._regime_lookback:
+            return "risk_on"
+        close = history['close']
+        sma = close.rolling(self._regime_lookback).mean().iloc[-1]
+        current = close.iloc[-1]
+        return "risk_on" if current > sma else "risk_off"
+
+{% elif regime_signal.type == "sma_cross" %}
+        # 50/200 SMA cross
+        spy = self._symbol_map.get("SPY")
+        if spy is None:
+            return "risk_on"
+        history = self.History(spy, 250, Resolution.Daily)
+        if history.empty or len(history) < 200:
+            return "risk_on"
+        close = history['close']
+        sma_50 = close.rolling(50).mean().iloc[-1]
+        sma_200 = close.rolling(200).mean().iloc[-1]
+        return "risk_on" if sma_50 > sma_200 else "risk_off"
+
+{% elif regime_signal.type == "momentum_roc" %}
+        # Rate of change threshold
+        spy = self._symbol_map.get("SPY")
+        if spy is None:
+            return "risk_on"
+        roc = self.GetHistoricalReturns(spy, self._regime_lookback)
+        return "risk_on" if roc > self._regime_threshold else "risk_off"
+
+{% elif regime_signal.type == "vix_threshold" %}
+        # VIX level
+        if not hasattr(self, '_vix') or self._vix is None:
+            return "risk_on"
+        history = self.History(self._vix, 5, Resolution.Daily)
+        if history.empty:
+            return "risk_on"
+        vix_level = history['close'].iloc[-1]
+        return "risk_off" if vix_level > self._regime_threshold else "risk_on"
+
+{% elif regime_signal.type == "mcclellan" %}
+        # McClellan Oscillator
+        if self._mcclellan_data is None:
+            return "risk_on"
+        current_date = self.Time.strftime("%Y-%m-%d")
+        if current_date in self._mcclellan_data.index:
+            mco = self._mcclellan_data.loc[current_date, 'McC_OSC']
+            return "risk_off" if mco < self._regime_threshold else "risk_on"
+        return "risk_on"
+{% else %}
+        return "risk_on"
+{% endif %}
+
+    def _check_reentry(self) -> bool:
+        """Check if re-entry conditions are met during risk-off."""
+{% if reentry_signal.type == "rsi_oversold" %}
+        # RSI oversold
+        spy = self._symbol_map.get("SPY")
+        if spy is None:
+            return False
+        history = self.History(spy, self._reentry_lookback + 5, Resolution.Daily)
+        if history.empty or len(history) < self._reentry_lookback:
+            return False
+        close = history['close']
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0).rolling(self._reentry_lookback).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(self._reentry_lookback).mean()
+        rs = gain / loss.replace(0, float('inf'))
+        rsi = 100 - (100 / (1 + rs)).iloc[-1]
+        return rsi < self._reentry_threshold
+
+{% elif reentry_signal.type == "drawdown" %}
+        # Percent from high
+        spy = self._symbol_map.get("SPY")
+        if spy is None:
+            return False
+        history = self.History(spy, self._reentry_lookback, Resolution.Daily)
+        if history.empty:
+            return False
+        close = history['close']
+        high = close.max()
+        current = close.iloc[-1]
+        drawdown = (high - current) / high
+        return drawdown > self._reentry_threshold
+
+{% elif reentry_signal.type == "vix_spike" %}
+        # VIX spike as contrarian
+        if not hasattr(self, '_vix') or self._vix is None:
+            return False
+        history = self.History(self._vix, 5, Resolution.Daily)
+        if history.empty:
+            return False
+        vix_level = history['close'].iloc[-1]
+        return vix_level > self._reentry_threshold
+{% else %}
+        return False
+{% endif %}
+
+    def _apply_reentry_boost(self, weights: dict) -> dict:
+        """Boost equity weight when re-entry is triggered."""
+        boost = {{ structure.reentry_boost | default(0.1) }}
+        if "SPY" in weights:
+            weights["SPY"] = min(weights["SPY"] + boost, 1.0)
+            # Reduce others proportionally
+            total = sum(weights.values())
+            if total > 1.0:
+                for k in weights:
+                    if k != "SPY":
+                        weights[k] = weights[k] * (1.0 - weights["SPY"]) / (total - weights["SPY"])
+        return weights
+
+{% if structure.type == "tactical_rotation" %}
+    def _apply_tactical_rotation(self, base_weights: dict) -> dict:
+        """Apply momentum-based rotation within allowed weights."""
+        # Calculate momentum for each asset
+        momentum_scores = {}
+        for symbol_str, weight in base_weights.items():
+            if weight <= 0:
+                continue
+            symbol = self._symbol_map.get(symbol_str)
+            if symbol is None:
+                continue
+            mom = self.GetHistoricalReturns(symbol, {{ structure.momentum_lookback | default(63) }})
+            momentum_scores[symbol_str] = mom
+
+        if not momentum_scores:
+            return base_weights
+
+        # Rank and allocate to top N
+        ranked = sorted(momentum_scores.items(), key=lambda x: x[1], reverse=True)
+        top_n = ranked[:{{ structure.top_n | default(2) }}]
+
+        # Equal weight among top performers
+        total_available = sum(base_weights.get(s, 0) for s, _ in top_n)
+        if total_available > 0:
+            weight_per = total_available / len(top_n)
+            return {s: weight_per for s, _ in top_n}
+        return base_weights
+{% endif %}
+
+{% if structure.type == "core_satellite" %}
+    def _apply_core_satellite(self, base_weights: dict) -> dict:
+        """Fixed core + tactical satellite overlay."""
+        core_pct = {{ structure.core_pct | default(0.6) }}
+        satellite_pct = 1.0 - core_pct
+
+        # Core is equal weight of all assets
+        core_weight = core_pct / len(base_weights) if base_weights else 0
+
+        # Satellite goes to highest momentum asset
+        momentum_scores = {}
+        for symbol_str in base_weights:
+            symbol = self._symbol_map.get(symbol_str)
+            if symbol:
+                momentum_scores[symbol_str] = self.GetHistoricalReturns(symbol, 63)
+
+        weights = {s: core_weight for s in base_weights}
+
+        if momentum_scores:
+            best = max(momentum_scores.items(), key=lambda x: x[1])[0]
+            weights[best] = weights.get(best, 0) + satellite_pct
+
+        return weights
+{% endif %}
+
+{% if position_sizing.method == "volatility_adjusted" %}
+    def _apply_vol_adjustment(self, weights: dict) -> dict:
+        """Adjust weights by inverse volatility."""
+        vol_lookback = {{ position_sizing.vol_lookback | default(21) }}
+        volatilities = {}
+
+        for symbol_str, weight in weights.items():
+            if weight <= 0:
+                continue
+            symbol = self._symbol_map.get(symbol_str)
+            if symbol:
+                vol = self.GetVolatility(symbol, vol_lookback)
+                if vol > 0 and vol != float('inf'):
+                    volatilities[symbol_str] = vol
+
+        if not volatilities:
+            return weights
+
+        # Inverse vol weighting
+        inv_vols = {s: 1.0/v for s, v in volatilities.items()}
+        total_inv = sum(inv_vols.values())
+
+        return {s: iv/total_inv for s, iv in inv_vols.items()}
+{% endif %}
+
+{% if use_mcclellan %}
+    def _load_mcclellan_data(self):
+        """Load McClellan Oscillator data from Object Store."""
+        try:
+            import pandas as pd
+            from io import StringIO
+
+            content = self.ObjectStore.Read("research/mcclellan/mcclellan_osc.csv")
+            self._mcclellan_data = pd.read_csv(StringIO(content), index_col='Date', parse_dates=True)
+            self.Debug(f"Loaded McClellan data: {len(self._mcclellan_data)} rows")
+        except Exception as e:
+            self.Debug(f"Failed to load McClellan data: {e}")
+            self._mcclellan_data = None
+{% endif %}
+{% endblock %}
