@@ -4,10 +4,11 @@ Workspace Management
 Handles the separation between application code and user data.
 Each user has their own workspace containing their catalog, validations, and data.
 
-The workspace path can be set via:
-1. --workspace flag on any command
+The workspace path is resolved in this order:
+1. --workspace flag on any command (explicit)
 2. RESEARCH_WORKSPACE environment variable
-3. ~/.research-workspace (default)
+3. Auto-detect: walk up from cwd looking for config.json (like git finds .git)
+4. ~/.research-workspace (default)
 """
 
 import os
@@ -26,6 +27,45 @@ WORKSPACE_ENV_VAR = "RESEARCH_WORKSPACE"
 
 # Lean CLI credentials location
 LEAN_CREDENTIALS_PATH = Path.home() / ".lean" / "credentials"
+
+
+def _find_workspace_in_parents(start_path: Optional[Path] = None) -> Optional[Path]:
+    """
+    Walk up directory tree looking for a workspace (config.json file).
+
+    Similar to how git finds .git directory.
+
+    Args:
+        start_path: Starting directory (defaults to cwd)
+
+    Returns:
+        Path to workspace directory if found, None otherwise
+    """
+    current = (start_path or Path.cwd()).resolve()
+
+    # Don't search above home directory
+    home = Path.home().resolve()
+
+    while current != current.parent:  # Stop at filesystem root
+        config_file = current / "config.json"
+        if config_file.exists():
+            # Verify it looks like a workspace config (has expected keys)
+            try:
+                with open(config_file) as f:
+                    data = json.load(f)
+                # Check for workspace-specific keys
+                if "name" in data and ("inbox_dir" in data or "created_at" in data):
+                    return current
+            except (json.JSONDecodeError, IOError):
+                pass
+
+        # Don't search above home directory
+        if current == home:
+            break
+
+        current = current.parent
+
+    return None
 
 
 @dataclass
@@ -145,13 +185,24 @@ class Workspace:
 
     @staticmethod
     def _resolve_path(path: Optional[Path]) -> Path:
-        """Resolve workspace path from argument, env, or default."""
+        """
+        Resolve workspace path with priority:
+        1. Explicit path argument
+        2. RESEARCH_WORKSPACE environment variable
+        3. Auto-detect by walking up from cwd (like git finds .git)
+        4. Default ~/.research-workspace
+        """
         if path:
             return Path(path).expanduser().resolve()
 
         env_path = os.environ.get(WORKSPACE_ENV_VAR)
         if env_path:
             return Path(env_path).expanduser().resolve()
+
+        # Try to auto-detect workspace in current or parent directories
+        detected = _find_workspace_in_parents()
+        if detected:
+            return detected
 
         return DEFAULT_WORKSPACE
 
