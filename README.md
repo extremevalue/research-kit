@@ -309,6 +309,24 @@ research v4-ideate --dry-run            # Preview without saving
 └── logs/                     # Daily rotating logs
 ```
 
+## Workspace Location
+
+By default, all V4 commands use `~/.research-workspace-v4`. To use a different location, you have two options:
+
+**Option 1: Set environment variable (recommended)**
+```bash
+export RESEARCH_WORKSPACE=~/my-research
+research v4-status  # Uses ~/my-research
+```
+
+**Option 2: Use --workspace flag on each command**
+```bash
+research v4-status --workspace ~/my-research
+research v4-list --workspace ~/my-research
+```
+
+> **Note:** Simply `cd`ing into a workspace directory does NOT automatically select it. You must use one of the options above.
+
 ## Environment Variables
 
 | Variable | Description | Default |
@@ -323,7 +341,7 @@ Run `research init --v4` to create a workspace:
 
 ```bash
 research init --v4 ~/my-research
-cd ~/my-research
+export RESEARCH_WORKSPACE=~/my-research
 research v4-status
 ```
 

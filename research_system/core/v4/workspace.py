@@ -508,7 +508,11 @@ class V4Workspace:
         # Count other items
         idea_count = len(list(self.ideas_path.glob("*.yaml"))) if self.ideas_path.exists() else 0
         validation_count = len(list(self.validations_path.iterdir())) if self.validations_path.exists() else 0
-        inbox_count = len([f for f in self.inbox_path.rglob("*") if f.is_file()]) if self.inbox_path.exists() else 0
+        # Count inbox files, excluding hidden files (.DS_Store, .gitkeep, etc.)
+        inbox_count = len([
+            f for f in self.inbox_path.rglob("*")
+            if f.is_file() and not f.name.startswith(".")
+        ]) if self.inbox_path.exists() else 0
 
         # Get counters
         counters = self._read_counters()

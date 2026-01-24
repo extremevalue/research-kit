@@ -17,10 +17,12 @@ Stage 2: Deterministic Processing (Python)
 import hashlib
 import json
 import shutil
+import fcntl
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Set
 from dataclasses import dataclass, field
 from datetime import datetime
+from contextlib import contextmanager
 
 from research_system.core.workspace import Workspace
 from research_system.core.catalog import Catalog
@@ -171,6 +173,38 @@ class IngestProcessor:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
+    def _get_lock_path(self, file_path: Path) -> Path:
+        """Get lock file path for a given inbox file."""
+        lock_dir = self.workspace.work_path / "locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        # Use hash of path to create unique lock filename
+        path_hash = hashlib.md5(str(file_path).encode()).hexdigest()[:16]
+        return lock_dir / f"{path_hash}.lock"
+
+    @contextmanager
+    def _file_lock(self, file_path: Path):
+        """Acquire exclusive lock for processing a file.
+
+        Uses fcntl for file locking to prevent race conditions
+        when multiple ingest processes run concurrently.
+        """
+        lock_path = self._get_lock_path(file_path)
+        lock_file = None
+        try:
+            lock_file = open(lock_path, 'w')
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield True  # Lock acquired
+        except (IOError, OSError):
+            yield False  # Lock not acquired (another process has it)
+        finally:
+            if lock_file:
+                try:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    lock_file.close()
+                    lock_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
     def _get_relative_path(self, file_path: Path) -> str:
         """Get path relative to inbox, preserving subdirectory structure."""
         try:
@@ -242,11 +276,37 @@ class IngestProcessor:
             dry_run=dry_run
         )
 
+        # Check if file still exists (may have been processed by concurrent ingest)
+        if not file_path.exists():
+            result.skipped_reason = "File already processed by another ingest"
+            return result
+
+        # Try to acquire lock for this file (prevents concurrent processing)
+        with self._file_lock(file_path) as lock_acquired:
+            if not lock_acquired:
+                result.skipped_reason = "File being processed by another ingest"
+                return result
+
+            # Re-check file exists after acquiring lock
+            if not file_path.exists():
+                result.skipped_reason = "File already processed by another ingest"
+                return result
+
+            return self._process_file_locked(file_path, result, dry_run, known_hashes)
+
+    def _process_file_locked(
+        self,
+        file_path: Path,
+        result: IngestResult,
+        dry_run: bool,
+        known_hashes: Optional[Dict[str, str]]
+    ) -> IngestResult:
+        """Process a file after acquiring lock."""
         # Compute content hash for duplicate detection
         try:
             content_hash = self.compute_file_hash(file_path)
             result.content_hash = content_hash
-        except IOError as e:
+        except (IOError, FileNotFoundError) as e:
             result.success = False
             result.error = f"Cannot read file: {e}"
             return result
@@ -463,8 +523,15 @@ class IngestProcessor:
             # Don't fail ingest if classification fails
             pass
 
-    def _move_to_sources(self, file_path: Path, content_hash: str):
-        """Move file to catalog/sources/ with preserved subdirectory structure."""
+    def _move_to_sources(self, file_path: Path, content_hash: str) -> bool:
+        """Move file to catalog/sources/ with preserved subdirectory structure.
+
+        Returns:
+            True if file was moved, False if file was already gone (concurrent processing).
+        """
+        if not file_path.exists():
+            return False  # File already moved by concurrent process
+
         relative_path = self._get_relative_path(file_path)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         hash_prefix = content_hash[:8]
@@ -481,11 +548,22 @@ class IngestProcessor:
         # Ensure directory exists
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Move file
-        shutil.move(str(file_path), str(dest_path))
+        # Move file with race condition handling
+        try:
+            shutil.move(str(file_path), str(dest_path))
+            return True
+        except FileNotFoundError:
+            return False  # File already moved by concurrent process
 
-    def _move_to_reviewed(self, file_path: Path, content_hash: str):
-        """Move file to reviewed/ with preserved subdirectory structure."""
+    def _move_to_reviewed(self, file_path: Path, content_hash: str) -> bool:
+        """Move file to reviewed/ with preserved subdirectory structure.
+
+        Returns:
+            True if file was moved, False if file was already gone (concurrent processing).
+        """
+        if not file_path.exists():
+            return False  # File already moved by concurrent process
+
         relative_path = self._get_relative_path(file_path)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         hash_prefix = content_hash[:8]
@@ -502,8 +580,12 @@ class IngestProcessor:
         # Ensure directory exists
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Move file
-        shutil.move(str(file_path), str(dest_path))
+        # Move file with race condition handling
+        try:
+            shutil.move(str(file_path), str(dest_path))
+            return True
+        except FileNotFoundError:
+            return False  # File already moved by concurrent process
 
     def _process_data_file(
         self,
