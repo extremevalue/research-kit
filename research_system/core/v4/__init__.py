@@ -4,10 +4,12 @@ This package provides the core components for the V4 research-kit system:
 
 - Configuration loading and validation (research-kit.yaml)
 - Workspace management (directories, ID generation)
+- Logging configuration with daily rotation
 
 Example usage:
     from research_system.core.v4 import load_config, get_default_config, V4Config
     from research_system.core.v4 import V4Workspace, get_v4_workspace
+    from research_system.core.v4 import setup_logging, get_logger, V4LogManager
 
     # Load config from file or use defaults
     config = load_config()
@@ -31,6 +33,14 @@ Example usage:
     # Generate IDs
     strat_id = workspace.next_strategy_id()  # STRAT-001
     idea_id = workspace.next_idea_id()       # IDEA-001
+
+    # Set up logging
+    logger = setup_logging(workspace.path)
+    logger.info("Starting research process")
+
+    # Get named loggers for components
+    ingest_logger = get_logger("research_system.ingest")
+    ingest_logger.debug("Processing file")
 """
 
 from research_system.core.v4.config import (
@@ -64,6 +74,13 @@ from research_system.core.v4.workspace import (
     WORKSPACE_ENV_VAR,
 )
 
+from research_system.core.v4.logging import (
+    # Logging setup
+    setup_logging,
+    get_logger,
+    V4LogManager,
+)
+
 __all__ = [
     # Configuration models
     "V4Config",
@@ -88,4 +105,8 @@ __all__ = [
     # Constants
     "DEFAULT_V4_WORKSPACE",
     "WORKSPACE_ENV_VAR",
+    # Logging
+    "setup_logging",
+    "get_logger",
+    "V4LogManager",
 ]
