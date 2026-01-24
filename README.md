@@ -1,599 +1,341 @@
-# Research Validation System
+# Research-Kit V4
 
-A systematic framework for validating trading strategies and indicators with proper statistical rigor, mandatory quality gates, and multi-perspective analysis.
-
-> **V2 Development Status**: See [docs/V2-STATUS.md](docs/V2-STATUS.md) for current progress on the v2 rebuild (schemas, code generation, walk-forward validation).
+A structured workflow for ingesting, organizing, and validating trading strategy research.
 
 ## What This Tool Does
 
-This tool helps you:
+Research-Kit V4 helps you:
 
-1. **Organize research** - Catalog trading indicators, strategies, and ideas in a structured format
-2. **Validate hypotheses** - Test if trading signals actually work using QuantConnect backtesting
-3. **Ensure statistical rigor** - Apply proper significance testing (p-values, Bonferroni correction)
-4. **Avoid common mistakes** - Mandatory checks for look-ahead bias, survivorship bias, overfitting
-5. **Get diverse perspectives** - AI personas (momentum trader, risk manager, etc.) analyze results
+1. **Ingest research** - Drop transcripts, papers, and notes into your inbox. The system extracts structured strategy information using LLM analysis.
+2. **Quality scoring** - Each strategy is scored for specificity (0-8) and trust (0-100), with automatic red flag detection.
+3. **Organize strategies** - Strategies are organized by status (pending, validated, invalidated, blocked).
+4. **Track progress** - View your workspace status, list strategies, and see detailed information.
 
 ## Requirements
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- [Lean CLI](https://www.lean.io/docs/lean-cli/installation) (optional) - credentials auto-detected for QC integration
+- Anthropic API key (for LLM extraction)
 
 ## Quick Start
 
 ### 1. Install
 
-**Recommended: Install with uv**
-
 ```bash
-# Install persistently (available in PATH)
-uv tool install research-kit --from git+https://github.com/your-repo/research-kit.git
+# Install with uv (recommended)
+uv tool install research-kit --from git+https://github.com/extremevalue/research-kit.git
 
-# Or run once without installing
-uvx --from git+https://github.com/your-repo/research-kit.git research --help
+# Or with pip
+pip3 install git+https://github.com/extremevalue/research-kit.git
 ```
 
-**Alternative: Install with pip**
+> **Note:** If you see "externally managed environment" error on macOS, use `uv` or create a virtual environment first.
+
+### 2. Initialize a V4 Workspace
 
 ```bash
-# Use pip3 or python -m pip (works on all systems)
-pip3 install git+https://github.com/your-repo/research-kit.git
+# Create a new V4 workspace
+research init --v4 ~/my-research
 
-# Or explicitly with python
-python3 -m pip install git+https://github.com/your-repo/research-kit.git
-```
-
-> **Note:** If you see "externally managed environment" error (common on macOS with Homebrew Python), use `uv` instead or create a virtual environment first:
-> ```bash
-> python3 -m venv .venv && source .venv/bin/activate
-> pip install git+https://github.com/your-repo/research-kit.git
-> ```
-
-**Development install**
-
-```bash
-git clone https://github.com/your-repo/research-kit.git
-cd research-kit
-
-# Option 1: Activate existing .venv (if present)
-source .venv/bin/activate
-
-# Option 2: Create new venv
-python3 -m venv .venv && source .venv/bin/activate
-
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
-```
-
-### Upgrade
-
-```bash
-# With uv
-uv tool install research-kit --force --from git+https://github.com/your-repo/research-kit.git
-
-# With pip
-pip3 install --upgrade git+https://github.com/your-repo/research-kit.git
-```
-
-### 2. Initialize a Workspace
-
-Your workspace is where YOUR data lives - completely separate from the tool itself.
-
-```bash
-# Create a new workspace
-research init ~/my-research
-
-# Or let it use the default location (~/.research-workspace)
-research init
+# Or use the default location
+research init --v4
 ```
 
 This creates:
 ```
 ~/my-research/
-├── inbox/              # Drop files here to process
-├── reviewed/           # Processed files that didn't create entries (purgeable)
-├── catalog/
-│   ├── entries/        # Catalog entry metadata (JSON)
-│   └── sources/        # Original files that created entries
-├── data-registry/      # Your data source definitions
-├── validations/        # Test results
-├── combinations/       # Generated combinations
-└── config.json         # Your settings
+├── research-kit.yaml     # Configuration
+├── inbox/                # Drop files here to ingest
+├── strategies/
+│   ├── pending/          # Newly ingested, awaiting validation
+│   ├── validated/        # Passed validation
+│   ├── invalidated/      # Failed validation
+│   └── blocked/          # Missing data dependencies
+├── validations/          # Validation results
+├── learnings/            # Extracted learnings
+├── ideas/                # Strategy ideas
+├── archive/              # Archived/rejected items
+└── logs/                 # Daily rotating logs
 ```
 
-### 3. Ingest Research Materials
+### 3. Set Up API Key
 
-Drop files into your `inbox/` folder, then process them:
+Create a `.env` file in your workspace (copy from `.env.template`):
 
 ```bash
-# Copy research files to inbox
-cp ~/Downloads/strategy_paper.pdf ~/my-research/inbox/
-cp -r ~/research/papers/ ~/my-research/inbox/
+cd ~/my-research
+cp .env.template .env
+```
+
+Edit `.env` and add your Anthropic API key:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 4. Ingest Research
+
+Drop files into your `inbox/` folder:
+
+```bash
+cp ~/Downloads/strategy_transcript.txt ~/my-research/inbox/
+```
+
+Then run ingest:
+
+```bash
+# Preview what would happen
+research v4-ingest --dry-run
 
 # Process all files in inbox
-research ingest process
+research v4-ingest
 
-# Or preview what would happen
-research ingest process --dry-run
-
-# List inbox contents
-research ingest list
+# Process a specific file
+research v4-ingest ~/my-research/inbox/strategy_transcript.txt
 ```
 
-**What happens during ingest:**
-1. Each file is hashed (detects duplicates)
-2. LLM extracts metadata (type, name, summary, data requirements)
-3. Catalog entry is created
-4. File moves to `catalog/sources/` (if entry created) or `reviewed/` (if skipped)
-
-### 4. Work with Your Catalog
+### 5. View Your Strategies
 
 ```bash
-# See what's in your catalog
-research catalog list
+# Check workspace status
+research v4-status
 
-# See catalog statistics
-research catalog stats
+# List all strategies
+research v4-list
 
-# Search entries
-research catalog search "momentum"
+# Filter by status
+research v4-list --status pending
 
-# Show entry details
-research catalog show IND-002
+# View strategy details
+research v4-show STRAT-001
+
+# Export as YAML or JSON
+research v4-show STRAT-001 --format yaml
 ```
 
-### 5. Validate Entries
+## Example Workflow
 
 ```bash
-# Start validating an entry
-research validate start IND-002
+# 1. Initialize workspace
+research init --v4 ~/trading-research
+cd ~/trading-research
 
-# Check validation status
-research validate status IND-002
+# 2. Set up API key
+echo "ANTHROPIC_API_KEY=sk-ant-xxx" > .env
 
-# Generate indicator+strategy combinations
-research combine generate
+# 3. Add a podcast transcript to inbox
+cp "Macro Voices Episode 412.txt" inbox/
+
+# 4. Check status - should show 1 file in inbox
+research v4-status
+
+# 5. Preview ingestion
+research v4-ingest --dry-run
+
+# 6. Run ingestion
+research v4-ingest
+
+# 7. Check what was created
+research v4-list
+
+# 8. View the strategy details
+research v4-show STRAT-001
 ```
 
 ## Commands Reference
 
-### `research init [path]`
+### `research init --v4 [path]`
 
-Initialize a new workspace.
-
-```bash
-research init ~/my-workspace             # Specific location
-research init                            # Default: ~/.research-workspace
-research init --name "Trading Research"  # Custom name
-research init --force                    # Overwrite existing
-```
-
-### `research ingest <action>`
-
-Process inbox files into catalog entries.
+Initialize a new V4 workspace.
 
 ```bash
-research ingest list                     # List inbox contents
-research ingest process                  # Process all inbox files
-research ingest process --dry-run        # Preview without changes
-research ingest process --file paper.pdf # Process specific file
+research init --v4                      # Default: ~/.research-workspace-v4
+research init --v4 ~/my-workspace       # Specific location
+research init --v4 --force              # Reinitialize existing
 ```
 
-**Features:**
-- Recursive scanning of inbox subdirectories
-- Content hashing to detect duplicates
-- Preserves subdirectory structure in destination
-- Automatic categorization (indicator, strategy, idea, etc.)
+### `research v4-status`
 
-**File destinations:**
-- **catalog/sources/** - Files that created catalog entries
-- **reviewed/** - Processed but skipped files (purgeable)
-
-### `research catalog <action>`
-
-Manage your research catalog.
+Show workspace dashboard with strategy counts, inbox status, and suggested next actions.
 
 ```bash
-research catalog list                    # List all entries
-research catalog list --type indicator   # Filter by type
-research catalog list --status VALIDATED # Filter by status
-research catalog show IND-002            # Show entry details
-research catalog stats                   # Show statistics
-research catalog search "momentum"       # Search entries
+research v4-status
+research v4-status --workspace ~/my-workspace
 ```
 
-**Entry types:** `indicator`, `strategy`, `idea`, `learning`, `tool`, `data`
+### `research v4-ingest [file]`
 
-**Entry statuses:** `UNTESTED`, `IN_PROGRESS`, `VALIDATED`, `CONDITIONAL`, `INVALIDATED`, `BLOCKED`
-
-### `research validate <action>`
-
-Run the validation pipeline.
+Process inbox files into strategy documents.
 
 ```bash
-research validate start IND-002          # Start validation
-research validate status IND-002         # Check status
-research validate hypothesis IND-002     # Submit hypothesis for validation
-research validate audit IND-002          # Run data audit
-research validate run IND-002            # Run next step
-research validate list                   # List all validations
+research v4-ingest                      # Process all inbox files
+research v4-ingest --dry-run            # Preview without changes
+research v4-ingest /path/to/file.txt    # Process specific file
 ```
 
-**Hypothesis File Format:**
+**What happens during ingest:**
+1. File content is extracted and sent to LLM for analysis
+2. Strategy metadata is extracted (name, hypothesis, edge, universe, entry/exit logic)
+3. Quality scoring: specificity (0-8) and trust (0-100)
+4. Red flag detection (selling author, no transaction costs, etc.)
+5. Decision: accept (→ pending), queue, archive, or reject
+6. Original file is archived
 
-After `validate start`, create a `hypothesis.json` in the validation folder:
+### `research v4-list`
 
-```json
-{
-  "statement": "SPY with 200-day SMA filter produces higher risk-adjusted returns than buy-and-hold",
-  "null_hypothesis": "The SMA filter provides no improvement over buy-and-hold",
-  "primary_metric": "sharpe_ratio",
-  "success_threshold": 0.1,
-  "parameters": {
-    "sma_period": 200,
-    "asset": "SPY"
-  },
-  "locked": false
-}
-```
-
-Submit with `research validate hypothesis IND-002` (locks parameters before testing).
-
-**Validation Pipeline Stages:**
-1. **HYPOTHESIS** - Define and lock your testable hypothesis
-2. **DATA_AUDIT** - Verify data availability and quality (MANDATORY)
-3. **IS_TESTING** - Run in-sample backtest (15+ years)
-4. **STATISTICAL** - Verify statistical significance
-5. **REGIME** - Analyze performance by market regime
-6. **OOS_TESTING** - Run out-of-sample backtest (ONE SHOT - no retries!)
-7. **DETERMINATION** - Make final decision (VALIDATED/CONDITIONAL/INVALIDATED)
-
-### `research develop <entry_id>`
-
-Develop a vague idea into a fully-specified strategy through guided questions.
+List strategies with optional filtering.
 
 ```bash
-research develop IDEA-001                # Start development workflow
-research develop STRAT-003               # Refine an existing strategy
+research v4-list                        # All strategies
+research v4-list --status pending       # Filter by status
+research v4-list --tags momentum        # Filter by tags
+research v4-list --format json          # JSON output
 ```
 
-The develop command walks through 10 structured steps:
-1. Hypothesis clarification
-2. Success criteria definition
-3. Universe selection
-4. Diversification check
-5. Structure (core+satellite, regime, rotation)
-6. Signal specification
-7. Risk management
-8. Testing protocol
-9. Implementation details
-10. Monitoring plan
+**Output columns:** ID, Name, Status, Created
 
-Output is saved to `develop/<entry_id>/` in your workspace.
+### `research v4-show <strategy_id>`
 
-### `research data <action>`
-
-Manage data sources.
+Display full strategy details.
 
 ```bash
-research data list                       # List all data sources
-research data show mcclellan_oscillator  # Show source details
-research data check spy_prices breadth   # Check availability
+research v4-show STRAT-001              # Human-readable format
+research v4-show STRAT-001 --format yaml  # Raw YAML
+research v4-show STRAT-001 --format json  # JSON output
 ```
 
-### `research combine <action>`
+## V4 Strategy Schema
 
-Generate and prioritize indicator + strategy combinations.
+Each strategy document contains:
 
-```bash
-research combine generate                # Generate all combinations
-research combine list --top 10           # Show top 10 by priority
-research combine prioritize              # Recalculate priorities
-research combine next --count 5          # Get next 5 to test
+- **Metadata**: ID, name, created date, status
+- **Source**: Type (podcast, paper, etc.), author, track record
+- **Hypothesis**: Thesis, type, testable prediction, expected Sharpe
+- **Edge**: Category (behavioral, structural), why it exists/persists
+- **Universe**: Symbols, filters
+- **Entry**: Signal logic, conditions
+- **Exit**: Exit paths (stops, targets, reversals)
+- **Data Requirements**: Primary data, derived indicators
+
+## Quality Scoring
+
+### Specificity Score (0-8)
+
+Higher is better. Measures how concrete and actionable the strategy is.
+
+| Score | Description |
+|-------|-------------|
+| 7-8   | Ready to code - all parameters specified |
+| 5-6   | Mostly complete - minor gaps |
+| 3-4   | Vague - needs development |
+| 0-2   | Very vague - just an idea |
+
+### Trust Score (0-100)
+
+Measures credibility of the source and author.
+
+| Score | Description |
+|-------|-------------|
+| 80+   | Verified fund manager, academic research |
+| 60-79 | Practitioner with track record |
+| 40-59 | Unknown author, some evidence |
+| 0-39  | Unverified, potential conflicts |
+
+### Red Flags
+
+Hard flags (reject):
+- Selling something
+- Obviously fraudulent claims
+
+Soft flags (queue for review):
+- No mention of transaction costs
+- Survivorship bias risk
+- Lack of out-of-sample testing
+
+## Configuration
+
+The `research-kit.yaml` file in your workspace controls:
+
+```yaml
+gates:
+  min_specificity: 4        # Minimum specificity to accept
+  min_trust: 30             # Minimum trust to accept
+  is_years: 15              # In-sample period for validation
+  oos_years: 4              # Out-of-sample period
+
+scoring:
+  specificity:
+    entry_logic: 2          # Weight for entry logic
+    exit_logic: 1           # Weight for exit logic
 ```
-
-### `research ideate`
-
-Generate new strategy ideas using AI personas.
-
-```bash
-research ideate                          # Run all 3 personas
-research ideate --count 2                # Generate 2 ideas per persona
-research ideate --add-to-catalog         # Auto-add generated ideas to catalog
-```
-
-**Personas:**
-- **edge-hunter** - Finds micro-structure and timing edges
-- **macro-strategist** - Cross-asset, regime-aware themes
-- **quant-archaeologist** - Rehabilitates failed approaches with modern techniques
-
-Ideas are generated based on your catalog's validated/invalidated entries and available data sources.
-
-### `research analyze <action>`
-
-Run multi-persona analysis on validation results.
-
-```bash
-research analyze run IND-002             # Full analysis
-research analyze run IND-002 --persona contrarian  # Specific persona
-research analyze show IND-002            # Show results
-```
-
-**Personas:**
-- **momentum-trader** - Trend-following perspective
-- **risk-manager** - Risk and drawdown focus
-- **quant-researcher** - Statistical rigor
-- **mad-genius** - Unconventional, creative insights
-- **contrarian** - Challenges consensus
-- **report-synthesizer** - Integrates all perspectives
-
-### `research synthesize`
-
-Run cross-strategy synthesis with an expert panel. Analyzes all validated strategies to identify portfolio construction opportunities, instrument expansion, and creative combinations.
-
-```bash
-research synthesize                      # Full synthesis with all personas
-research synthesize --dry-run            # Preview what would be analyzed
-research synthesize --persona creative-maverick  # Run single persona
-research synthesize --create-entries     # Create catalog entries from recommendations
-research synthesize --top 25             # Limit to top 25 by Sharpe
-research synthesize --min-sharpe 0.5     # Filter by minimum Sharpe
-```
-
-**Personas:**
-- **portfolio-architect** - Correlation, allocation, portfolio construction
-- **instrument-specialist** - Options, futures, ETF opportunities
-- **data-integrator** - Alternative data enhancement
-- **regime-strategist** - Market regime analysis
-- **creative-maverick** - Unconventional ideas and combinations
-- **synthesis-director** - Integrates all perspectives
-
-**Output:**
-- Markdown report saved to `synthesis/` directory
-- Optional: New catalog entries created from recommendations
-
-### `research migrate <action>`
-
-Import from external sources.
-
-```bash
-research migrate master-index /path/to/MASTER_INDEX.json
-research migrate master-index /path/to/MASTER_INDEX.json --dry-run
-```
-
-## System Overview
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                          Research Validation Pipeline                         │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                               │
-│  ┌─────────┐    ┌─────────┐    ┌──────────┐    ┌─────────────┐               │
-│  │ SOURCES │───▶│  INBOX  │───▶│  INGEST  │───▶│   CATALOG   │               │
-│  │ Papers  │    │ Drop    │    │ Extract  │    │ IND-001     │               │
-│  │ Ideas   │    │ files   │    │ metadata │    │ STRAT-002   │               │
-│  │ Data    │    │ here    │    │ via LLM  │    │ IDEA-003    │               │
-│  └─────────┘    └─────────┘    └──────────┘    └──────┬──────┘               │
-│                                                       │                       │
-│       ┌─────────────────────────────────────────────┬─┴───────┐               │
-│       ▼                                             ▼         ▼               │
-│  ┌─────────┐                                  ┌──────────┐  ┌───────┐         │
-│  │ IDEATE  │                                  │ COMBINE  │  │VALIDATE│        │
-│  │ 3 AI    │                                  │ Generate │  │Pipeline│        │
-│  │ personas│──────────────────────────────────▶│ IND+STRAT│──▶│ 7 gates│        │
-│  └─────────┘                                  └──────────┘  └───┬───┘         │
-│                                                                 │              │
-│           ┌─────────────────────────────────────────────────────┘              │
-│           ▼                                                                    │
-│      ┌──────────────────────────────────────────────────────────┐             │
-│      │  DETERMINATION:  VALIDATED  |  CONDITIONAL  |  INVALIDATED │            │
-│      └──────────────────────────────────────────────────────────┘             │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Key Concepts
-
-### Workspace vs Application
-
-The **application** (this tool) and your **workspace** (your data) are completely separate:
-
-- **Application**: Install once, upgrade anytime. Your data is untouched.
-- **Workspace**: Your catalog, validations, data registry. Back this up.
-
-This means you can:
-- Reinstall the tool without losing your work
-- Give the tool to 100 people - each creates their own workspace
-- Upgrade to a new version without touching your data
-- Back up just your workspace directory
-
-### The Validation Pipeline
-
-Every validation follows the same rigorous process:
-
-```
-HYPOTHESIS → DATA_AUDIT → IS_TESTING → STATISTICAL → REGIME → OOS → DETERMINATION
-     │            │           │            │          │       │
-     │            │           │            │          │       └─▶ VALIDATED
-     │            │           │            │          │           CONDITIONAL
-     │            │           │            │          │           INVALIDATED
-     │            │           │            │          │
-     │            │           │            │          └─▶ (skip if IS fails)
-     │            │           │            │
-     │            │           │            └─▶ FAIL if p > 0.01/N (Bonferroni)
-     │            │           │
-     │            │           └─▶ FAIL if alpha < 1% or Sharpe improvement < 0.10
-     │            │
-     │            └─▶ FAIL if lookahead bias, wrong columns, insufficient data
-     │
-     └─▶ REJECT if not falsifiable, no clear hypothesis
-```
-
-**Key rules:**
-- Each gate must pass before proceeding
-- Parameters are locked before testing begins
-- **OOS is ONE SHOT** - no retries, no adjustments after seeing results
-- This prevents p-hacking and curve fitting
-
-### Data Resolution
-
-When a strategy requires data (e.g., `vix_index`, `spy_prices`), the system resolves it through multiple layers:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Data Requirement Resolution                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  "vix_index"  ──┬─▶  Registry Lookup (by ID)  ──┬──▶ FOUND      │
-│                 │                               │                │
-│                 └─▶  Registry Lookup (by alias) ─┘               │
-│                 │                                                │
-│                 └─▶  QC Native Aliases (150+)  ─────▶ VIX       │
-│                 │    - vix_index → VIX                          │
-│                 │    - eur_usd → EURUSD                         │
-│                 │    - sp500_futures → ES                       │
-│                 │                                                │
-│                 └─▶  QC Native Patterns ────────────▶ AUTO      │
-│                      - spy_prices → SPY                         │
-│                      - aapl_data → AAPL                         │
-│                                                                  │
-│  Resolution fails only if no match at any level                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Semantic aliases automatically resolve to QC Native data:**
-
-| Category | Examples | Resolves To |
-|----------|----------|-------------|
-| Cash Indices | `vix_index`, `sp500_index`, `dollar_index` | VIX, SPX, DXY |
-| Forex | `eur_usd`, `gbp_usd`, `usd_jpy` | EURUSD, GBPUSD, USDJPY |
-| Crypto | `bitcoin`, `ethereum` | BTCUSD, ETHUSD |
-| ETFs | `sp500_etf`, `gold_etf`, `vix_etf` | SPY, GLD, VXX |
-| Futures | `sp500_futures`, `gold_futures`, `oil_futures` | ES, GC, CL |
-| Sectors | `technology_etf`, `financials_etf` | XLK, XLF |
-
-**Data tiers (in resolution order):**
-
-1. **QC Native** - QuantConnect built-in data (always preferred)
-2. **QC Object Store** - Data you've uploaded to QC cloud
-3. **Internal Purchased** - Paid data you own
-4. **Internal Curated** - Free data you've validated
-5. **Internal Experimental** - Unverified data (use with caution)
-
-### Statistical Thresholds
-
-| Metric | Threshold | Description |
-|--------|-----------|-------------|
-| p-value | < 0.01 | Single test significance |
-| p-value (corrected) | < 0.01/N | Multiple tests (Bonferroni) |
-| Alpha | > 1% | Minimum annualized alpha |
-| Sharpe improvement | > 0.10 | For filter tests vs baseline |
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RESEARCH_WORKSPACE` | Path to your workspace | `~/.research-workspace` |
-
-## Configuration
-
-The workspace `config.json` contains your settings:
-
-```json
-{
-  "name": "My Research",
-  "qc_user_id": "",
-  "qc_api_token": "",
-  "qc_organization_id": "",
-  "min_is_years": 15,
-  "min_oos_years": 4,
-  "base_alpha": 0.01,
-  "min_sharpe_improvement": 0.10,
-  "min_alpha_threshold": 0.01
-}
-```
-
-### QuantConnect Credentials
-
-QC credentials are resolved in this order:
-
-1. **Workspace config** - If `qc_user_id` and `qc_api_token` are set in `config.json`, those are used
-2. **Lean CLI** - Falls back to `~/.lean/credentials` if available (auto-detected)
-
-If you have Lean CLI configured, you don't need to duplicate credentials in your workspace config.
+| `RESEARCH_WORKSPACE` | Path to V4 workspace | `~/.research-workspace-v4` |
+| `ANTHROPIC_API_KEY` | API key for LLM extraction | (required) |
 
 ## Workspace Structure
 
 ```
 ~/my-research/
-├── config.json               # Your settings
-├── inbox/                    # Drop files here to process
-│   └── papers/               # Subdirectories preserved
-├── reviewed/                 # Processed but not cataloged (purgeable)
-│   └── papers/               # Subdirectory structure preserved
-├── catalog/
-│   ├── index.json            # Quick-lookup index
-│   ├── entries/              # One JSON file per entry
-│   │   ├── IND-001.json
-│   │   ├── IND-002.json
-│   │   └── STRAT-001.json
-│   └── sources/              # Original files that created entries
-│       └── papers/           # Subdirectory structure preserved
-│           └── 20251223_a1b2c3d4_strategy.pdf
-├── data-registry/
-│   ├── registry.json         # Data source definitions
-│   └── sources/              # Local data files
-├── validations/
-│   └── IND-002/              # One folder per validation
-│       ├── metadata.json
-│       ├── hypothesis.json
-│       ├── data_audit.json
-│       ├── is_test/
-│       ├── oos_test/
-│       └── determination.json
-└── combinations/
-    └── matrix.json           # Generated combinations
+├── .state/                   # Internal state (counters, locks)
+├── research-kit.yaml         # Configuration
+├── .env                      # API keys (git-ignored)
+├── inbox/                    # Drop files here
+├── strategies/
+│   ├── pending/              # STRAT-001.yaml, STRAT-002.yaml, ...
+│   ├── validated/
+│   ├── invalidated/
+│   └── blocked/
+├── validations/              # Walk-forward validation results
+├── learnings/                # Extracted learnings
+├── ideas/                    # IDEA-001.yaml, ...
+├── personas/                 # AI persona configurations
+├── archive/                  # Archived files
+│   ├── processed/            # Files that were successfully ingested
+│   └── rejected/             # Files that were rejected
+└── logs/                     # Daily rotating logs
+    └── research-kit.2024-01-15.log
 ```
-
-**File naming in sources/ and reviewed/:**
-- Format: `{timestamp}_{hash8}_{original_name}`
-- Example: `20251223_a1b2c3d4_strategy.pdf`
-- Timestamp ensures uniqueness, hash detects duplicates
-
-## Design Principles
-
-1. **Code over context** - Deterministic scripts do the testing, not LLM judgment
-2. **Separation of concerns** - Application code separate from user data
-3. **Schema enforcement** - JSON Schema validation for all data structures
-4. **Mandatory gates** - No skipping steps, enforced by code
-5. **Reproducibility** - Every artifact self-contained and re-runnable
-6. **Audit trail** - Every action logged with provenance
 
 ## Troubleshooting
 
-### "Workspace not initialized"
+### "V4 workspace not initialized"
 
-Run `research init` to create a workspace, or set `RESEARCH_WORKSPACE` to point to your existing workspace.
+Run `research init --v4` to create a workspace:
 
 ```bash
+research init --v4 ~/my-research
 export RESEARCH_WORKSPACE=~/my-research
-research catalog list
+research v4-status
 ```
 
-### "Data source not found"
+### "LLM client not available"
 
-Add the data source to your `data-registry/registry.json` or check that the ID matches exactly.
+Set your Anthropic API key:
 
-### "Entry not found"
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+# Or add to .env file in workspace
+```
 
-Check `research catalog list` to see available entries and their IDs.
+### "Strategy not found"
+
+Check available strategies:
+
+```bash
+research v4-list
+```
 
 ## Getting Help
 
 ```bash
-research --help                    # General help
-research <command> --help          # Command-specific help
-research validate --help           # Validation help
+research --help                     # General help
+research v4-ingest --help           # Command help
+research v4-list --help
+research v4-show --help
+research v4-status --help
 ```
 
 ## License
