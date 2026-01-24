@@ -229,10 +229,10 @@ class TestV4CommandHelp:
 
 
 class TestV4NotImplemented:
-    """Test that V4 commands print 'not implemented' message."""
+    """Test that V4 commands print 'not implemented' message or work correctly."""
 
-    def test_v4_ingest_not_implemented(self, tmp_path):
-        """Test v4-ingest prints not implemented message."""
+    def test_v4_ingest_empty_inbox(self, tmp_path):
+        """Test v4-ingest handles empty inbox gracefully."""
         # First init a v4 workspace
         subprocess.run(
             [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
@@ -249,7 +249,33 @@ class TestV4NotImplemented:
             cwd=Path(__file__).parent.parent.parent
         )
         assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert "no files found in inbox" in result.stdout.lower()
+
+    def test_v4_ingest_processes_file(self, tmp_path):
+        """Test v4-ingest processes a file from inbox."""
+        # First init a v4 workspace
+        subprocess.run(
+            [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent
+        )
+
+        # Create a test file in inbox
+        inbox_path = tmp_path / "inbox"
+        test_file = inbox_path / "test_strategy.txt"
+        test_file.write_text("Test strategy document")
+
+        result = subprocess.run(
+            [sys.executable, "-m", "research_system.cli.main", "v4-ingest",
+             "--workspace", str(tmp_path), "--dry-run"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent
+        )
+        assert result.returncode == 0
+        assert "processing" in result.stdout.lower()
+        assert "test_strategy.txt" in result.stdout
 
     def test_v4_verify_not_implemented(self, tmp_path):
         """Test v4-verify prints not implemented message."""
@@ -329,10 +355,11 @@ class TestV4NotImplemented:
             cwd=Path(__file__).parent.parent.parent
         )
         assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert "Research-Kit V4" in result.stdout
+        assert "Workspace" in result.stdout
 
-    def test_v4_list_not_implemented(self, tmp_path):
-        """Test v4-list prints not implemented message."""
+    def test_v4_list_works(self, tmp_path):
+        """Test v4-list works on empty workspace."""
         # First init a v4 workspace
         subprocess.run(
             [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
@@ -349,10 +376,10 @@ class TestV4NotImplemented:
             cwd=Path(__file__).parent.parent.parent
         )
         assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert "No strategies" in result.stdout
 
-    def test_v4_show_not_implemented(self, tmp_path):
-        """Test v4-show prints not implemented message."""
+    def test_v4_show_not_found(self, tmp_path):
+        """Test v4-show returns error for non-existent strategy."""
         # First init a v4 workspace
         subprocess.run(
             [sys.executable, "-m", "research_system.cli.main", "init", "--v4", str(tmp_path)],
@@ -368,8 +395,8 @@ class TestV4NotImplemented:
             text=True,
             cwd=Path(__file__).parent.parent.parent
         )
-        assert result.returncode == 0
-        assert "not implemented" in result.stdout.lower()
+        assert result.returncode == 1
+        assert "not found" in result.stdout
 
 
 # =============================================================================
