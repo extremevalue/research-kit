@@ -18,6 +18,10 @@ from research_system.validation.learner import (
     LearningsDocument,
     Learning,
 )
+from research_system.validation.ideator import (
+    V4Ideator,
+    StrategyIdea,
+)
 
 __all__ = [
     "V4Verifier",
@@ -32,4 +36,6 @@ __all__ = [
     "V4Learner",
     "LearningsDocument",
     "Learning",
+    "V4Ideator",
+    "StrategyIdea",
 ]
