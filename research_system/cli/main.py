@@ -961,6 +961,12 @@ Shows all strategy metadata including:
         help="Strategy ID to show (e.g., STRAT-001)"
     )
     parser.add_argument(
+        "--format", "-f",
+        choices=["text", "yaml", "json"],
+        default="text",
+        help="Output format (default: text)"
+    )
+    parser.add_argument(
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
@@ -1359,6 +1365,8 @@ def cmd_v4_list(args):
 
 def cmd_v4_show(args):
     """Show strategy details (V4)."""
+    import yaml
+
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
@@ -1368,10 +1376,159 @@ def cmd_v4_show(args):
         print("Run 'research init --v4' to initialize a V4 workspace.")
         return 1
 
-    print("V4 show command not implemented yet.")
-    print(f"Workspace: {workspace.path}")
-    print(f"Strategy ID: {args.strategy_id}")
+    strategy_id = args.strategy_id
+    output_format = getattr(args, 'format', 'text')
+
+    # Get strategy
+    strategy = workspace.get_strategy(strategy_id)
+
+    if strategy is None:
+        print(f"Error: Strategy '{strategy_id}' not found")
+        print(f"Searched in: {workspace.strategies_path}")
+        return 1
+
+    # Output based on format
+    if output_format == 'yaml':
+        # Remove internal fields
+        strategy.pop('_file', None)
+        strategy.pop('_status', None)
+        print(yaml.dump(strategy, default_flow_style=False, sort_keys=False))
+    elif output_format == 'json':
+        import json
+        # Remove internal fields
+        strategy.pop('_file', None)
+        status = strategy.pop('_status', None)
+        # Convert datetime to string
+        if 'created' in strategy and hasattr(strategy['created'], 'isoformat'):
+            strategy['created'] = strategy['created'].isoformat()
+        print(json.dumps(strategy, indent=2))
+    else:
+        # Human-readable text format
+        _print_strategy_details(strategy)
+
     return 0
+
+
+def _print_strategy_details(strategy: dict) -> None:
+    """Print strategy in human-readable format."""
+    status = strategy.get('_status', 'unknown')
+    filepath = strategy.get('_file', '')
+
+    # Header
+    print("\n" + "=" * 60)
+    print(f"Strategy: {strategy.get('id', 'Unknown')}")
+    print("=" * 60)
+
+    # Basic info
+    print(f"\nName:    {strategy.get('name', 'Unnamed')}")
+    print(f"Status:  {status}")
+    if strategy.get('created'):
+        created = strategy['created']
+        if hasattr(created, 'strftime'):
+            created = created.strftime('%Y-%m-%d %H:%M:%S')
+        print(f"Created: {created}")
+
+    # Source
+    source = strategy.get('source', {})
+    if source:
+        print(f"\n--- Source ---")
+        if source.get('type'):
+            print(f"Type:   {source['type']}")
+        if source.get('author'):
+            print(f"Author: {source['author']}")
+        if source.get('url'):
+            print(f"URL:    {source['url']}")
+        if source.get('track_record'):
+            print(f"Track Record: {source['track_record']}")
+
+    # Hypothesis
+    hypothesis = strategy.get('hypothesis', {})
+    if hypothesis:
+        print(f"\n--- Hypothesis ---")
+        if hypothesis.get('thesis'):
+            print(f"Thesis: {hypothesis['thesis']}")
+        if hypothesis.get('type'):
+            print(f"Type:   {hypothesis['type']}")
+        if hypothesis.get('testable_prediction'):
+            print(f"Testable Prediction: {hypothesis['testable_prediction']}")
+        if hypothesis.get('expected_sharpe'):
+            exp = hypothesis['expected_sharpe']
+            if isinstance(exp, dict):
+                print(f"Expected Sharpe: {exp.get('min', '?')} - {exp.get('max', '?')}")
+            else:
+                print(f"Expected Sharpe: {exp}")
+
+    # Edge
+    edge = strategy.get('edge', {})
+    if edge:
+        print(f"\n--- Edge ---")
+        if edge.get('category'):
+            print(f"Category: {edge['category']}")
+        if edge.get('why_exists'):
+            print(f"Why It Exists: {edge['why_exists']}")
+        if edge.get('why_persists'):
+            print(f"Why It Persists: {edge['why_persists']}")
+
+    # Universe
+    universe = strategy.get('universe', {})
+    if universe:
+        print(f"\n--- Universe ---")
+        if universe.get('type'):
+            print(f"Type: {universe['type']}")
+        if universe.get('symbols'):
+            symbols = universe['symbols']
+            if isinstance(symbols, list):
+                if len(symbols) <= 5:
+                    print(f"Symbols: {', '.join(symbols)}")
+                else:
+                    print(f"Symbols: {', '.join(symbols[:5])} ... (+{len(symbols)-5} more)")
+
+    # Entry
+    entry = strategy.get('entry', {})
+    if entry:
+        print(f"\n--- Entry ---")
+        if entry.get('type'):
+            print(f"Type: {entry['type']}")
+        signals = entry.get('signals', [])
+        for i, sig in enumerate(signals[:3], 1):
+            if isinstance(sig, dict):
+                print(f"Signal {i}: {sig.get('name', 'unnamed')} - {sig.get('condition', '')}")
+        if len(signals) > 3:
+            print(f"  ... and {len(signals)-3} more signals")
+
+    # Exit
+    exit_info = strategy.get('exit', {})
+    if exit_info:
+        print(f"\n--- Exit ---")
+        paths = exit_info.get('paths', [])
+        for path in paths[:3]:
+            if isinstance(path, dict):
+                print(f"- {path.get('name', 'unnamed')}: {path.get('condition', '')}")
+
+    # Data requirements
+    data_reqs = strategy.get('data_requirements', {})
+    if data_reqs:
+        print(f"\n--- Data Requirements ---")
+        primary = data_reqs.get('primary', [])
+        if primary:
+            print(f"Primary: {', '.join(str(d) for d in primary[:5])}")
+        derived = data_reqs.get('derived', [])
+        if derived:
+            print(f"Derived: {', '.join(str(d) for d in derived[:5])}")
+
+    # Tags
+    tags = strategy.get('tags', {})
+    if tags:
+        print(f"\n--- Tags ---")
+        if isinstance(tags, dict) and tags.get('custom'):
+            print(f"Custom: {', '.join(tags['custom'])}")
+        elif isinstance(tags, list):
+            print(f"Tags: {', '.join(tags)}")
+
+    # File location
+    print(f"\n--- Location ---")
+    print(f"File: {filepath}")
+    print()
 
 
 def cmd_v4_config(args):
