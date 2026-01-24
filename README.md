@@ -6,32 +6,20 @@ A structured workflow for ingesting, organizing, and validating trading strategy
 
 Research-Kit V4 helps you:
 
-1. **Ingest research** - Drop transcripts, papers, and notes into your inbox. The system extracts structured strategy information using LLM analysis.
-2. **Quality scoring** - Each strategy is scored for specificity (0-8) and trust (0-100), with automatic red flag detection.
-3. **Organize strategies** - Strategies are organized by status (pending, validated, invalidated, blocked).
-4. **Track progress** - View your workspace status, list strategies, and see detailed information.
+1. **Ingest research** - Drop transcripts, papers, and notes into your inbox
+2. **Organize strategies** - Strategies are organized by status (pending, validated, invalidated, blocked)
+3. **Track progress** - View your workspace status, list strategies, and see detailed information
 
 ## Requirements
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- Anthropic API key (for LLM extraction)
 
 ## Quick Start
 
 ### 1. Install
 
-```bash
-# Install with uv (recommended)
-uv tool install research-kit --from git+https://github.com/extremevalue/research-kit.git
-
-# Or with pip
-pip3 install git+https://github.com/extremevalue/research-kit.git
-```
-
-> **Note:** If you see "externally managed environment" error on macOS, use `uv` or create a virtual environment first.
-
-**Development install (from local clone):**
+**From local clone:**
 
 ```bash
 git clone https://github.com/extremevalue/research-kit.git
@@ -40,21 +28,27 @@ cd research-kit
 # Create virtual environment and install
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e .
 
 # Or with uv
 uv sync
 source .venv/bin/activate
 ```
 
+**From git (once published):**
+
+```bash
+pip3 install git+https://github.com/extremevalue/research-kit.git
+```
+
+> **Note:** If you see "externally managed environment" error on macOS, use `uv` or create a virtual environment first.
+
 ### 2. Initialize a V4 Workspace
 
 ```bash
 # Create a new V4 workspace
 research init --v4 ~/my-research
-
-# Or use the default location
-research init --v4
+cd ~/my-research
 ```
 
 This creates:
@@ -74,37 +68,22 @@ This creates:
 └── logs/                 # Daily rotating logs
 ```
 
-### 3. Set Up API Key (Optional)
+### 3. Add Files to Inbox
 
-The API key is needed for LLM-based metadata extraction. Without it, you can still use `--force` to create strategies with minimal metadata.
+Drop research files into the `inbox/` folder:
 
 ```bash
-cd ~/my-research
-cp .env.template .env
-# Edit .env and add: ANTHROPIC_API_KEY=sk-ant-...
+cp ~/Downloads/strategy_transcript.txt inbox/
 ```
-
-**Without API key:** Use `research v4-ingest --force` to bypass quality checks.
 
 ### 4. Ingest Research
 
-Drop files into your `inbox/` folder:
-
 ```bash
-cp ~/Downloads/strategy_transcript.txt ~/my-research/inbox/
-```
-
-Then run ingest:
-
-```bash
-# Preview what would happen
-research v4-ingest --dry-run
-
 # Process all files in inbox
-research v4-ingest
+research v4-ingest --force
 
-# Process a specific file
-research v4-ingest ~/my-research/inbox/strategy_transcript.txt
+# Preview what would happen (no changes made)
+research v4-ingest --force --dry-run
 ```
 
 ### 5. View Your Strategies
@@ -116,43 +95,49 @@ research v4-status
 # List all strategies
 research v4-list
 
-# Filter by status
-research v4-list --status pending
-
 # View strategy details
 research v4-show STRAT-001
-
-# Export as YAML or JSON
-research v4-show STRAT-001 --format yaml
 ```
 
-## Example Workflow
+## Complete Example Workflow
 
 ```bash
-# 1. Initialize workspace
+# 1. Clone and install
+git clone https://github.com/extremevalue/research-kit.git
+cd research-kit
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+
+# 2. Initialize workspace
 research init --v4 ~/trading-research
 cd ~/trading-research
 
-# 2. Set up API key
-echo "ANTHROPIC_API_KEY=sk-ant-xxx" > .env
+# 3. Add a file to inbox
+cat > inbox/volatility_strategy.txt << 'EOF'
+PODCAST TRANSCRIPT: Volatility Trading
 
-# 3. Add a podcast transcript to inbox
-cp "Macro Voices Episode 412.txt" inbox/
+Host: Tell us about your VIX strategy.
+
+Trader: When VIX spikes above 25, I wait for it to drop back below 20,
+then buy SPY. Entry is when VIX crosses below its 20-day moving average.
+I use a trailing stop of 5% and exit if VIX goes above 30 again.
+Position size is 10% of portfolio. Sharpe ratio has been around 1.2.
+EOF
 
 # 4. Check status - should show 1 file in inbox
 research v4-status
 
-# 5. Preview ingestion
-research v4-ingest --dry-run
+# 5. Ingest the file
+research v4-ingest --force
 
-# 6. Run ingestion
-research v4-ingest
-
-# 7. Check what was created
+# 6. List strategies - should show STRAT-001
 research v4-list
 
-# 8. View the strategy details
+# 7. View strategy details
 research v4-show STRAT-001
+
+# 8. Check final status
+research v4-status
 ```
 
 ## Commands Reference
@@ -181,19 +166,15 @@ research v4-status --workspace ~/my-workspace
 Process inbox files into strategy documents.
 
 ```bash
-research v4-ingest                      # Process all inbox files
-research v4-ingest --dry-run            # Preview without changes
-research v4-ingest --force              # Bypass quality checks (no API key needed)
-research v4-ingest /path/to/file.txt    # Process specific file
+research v4-ingest --force              # Process all inbox files
+research v4-ingest --force --dry-run    # Preview without changes
+research v4-ingest --force file.txt     # Process specific file
 ```
 
 **What happens during ingest:**
-1. File content is extracted and sent to LLM for analysis
-2. Strategy metadata is extracted (name, hypothesis, edge, universe, entry/exit logic)
-3. Quality scoring: specificity (0-8) and trust (0-100)
-4. Red flag detection (selling author, no transaction costs, etc.)
-5. Decision: accept (→ pending), queue, archive, or reject
-6. Original file is archived
+1. File content is read from inbox
+2. Strategy document is created with extracted metadata
+3. Original file is archived
 
 ### `research v4-list`
 
@@ -218,85 +199,12 @@ research v4-show STRAT-001 --format yaml  # Raw YAML
 research v4-show STRAT-001 --format json  # JSON output
 ```
 
-## V4 Strategy Schema
-
-Each strategy document contains:
-
-- **Metadata**: ID, name, created date, status
-- **Source**: Type (podcast, paper, etc.), author, track record
-- **Hypothesis**: Thesis, type, testable prediction, expected Sharpe
-- **Edge**: Category (behavioral, structural), why it exists/persists
-- **Universe**: Symbols, filters
-- **Entry**: Signal logic, conditions
-- **Exit**: Exit paths (stops, targets, reversals)
-- **Data Requirements**: Primary data, derived indicators
-
-## Quality Scoring
-
-### Specificity Score (0-8)
-
-Higher is better. Measures how concrete and actionable the strategy is.
-
-| Score | Description |
-|-------|-------------|
-| 7-8   | Ready to code - all parameters specified |
-| 5-6   | Mostly complete - minor gaps |
-| 3-4   | Vague - needs development |
-| 0-2   | Very vague - just an idea |
-
-### Trust Score (0-100)
-
-Measures credibility of the source and author.
-
-| Score | Description |
-|-------|-------------|
-| 80+   | Verified fund manager, academic research |
-| 60-79 | Practitioner with track record |
-| 40-59 | Unknown author, some evidence |
-| 0-39  | Unverified, potential conflicts |
-
-### Red Flags
-
-Hard flags (reject):
-- Selling something
-- Obviously fraudulent claims
-
-Soft flags (queue for review):
-- No mention of transaction costs
-- Survivorship bias risk
-- Lack of out-of-sample testing
-
-## Configuration
-
-The `research-kit.yaml` file in your workspace controls:
-
-```yaml
-gates:
-  min_specificity: 4        # Minimum specificity to accept
-  min_trust: 30             # Minimum trust to accept
-  is_years: 15              # In-sample period for validation
-  oos_years: 4              # Out-of-sample period
-
-scoring:
-  specificity:
-    entry_logic: 2          # Weight for entry logic
-    exit_logic: 1           # Weight for exit logic
-```
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RESEARCH_WORKSPACE` | Path to V4 workspace | `~/.research-workspace-v4` |
-| `ANTHROPIC_API_KEY` | API key for LLM extraction | (required) |
-
 ## Workspace Structure
 
 ```
 ~/my-research/
 ├── .state/                   # Internal state (counters, locks)
 ├── research-kit.yaml         # Configuration
-├── .env                      # API keys (git-ignored)
 ├── inbox/                    # Drop files here
 ├── strategies/
 │   ├── pending/              # STRAT-001.yaml, STRAT-002.yaml, ...
@@ -311,8 +219,13 @@ scoring:
 │   ├── processed/            # Files that were successfully ingested
 │   └── rejected/             # Files that were rejected
 └── logs/                     # Daily rotating logs
-    └── research-kit.2024-01-15.log
 ```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RESEARCH_WORKSPACE` | Path to V4 workspace | `~/.research-workspace-v4` |
 
 ## Troubleshooting
 
@@ -322,17 +235,8 @@ Run `research init --v4` to create a workspace:
 
 ```bash
 research init --v4 ~/my-research
-export RESEARCH_WORKSPACE=~/my-research
+cd ~/my-research
 research v4-status
-```
-
-### "LLM client not available"
-
-Set your Anthropic API key:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-# Or add to .env file in workspace
 ```
 
 ### "Strategy not found"
@@ -342,6 +246,27 @@ Check available strategies:
 ```bash
 research v4-list
 ```
+
+## Advanced: LLM-Based Extraction
+
+For richer metadata extraction, you can configure an Anthropic API key:
+
+```bash
+cd ~/my-research
+cp .env.template .env
+# Edit .env and add: ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then run ingest without `--force`:
+
+```bash
+research v4-ingest  # Uses LLM for metadata extraction
+```
+
+This enables:
+- Quality scoring (specificity 0-8, trust 0-100)
+- Red flag detection
+- Automatic accept/reject decisions
 
 ## Getting Help
 
