@@ -1041,6 +1041,41 @@ Examples:
     )
     parser.set_defaults(func=cmd_v4_run)
 
+    # v4-cleanup command
+    parser = subparsers.add_parser(
+        "v4-cleanup",
+        help="Clean up stuck QC backtests (V4)",
+        description="""
+Clean up stuck or queued backtests on QuantConnect cloud.
+
+Use this when you see "no spare nodes available" errors. This command
+will cancel running/queued backtests that may be blocking resources.
+
+Examples:
+  research v4-cleanup                    # Clean backtests older than 5 min
+  research v4-cleanup --aggressive       # Clean ALL running backtests
+  research v4-cleanup --dry-run          # Show what would be cleaned
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--aggressive",
+        action="store_true",
+        help="Clean ALL running backtests, not just stuck ones"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be cleaned without actually cleaning"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_cleanup)
+
     # v4-status command
     parser = subparsers.add_parser(
         "v4-status",
@@ -2090,6 +2125,62 @@ def cmd_v4_run(args):
 
         print(f"\nPipeline completed: {result.determination}")
         return 0
+
+
+def cmd_v4_cleanup(args):
+    """Clean up stuck QC backtests (V4)."""
+    from research_system.validation.backtest import BacktestExecutor
+
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    aggressive = getattr(args, 'aggressive', False)
+    dry_run = getattr(args, 'dry_run', False)
+
+    print("\n" + "=" * 60)
+    print("  QC Backtest Cleanup")
+    print("=" * 60)
+
+    # Create executor (with cleanup disabled - we'll do it manually)
+    executor = BacktestExecutor(
+        workspace_path=workspace.path,
+        use_local=False,
+        cleanup_on_start=False,
+    )
+
+    if dry_run:
+        print("\n[DRY RUN] Would clean up backtests")
+        # Just check credentials
+        creds = executor._get_qc_credentials()
+        if not creds:
+            print("  Error: No QC credentials found at ~/.lean/credentials")
+            return 1
+        print("  QC credentials found")
+        print(f"  Mode: {'Aggressive (all running)' if aggressive else 'Standard (stuck only)'}")
+        return 0
+
+    print()
+    if aggressive:
+        print("Aggressive cleanup: Cancelling ALL running backtests...")
+        cleaned = executor._cleanup_all_running_backtests(min_age_seconds=10)
+    else:
+        print("Standard cleanup: Cancelling stuck backtests (>5 min old)...")
+        cleaned = executor._cleanup_all_stuck_backtests(max_age_seconds=300, max_projects=50)
+
+    if cleaned > 0:
+        print(f"\nCleaned up {cleaned} backtest(s)")
+        print("Nodes should be available shortly. Wait 10-30 seconds before retrying.")
+    else:
+        print("\nNo backtests to clean up")
+        print("If you're still seeing 'no spare nodes', check the QC dashboard directly.")
+
+    return 0
 
 
 def cmd_v4_status(args):
