@@ -280,7 +280,9 @@ FOR OPTIONS STRATEGIES:
   equity = self.add_equity("SPY", Resolution.MINUTE)
   equity.set_data_normalization_mode(DataNormalizationMode.RAW)
 - Add options with: option = self.add_option("SPY")
-- Use option.set_filter() to define strikes and expiry range
+- Option filter methods use PascalCase (exception to snake_case rule):
+  option.set_filter(lambda u: u.IncludeWeeklys().Strikes(-5, 5).Expiration(7, 45))
+  Note: It's "IncludeWeeklys" (not "Weeklies"), "Strikes", "Expiration" (PascalCase)
 
 Return ONLY the Python code, no explanations."""
 
@@ -349,7 +351,24 @@ Return ONLY the Python code, no explanations."""
         code = re.sub(r"Resolution\.hour", "Resolution.HOUR", code, flags=re.IGNORECASE)
         code = re.sub(r"Resolution\.minute", "Resolution.MINUTE", code, flags=re.IGNORECASE)
 
-        # Fix 4: Add warning for potential issues
+        # Fix 4: Option filter methods use PascalCase (opposite of algorithm methods)
+        option_filter_replacements = [
+            (r"\.include_weeklies\(\)", ".IncludeWeeklys()"),
+            (r"\.include_weeklys\(\)", ".IncludeWeeklys()"),
+            (r"\.strikes\(", ".Strikes("),
+            (r"\.expiration\(", ".Expiration("),
+            (r"\.contracts\(", ".Contracts("),
+            (r"\.front_month\(\)", ".FrontMonth()"),
+            (r"\.back_months\(\)", ".BackMonths()"),
+            (r"\.back_month\(\)", ".BackMonth()"),
+            (r"\.calls_only\(\)", ".CallsOnly()"),
+            (r"\.puts_only\(\)", ".PutsOnly()"),
+        ]
+
+        for pattern, replacement in option_filter_replacements:
+            code = re.sub(pattern, replacement, code, flags=re.IGNORECASE)
+
+        # Fix 5: Add warning for potential issues
         warnings = []
 
         # Check for hardcoded dates
