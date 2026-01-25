@@ -86,8 +86,9 @@ class WalkForwardResult:
     aggregate_sharpe: float | None = None
     max_drawdown: float | None = None
     consistency: float | None = None  # % of profitable windows
-    determination: str = "PENDING"  # VALIDATED, INVALIDATED, BLOCKED
+    determination: str = "PENDING"  # VALIDATED, INVALIDATED, BLOCKED, RETRY_LATER
     determination_reason: str = ""
+    is_transient: bool = False  # True if failure is transient (rate limit, no nodes)
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 
     def to_dict(self) -> dict[str, Any]:
@@ -110,6 +111,7 @@ class WalkForwardResult:
             "consistency": self.consistency,
             "determination": self.determination,
             "determination_reason": self.determination_reason,
+            "is_transient": self.is_transient,
             "timestamp": self.timestamp,
         }
 
@@ -235,16 +237,18 @@ class BacktestExecutor:
                 )
             )
 
-            # If rate limited, stop and retry later
+            # If rate limited, stop and retry later (transient - don't block)
             if result.rate_limited:
-                wf_result.determination = "BLOCKED"
-                wf_result.determination_reason = "Rate limited during walk-forward"
+                wf_result.determination = "RETRY_LATER"
+                wf_result.determination_reason = "Rate limited during walk-forward - retry when nodes available"
+                wf_result.is_transient = True
                 return wf_result
 
-            # If engine crashed, mark as blocked
+            # If engine crashed, mark as blocked (permanent - needs investigation)
             if result.engine_crash:
                 wf_result.determination = "BLOCKED"
                 wf_result.determination_reason = "LEAN engine crash"
+                wf_result.is_transient = False
                 return wf_result
 
         # Aggregate results
