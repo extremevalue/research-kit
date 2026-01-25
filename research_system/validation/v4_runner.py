@@ -194,12 +194,19 @@ class V4Runner:
         )
 
         # Check for blocking issues
-        if wf_result.determination == "BLOCKED":
-            self._update_status(strategy_id, "blocked")
+        if wf_result.determination in ("BLOCKED", "RETRY_LATER"):
+            # Only move to blocked folder for permanent issues, not transient ones
+            if not wf_result.is_transient:
+                self._update_status(strategy_id, "blocked")
+                print(f"  Strategy blocked: {wf_result.determination_reason}")
+            else:
+                # Transient issue - leave in pending for retry
+                print(f"  Transient failure (will retry): {wf_result.determination_reason}")
+
             self._save_result(strategy_id, V4RunResult(
                 strategy_id=strategy_id,
                 success=False,
-                determination="BLOCKED",
+                determination=wf_result.determination,
                 code_gen=code_result,
                 backtest=wf_result,
                 error=wf_result.determination_reason,
@@ -207,7 +214,7 @@ class V4Runner:
             return V4RunResult(
                 strategy_id=strategy_id,
                 success=False,
-                determination="BLOCKED",
+                determination=wf_result.determination,
                 code_gen=code_result,
                 backtest=wf_result,
                 error=wf_result.determination_reason,
