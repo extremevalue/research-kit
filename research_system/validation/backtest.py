@@ -307,8 +307,8 @@ class BacktestExecutor:
             cmd = ["lean", "backtest", str(project_dir), "--download-data"]
             cmd.extend(["--lean-config", str(lean_config)])
         else:
+            # Note: lean cloud backtest doesn't support --lean-config flag
             cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
-            cmd.extend(["--lean-config", str(lean_config)])
 
         logger.info(f"Running: {' '.join(cmd)}")
 
