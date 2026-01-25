@@ -1,0 +1,303 @@
+{# V4 Options Income Strategy Template #}
+{# Supports: cash_secured_put, put_credit_spread, covered_call #}
+# region imports
+from AlgorithmImports import *
+from datetime import timedelta
+# endregion
+
+
+class {{ class_name }}(QCAlgorithm):
+    """
+    {{ strategy.name }}
+
+    {{ strategy.description | default("V4 options income strategy.", true) }}
+
+    Strategy ID: {{ strategy.id }}
+    Type: Options Income ({{ strategy.parameters.sub_type | default("cash_secured_put", true) }})
+    Generated: {{ timestamp }}
+    """
+
+    def initialize(self):
+        """Initialize the options income strategy."""
+        self.set_cash({{ strategy.parameters.initial_capital | default(100000, true) }})
+
+        # Benchmark
+        self.set_benchmark("SPY")
+
+        # Underlying symbol
+        self._underlying_ticker = "{{ strategy.parameters.underlying | default('SPY', true) }}"
+
+        # Add underlying equity with RAW normalization (REQUIRED for options)
+        self._equity = self.add_equity(self._underlying_ticker, Resolution.MINUTE)
+        self._equity.set_data_normalization_mode(DataNormalizationMode.RAW)
+        self._underlying = self._equity.symbol
+
+        # Add options chain
+        option = self.add_option(self._underlying_ticker)
+        self._option_symbol = option.symbol
+
+        # Configure option filter with PascalCase methods
+        option.set_filter(lambda u: u
+            .IncludeWeeklys()
+            .Strikes(-{{ strategy.parameters.strike_range | default(10, true) }}, {{ strategy.parameters.strike_range | default(10, true) }})
+            .Expiration({{ strategy.parameters.min_dte | default(7, true) }}, {{ strategy.parameters.max_dte | default(45, true) }})
+        )
+
+        # Trading parameters
+        self._target_delta = {{ strategy.parameters.target_delta | default(0.30, true) }}
+        self._min_premium = {{ strategy.parameters.min_premium | default(0.50, true) }}
+        self._max_positions = {{ strategy.parameters.max_positions | default(1, true) }}
+        self._profit_target = {{ strategy.parameters.profit_target | default(0.50, true) }}  # Close at 50% profit
+        self._stop_loss = {{ strategy.parameters.stop_loss | default(2.0, true) }}  # Close at 200% loss
+
+{% if strategy.parameters.sub_type == 'put_credit_spread' %}
+        # Spread width for credit spreads
+        self._spread_width = {{ strategy.parameters.spread_width | default(5, true) }}
+{% endif %}
+
+{% if strategy.parameters.sub_type == 'covered_call' %}
+        # Shares to cover for covered calls
+        self._shares_per_contract = 100
+{% endif %}
+
+        # Track open positions
+        self._positions = {}
+
+        # Schedule trading
+        self.schedule.on(
+            self.date_rules.every_day(self._underlying_ticker),
+            self.time_rules.after_market_open(self._underlying_ticker, 30),
+            self.check_positions
+        )
+
+        # Schedule position management
+        self.schedule.on(
+            self.date_rules.every_day(self._underlying_ticker),
+            self.time_rules.before_market_close(self._underlying_ticker, 15),
+            self.manage_positions
+        )
+
+    def check_positions(self):
+        """Check and open new positions if needed."""
+        if self.is_warming_up:
+            return
+
+        # Count current option positions
+        current_positions = sum(1 for h in self.portfolio.values()
+                                if h.invested and h.symbol.security_type == SecurityType.OPTION)
+
+        if current_positions >= self._max_positions:
+            return
+
+{% if strategy.parameters.sub_type == 'cash_secured_put' %}
+        self._open_cash_secured_put()
+{% elif strategy.parameters.sub_type == 'put_credit_spread' %}
+        self._open_put_credit_spread()
+{% else %}
+        self._open_covered_call()
+{% endif %}
+
+    def manage_positions(self):
+        """Manage existing positions - profit taking and stop losses."""
+        if self.is_warming_up:
+            return
+
+        for symbol, holding in list(self.portfolio.items()):
+            if not holding.invested:
+                continue
+
+            if symbol.security_type != SecurityType.OPTION:
+                continue
+
+            # Check if position was opened by us (tracked)
+            entry_price = self._positions.get(symbol)
+            if entry_price is None:
+                continue
+
+            current_price = self.securities[symbol].price
+            if current_price <= 0:
+                continue
+
+            # For short options, profit when price drops
+            if holding.quantity < 0:
+                # Profit target: close at X% of entry premium
+                if current_price <= entry_price * (1 - self._profit_target):
+                    self.liquidate(symbol, "Profit target reached")
+                    del self._positions[symbol]
+                    self.log(f"Closed {symbol} for profit. Entry: {entry_price:.2f}, Exit: {current_price:.2f}")
+
+                # Stop loss: close if premium increased too much
+                elif current_price >= entry_price * (1 + self._stop_loss):
+                    self.liquidate(symbol, "Stop loss triggered")
+                    del self._positions[symbol]
+                    self.log(f"Closed {symbol} for loss. Entry: {entry_price:.2f}, Exit: {current_price:.2f}")
+
+{% if strategy.parameters.sub_type == 'cash_secured_put' %}
+    def _open_cash_secured_put(self):
+        """Open a cash-secured put position."""
+        chain = self.option_chain(self._option_symbol)
+        if not chain:
+            return
+
+        # Filter for puts
+        puts = [c for c in chain if c.right == OptionRight.PUT]
+        if not puts:
+            return
+
+        # Find put with target delta (OTM puts have negative delta)
+        target_put = None
+        best_delta_diff = float('inf')
+
+        for contract in puts:
+            # Skip if no greeks
+            if contract.greeks is None or contract.greeks.delta is None:
+                continue
+
+            delta = abs(contract.greeks.delta)
+            delta_diff = abs(delta - self._target_delta)
+
+            # Check minimum premium
+            if contract.bid_price < self._min_premium:
+                continue
+
+            if delta_diff < best_delta_diff:
+                best_delta_diff = delta_diff
+                target_put = contract
+
+        if target_put is None:
+            return
+
+        # Sell the put (negative quantity = short)
+        self.market_order(target_put.symbol, -1)
+        self._positions[target_put.symbol] = target_put.bid_price
+        self.log(f"Sold put: {target_put.symbol}, Strike: {target_put.strike}, "
+                 f"DTE: {(target_put.expiry - self.time).days}, Premium: {target_put.bid_price:.2f}")
+{% endif %}
+
+{% if strategy.parameters.sub_type == 'put_credit_spread' %}
+    def _open_put_credit_spread(self):
+        """Open a put credit spread (bull put spread)."""
+        chain = self.option_chain(self._option_symbol)
+        if not chain:
+            return
+
+        # Filter for puts with same expiry
+        puts = [c for c in chain if c.right == OptionRight.PUT]
+        if not puts:
+            return
+
+        # Group by expiry
+        by_expiry = {}
+        for put in puts:
+            if put.expiry not in by_expiry:
+                by_expiry[put.expiry] = []
+            by_expiry[put.expiry].append(put)
+
+        # Find best spread
+        best_spread = None
+        best_credit = 0
+
+        for expiry, contracts in by_expiry.items():
+            contracts = sorted(contracts, key=lambda x: x.strike)
+
+            for i, short_put in enumerate(contracts):
+                # Skip if no greeks
+                if short_put.greeks is None or short_put.greeks.delta is None:
+                    continue
+
+                # Check delta target
+                delta = abs(short_put.greeks.delta)
+                if abs(delta - self._target_delta) > 0.10:
+                    continue
+
+                # Find long put (lower strike for protection)
+                for long_put in contracts[:i]:
+                    if short_put.strike - long_put.strike != self._spread_width:
+                        continue
+
+                    # Calculate credit
+                    credit = short_put.bid_price - long_put.ask_price
+                    if credit < self._min_premium:
+                        continue
+
+                    if credit > best_credit:
+                        best_credit = credit
+                        best_spread = (short_put, long_put)
+
+        if best_spread is None:
+            return
+
+        short_put, long_put = best_spread
+
+        # Open the spread
+        self.market_order(short_put.symbol, -1)  # Sell higher strike
+        self.market_order(long_put.symbol, 1)    # Buy lower strike
+
+        self._positions[short_put.symbol] = short_put.bid_price
+        self._positions[long_put.symbol] = long_put.ask_price
+
+        self.log(f"Opened put credit spread: Sold {short_put.strike} / Bought {long_put.strike}, "
+                 f"Credit: {best_credit:.2f}")
+{% endif %}
+
+{% if strategy.parameters.sub_type == 'covered_call' %}
+    def _open_covered_call(self):
+        """Open a covered call position."""
+        # First ensure we own the underlying shares
+        underlying_holding = self.portfolio[self._underlying]
+        shares_needed = self._shares_per_contract - underlying_holding.quantity
+
+        if shares_needed > 0:
+            self.market_order(self._underlying, shares_needed)
+            self.log(f"Bought {shares_needed} shares of {self._underlying_ticker}")
+            return  # Wait for next bar to sell call
+
+        # Get option chain
+        chain = self.option_chain(self._option_symbol)
+        if not chain:
+            return
+
+        # Filter for calls
+        calls = [c for c in chain if c.right == OptionRight.CALL]
+        if not calls:
+            return
+
+        # Find call with target delta (OTM calls have positive delta < 0.5)
+        target_call = None
+        best_delta_diff = float('inf')
+
+        for contract in calls:
+            # Skip if no greeks
+            if contract.greeks is None or contract.greeks.delta is None:
+                continue
+
+            delta = contract.greeks.delta
+            delta_diff = abs(delta - self._target_delta)
+
+            # Check minimum premium
+            if contract.bid_price < self._min_premium:
+                continue
+
+            if delta_diff < best_delta_diff:
+                best_delta_diff = delta_diff
+                target_call = contract
+
+        if target_call is None:
+            return
+
+        # Sell the call (covered by shares)
+        self.market_order(target_call.symbol, -1)
+        self._positions[target_call.symbol] = target_call.bid_price
+        self.log(f"Sold covered call: {target_call.symbol}, Strike: {target_call.strike}, "
+                 f"DTE: {(target_call.expiry - self.time).days}, Premium: {target_call.bid_price:.2f}")
+{% endif %}
+
+    def on_data(self, data):
+        """Handle incoming data."""
+        pass
+
+    def on_order_event(self, order_event):
+        """Handle order events for logging."""
+        if order_event.status == OrderStatus.FILLED:
+            self.log(f"Order filled: {order_event.symbol}, Qty: {order_event.fill_quantity}, "
+                     f"Price: {order_event.fill_price:.2f}")

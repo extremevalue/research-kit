@@ -52,6 +52,25 @@ class V4CodeGenResult:
         }
 
 
+@dataclass
+class V4CodeCorrectionResult:
+    """Result of code correction attempt."""
+
+    success: bool
+    corrected_code: str | None = None
+    error: str | None = None
+    attempt: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "success": self.success,
+            "corrected_code": self.corrected_code,
+            "error": self.error,
+            "attempt": self.attempt,
+        }
+
+
 class V4CodeGenerator:
     """Generate QuantConnect Python code for V4 strategies.
 
@@ -245,6 +264,94 @@ class V4CodeGenerator:
                 success=False,
                 error=f"LLM generation failed: {e}",
             )
+
+    def correct_code_error(
+        self,
+        original_code: str,
+        error_message: str,
+        strategy: dict[str, Any],
+        attempt: int = 1,
+    ) -> V4CodeCorrectionResult:
+        """Attempt to correct code based on backtest error.
+
+        Args:
+            original_code: The code that failed
+            error_message: Error from backtest
+            strategy: Original strategy document
+            attempt: Current correction attempt number
+
+        Returns:
+            V4CodeCorrectionResult with corrected code or error
+        """
+        if not self.llm_client:
+            return V4CodeCorrectionResult(
+                success=False,
+                error="No LLM client available for correction",
+                attempt=attempt,
+            )
+
+        try:
+            prompt = self._build_correction_prompt(original_code, error_message, strategy)
+            response = self.llm_client.generate(prompt)
+            corrected = self._extract_code_from_response(response.content)
+
+            if not corrected:
+                return V4CodeCorrectionResult(
+                    success=False,
+                    error="Could not extract corrected code from LLM response",
+                    attempt=attempt,
+                )
+
+            # Apply post-processing fixes
+            corrected = self._fix_qc_api_issues(corrected)
+
+            return V4CodeCorrectionResult(
+                success=True,
+                corrected_code=corrected,
+                attempt=attempt,
+            )
+
+        except Exception as e:
+            return V4CodeCorrectionResult(
+                success=False,
+                error=f"Correction failed: {e}",
+                attempt=attempt,
+            )
+
+    def _build_correction_prompt(
+        self,
+        code: str,
+        error: str,
+        strategy: dict[str, Any],
+    ) -> str:
+        """Build prompt for error correction."""
+        return f"""The following QuantConnect algorithm failed with an error.
+Fix the code to resolve the error.
+
+STRATEGY: {strategy.get('name', 'Unknown')}
+STRATEGY ID: {strategy.get('id', 'unknown')}
+
+ERROR:
+{error}
+
+FAILED CODE:
+```python
+{code}
+```
+
+COMMON FIXES:
+- Resolution enum uses UPPERCASE: Resolution.DAILY, Resolution.MINUTE, Resolution.HOUR
+- Algorithm methods use snake_case: self.add_equity(), self.set_holdings(), self.liquidate()
+- Option filter methods use PascalCase (exception): .IncludeWeeklys(), .Strikes(), .Expiration()
+- Options require DataNormalizationMode.RAW on underlying:
+  equity = self.add_equity("SPY", Resolution.MINUTE)
+  equity.set_data_normalization_mode(DataNormalizationMode.RAW)
+- Always check if indicators are ready before using: if not self.sma.is_ready: return
+- Access data safely: bar = data.bars.get(symbol); if bar is None: return
+- Use self.history() for historical data, not self.History()
+- Import everything from AlgorithmImports: from AlgorithmImports import *
+
+Return ONLY the corrected Python code, no explanations."""
 
     def _build_llm_prompt(self, strategy: dict[str, Any]) -> str:
         """Build LLM prompt for code generation."""

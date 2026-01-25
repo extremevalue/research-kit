@@ -29,6 +29,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Patterns that indicate errors that might be fixable by LLM code correction
+CORRECTABLE_ERROR_PATTERNS = [
+    r"AttributeError:.*object has no attribute",
+    r"AttributeError:.*has no attribute",
+    r"NameError: name '.*' is not defined",
+    r"TypeError: .*argument",
+    r"TypeError: .*takes \d+ positional argument",
+    r"IndexError: .*index out of range",
+    r"KeyError:",
+    r"No such option:",
+    r"Resolution\.",
+    r"DataNormalizationMode",
+    r"has no attribute 'is_ready'",
+    r"invalid syntax",
+    r"unexpected keyword argument",
+    r"missing \d+ required positional argument",
+    r"object is not callable",
+    r"object is not subscriptable",
+]
+
+
 @dataclass
 class BacktestResult:
     """Results from a backtest run."""
@@ -254,6 +275,169 @@ class BacktestExecutor:
         # Aggregate results
         self._aggregate_walk_forward_results(wf_result)
         return wf_result
+
+    def _is_correctable_error(self, error: str) -> bool:
+        """Check if error is potentially correctable by LLM.
+
+        Args:
+            error: Error message from backtest
+
+        Returns:
+            True if the error pattern suggests it could be fixed by code correction
+        """
+        if not error:
+            return False
+
+        for pattern in CORRECTABLE_ERROR_PATTERNS:
+            if re.search(pattern, error, re.IGNORECASE):
+                return True
+        return False
+
+    def run_single_with_correction(
+        self,
+        code: str,
+        start_date: str,
+        end_date: str,
+        strategy_id: str,
+        strategy: dict[str, Any],
+        code_generator,
+        max_attempts: int = 3,
+    ) -> tuple[BacktestResult, int]:
+        """Run backtest with automatic error correction.
+
+        Attempts to run the backtest, and if it fails with a correctable error,
+        uses the LLM to correct the code and retries.
+
+        Args:
+            code: Python algorithm code
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+            strategy_id: Strategy ID for file naming
+            strategy: Original strategy document (for correction context)
+            code_generator: V4CodeGenerator instance with LLM client
+            max_attempts: Maximum number of attempts (including original)
+
+        Returns:
+            Tuple of (BacktestResult, attempts_made)
+        """
+        current_code = code
+
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Backtest attempt {attempt}/{max_attempts} for {strategy_id}")
+            result = self.run_single(current_code, start_date, end_date, strategy_id)
+
+            if result.success:
+                return result, attempt
+
+            # Check if we should try correction
+            if attempt >= max_attempts:
+                logger.info(f"Max attempts ({max_attempts}) reached for {strategy_id}")
+                break
+
+            error_msg = result.error or ""
+            if not self._is_correctable_error(error_msg):
+                logger.info(f"Error is not correctable: {error_msg[:100]}...")
+                break
+
+            # Skip correction for rate limiting or engine crashes
+            if result.rate_limited or result.engine_crash:
+                logger.info("Skipping correction for rate limit or engine crash")
+                break
+
+            # Attempt correction
+            logger.info(f"Attempting code correction for {strategy_id}")
+            correction = code_generator.correct_code_error(
+                current_code,
+                error_msg,
+                strategy,
+                attempt=attempt,
+            )
+
+            if not correction.success:
+                logger.warning(f"Code correction failed: {correction.error}")
+                break
+
+            current_code = correction.corrected_code
+            logger.info(f"Code corrected, retrying backtest (attempt {attempt + 1})")
+
+        return result, attempt
+
+    def run_walk_forward_with_correction(
+        self,
+        code: str,
+        strategy_id: str,
+        strategy: dict[str, Any],
+        code_generator,
+        windows: list[tuple[str, str]] | None = None,
+        max_correction_attempts: int = 3,
+    ) -> tuple[WalkForwardResult, int]:
+        """Execute walk-forward validation with automatic error correction.
+
+        For the first window, attempts correction if there's a correctable error.
+        Subsequent windows use the (potentially corrected) code.
+
+        Args:
+            code: Python algorithm code
+            strategy_id: Strategy ID
+            strategy: Original strategy document
+            code_generator: V4CodeGenerator instance with LLM client
+            windows: List of (start_date, end_date) tuples, or None for defaults
+            max_correction_attempts: Maximum correction attempts for first window
+
+        Returns:
+            Tuple of (WalkForwardResult, total_correction_attempts)
+        """
+        if windows is None:
+            windows = self.DEFAULT_WINDOWS
+
+        wf_result = WalkForwardResult(strategy_id=strategy_id)
+        current_code = code
+        total_attempts = 1
+
+        for i, (start_date, end_date) in enumerate(windows):
+            logger.info(f"Running window {i + 1}/{len(windows)}: {start_date} to {end_date}")
+
+            # Only try correction on first window
+            if i == 0:
+                result, attempts = self.run_single_with_correction(
+                    current_code,
+                    start_date,
+                    end_date,
+                    strategy_id,
+                    strategy,
+                    code_generator,
+                    max_attempts=max_correction_attempts,
+                )
+                total_attempts = attempts
+            else:
+                result = self.run_single(current_code, start_date, end_date, strategy_id)
+
+            wf_result.windows.append(
+                WalkForwardWindow(
+                    window_id=i + 1,
+                    start_date=start_date,
+                    end_date=end_date,
+                    result=result,
+                )
+            )
+
+            # If rate limited, stop and retry later (transient - don't block)
+            if result.rate_limited:
+                wf_result.determination = "RETRY_LATER"
+                wf_result.determination_reason = "Rate limited during walk-forward - retry when nodes available"
+                wf_result.is_transient = True
+                return wf_result, total_attempts
+
+            # If engine crashed, mark as blocked (permanent - needs investigation)
+            if result.engine_crash:
+                wf_result.determination = "BLOCKED"
+                wf_result.determination_reason = "LEAN engine crash"
+                wf_result.is_transient = False
+                return wf_result, total_attempts
+
+        # Aggregate results
+        self._aggregate_walk_forward_results(wf_result)
+        return wf_result, total_attempts
 
     def _aggregate_walk_forward_results(self, wf_result: WalkForwardResult) -> None:
         """Calculate aggregate metrics from walk-forward windows."""

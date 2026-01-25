@@ -5,6 +5,7 @@ Template Structure:
 - momentum.py.j2: Momentum/rotation strategies
 - mean_reversion.py.j2: Z-score based mean reversion
 - regime_adaptive.py.j2: Regime-switching strategies
+- options_income.py.j2: Options income strategies (puts, spreads, covered calls)
 
 Template Selection:
 Templates are selected based on the strategy's signal_type or strategy_type field.
@@ -33,6 +34,16 @@ V4_STRATEGY_TO_TEMPLATE = {
     "regime-adaptive": "regime_adaptive.py.j2",
     "regime_switching": "regime_adaptive.py.j2",
     "tactical_allocation": "regime_adaptive.py.j2",
+    # Options income strategies
+    "options_income": "options_income.py.j2",
+    "options-income": "options_income.py.j2",
+    "cash_secured_put": "options_income.py.j2",
+    "cash-secured-put": "options_income.py.j2",
+    "put_credit_spread": "options_income.py.j2",
+    "put-credit-spread": "options_income.py.j2",
+    "covered_call": "options_income.py.j2",
+    "covered-call": "options_income.py.j2",
+    "options": "options_income.py.j2",
     # Fallback
     "base": "base.py.j2",
 }
