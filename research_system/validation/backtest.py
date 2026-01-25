@@ -244,10 +244,26 @@ class BacktestExecutor:
             windows = self.DEFAULT_WINDOWS
 
         wf_result = WalkForwardResult(strategy_id=strategy_id)
+        total_windows = len(windows)
 
         for i, (start_date, end_date) in enumerate(windows):
-            logger.info(f"Running window {i + 1}/{len(windows)}: {start_date} to {end_date}")
+            window_num = i + 1
+            print(f"    Window {window_num}/{total_windows}: {start_date} to {end_date}...", end="", flush=True)
+            logger.info(f"Running window {window_num}/{total_windows}: {start_date} to {end_date}")
+
+            window_start = time.time()
             result = self.run_single(code, start_date, end_date, strategy_id)
+            window_elapsed = time.time() - window_start
+
+            # Print result on same line
+            if result.success:
+                print(f" done ({window_elapsed:.0f}s)")
+            elif result.rate_limited:
+                print(f" rate limited ({window_elapsed:.0f}s)")
+            elif result.engine_crash:
+                print(f" engine crash ({window_elapsed:.0f}s)")
+            else:
+                print(f" failed ({window_elapsed:.0f}s)")
 
             wf_result.windows.append(
                 WalkForwardWindow(
@@ -345,6 +361,7 @@ class BacktestExecutor:
                 break
 
             # Attempt correction
+            print(f" (correcting...)", end="", flush=True)
             logger.info(f"Attempting code correction for {strategy_id}")
             correction = code_generator.correct_code_error(
                 current_code,
@@ -354,10 +371,12 @@ class BacktestExecutor:
             )
 
             if not correction.success:
+                print(f" correction failed", flush=True)
                 logger.warning(f"Code correction failed: {correction.error}")
                 break
 
             current_code = correction.corrected_code
+            print(f" retrying...", end="", flush=True)
             logger.info(f"Code corrected, retrying backtest (attempt {attempt + 1})")
 
         return result, attempt
@@ -393,9 +412,14 @@ class BacktestExecutor:
         wf_result = WalkForwardResult(strategy_id=strategy_id)
         current_code = code
         total_attempts = 1
+        total_windows = len(windows)
 
         for i, (start_date, end_date) in enumerate(windows):
-            logger.info(f"Running window {i + 1}/{len(windows)}: {start_date} to {end_date}")
+            window_num = i + 1
+            print(f"    Window {window_num}/{total_windows}: {start_date} to {end_date}...", end="", flush=True)
+            logger.info(f"Running window {window_num}/{total_windows}: {start_date} to {end_date}")
+
+            window_start = time.time()
 
             # Only try correction on first window
             if i == 0:
@@ -411,6 +435,18 @@ class BacktestExecutor:
                 total_attempts = attempts
             else:
                 result = self.run_single(current_code, start_date, end_date, strategy_id)
+
+            window_elapsed = time.time() - window_start
+
+            # Print result on same line
+            if result.success:
+                print(f" done ({window_elapsed:.0f}s)")
+            elif result.rate_limited:
+                print(f" rate limited ({window_elapsed:.0f}s)")
+            elif result.engine_crash:
+                print(f" engine crash ({window_elapsed:.0f}s)")
+            else:
+                print(f" failed ({window_elapsed:.0f}s)")
 
             wf_result.windows.append(
                 WalkForwardWindow(
@@ -811,6 +847,7 @@ class BacktestExecutor:
         """Poll QC API until backtest completes or times out."""
         start_time = time.time()
         poll_interval = 10
+        dots_printed = 0
 
         while time.time() - start_time < timeout:
             status = self._get_backtest_status(project_id, backtest_id)
@@ -819,6 +856,11 @@ class BacktestExecutor:
             elif status == "RuntimeError":
                 return "RuntimeError"
             elif status == "Running":
+                # Print progress dot every 30 seconds
+                elapsed = int(time.time() - start_time)
+                if elapsed > 0 and elapsed % 30 == 0 and elapsed // 30 > dots_printed:
+                    print(".", end="", flush=True)
+                    dots_printed = elapsed // 30
                 time.sleep(poll_interval)
             else:
                 time.sleep(poll_interval)
