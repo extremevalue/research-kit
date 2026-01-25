@@ -78,7 +78,7 @@ class V4Runner:
         workspace,
         llm_client=None,
         use_local: bool = False,
-        num_windows: int = 2,
+        num_windows: int = 1,
     ):
         """Initialize the V4 runner.
 
@@ -86,7 +86,7 @@ class V4Runner:
             workspace: V4Workspace instance
             llm_client: Optional LLM client for code generation
             use_local: Use local Docker instead of QC cloud
-            num_windows: Number of walk-forward windows (2 or 5)
+            num_windows: Number of walk-forward windows (1, 2, or 5)
         """
         self.workspace = workspace
         self.llm_client = llm_client
