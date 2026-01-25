@@ -1036,9 +1036,9 @@ Examples:
     parser.add_argument(
         "--windows",
         type=int,
-        default=2,
-        choices=[2, 5],
-        help="Number of walk-forward windows: 2 (fast, IS/OOS style) or 5 (thorough). Default: 2"
+        default=1,
+        choices=[1, 2, 5],
+        help="Number of walk-forward windows: 1 (fastest), 2 (IS/OOS), or 5 (thorough). Default: 1"
     )
     parser.add_argument(
         "--workspace", "-w",
@@ -2079,7 +2079,7 @@ def cmd_v4_run(args):
     dry_run = getattr(args, 'dry_run', False)
     force_llm = getattr(args, 'force_llm', False)
     skip_verify = getattr(args, 'skip_verify', False)
-    num_windows = getattr(args, 'windows', 2)
+    num_windows = getattr(args, 'windows', 1)
 
     if not strategy_id and not run_all:
         print("Error: Strategy ID required or use --all")

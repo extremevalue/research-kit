@@ -153,9 +153,14 @@ class BacktestExecutor:
         ("2020-01-01", "2023-12-31"),
     ]
 
-    # Default: 2 windows (similar to old IS/OOS approach, faster iteration)
-    # Use --windows 5 for thorough validation
+    # Default: 1 window (fastest iteration for single-node accounts)
+    # Use --windows 2 for IS/OOS, --windows 5 for thorough validation
     DEFAULT_WINDOWS = [
+        ("2012-01-01", "2023-12-31"),  # Full period
+    ]
+
+    # 2 windows: IS/OOS style
+    TWO_WINDOWS = [
         ("2012-01-01", "2017-12-31"),  # In-sample period
         ("2018-01-01", "2023-12-31"),  # Out-of-sample period
     ]
@@ -165,7 +170,7 @@ class BacktestExecutor:
         workspace_path: Path,
         use_local: bool = False,
         cleanup_on_start: bool = True,
-        num_windows: int = 2,
+        num_windows: int = 1,
     ):
         """Initialize backtest executor.
 
@@ -173,7 +178,7 @@ class BacktestExecutor:
             workspace_path: Path to the V4 workspace
             use_local: If True, use local Docker; if False, use QC cloud
             cleanup_on_start: If True, clean up stuck backtests on init
-            num_windows: Number of walk-forward windows (2 or 5)
+            num_windows: Number of walk-forward windows (1, 2, or 5)
         """
         self.workspace_path = Path(workspace_path)
         self.validations_path = self.workspace_path / "validations"
@@ -183,6 +188,8 @@ class BacktestExecutor:
         # Select windows based on num_windows
         if num_windows >= 5:
             self.windows = self.ALL_WINDOWS
+        elif num_windows == 2:
+            self.windows = self.TWO_WINDOWS
         else:
             self.windows = self.DEFAULT_WINDOWS
 
