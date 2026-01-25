@@ -275,6 +275,13 @@ IMPORTANT: Do NOT set dates in the code - they are injected by the framework.
 IMPORTANT: Use snake_case for all QuantConnect methods.
 IMPORTANT: Always check if indicators are ready before using them.
 
+FOR OPTIONS STRATEGIES:
+- MUST set DataNormalizationMode.Raw on the underlying equity:
+  equity = self.add_equity("SPY", Resolution.MINUTE)
+  equity.set_data_normalization_mode(DataNormalizationMode.RAW)
+- Add options with: option = self.add_option("SPY")
+- Use option.set_filter() to define strikes and expiry range
+
 Return ONLY the Python code, no explanations."""
 
     def _format_parameters(self, params: dict[str, Any]) -> str:
@@ -355,6 +362,23 @@ Return ONLY the Python code, no explanations."""
             code = re.sub(
                 r"(self\.set_cash\([^)]+\))",
                 r"\1\n        self.set_benchmark('SPY')",
+                code,
+            )
+
+        # Fix 5: Options strategies require DataNormalizationMode.Raw on underlying
+        options_patterns = [
+            r"add_option\(",
+            r"add_option_contract\(",
+            r"option_chain",
+            r"OptionChain",
+        ]
+        is_options_strategy = any(re.search(p, code, re.IGNORECASE) for p in options_patterns)
+
+        if is_options_strategy and "DataNormalizationMode" not in code:
+            # Add normalization mode after add_equity calls
+            code = re.sub(
+                r"((\w+)\s*=\s*self\.add_equity\([^)]+\))",
+                r"\1\n        \2.set_data_normalization_mode(DataNormalizationMode.RAW)",
                 code,
             )
 
