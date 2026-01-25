@@ -144,8 +144,8 @@ class BacktestExecutor:
     Cloud execution provides full data access but requires API credentials.
     """
 
-    # Default walk-forward windows (5 rolling windows)
-    DEFAULT_WINDOWS = [
+    # All available walk-forward windows (5 rolling windows)
+    ALL_WINDOWS = [
         ("2012-01-01", "2015-12-31"),
         ("2014-01-01", "2017-12-31"),
         ("2016-01-01", "2019-12-31"),
@@ -153,11 +153,19 @@ class BacktestExecutor:
         ("2020-01-01", "2023-12-31"),
     ]
 
+    # Default: 2 windows (similar to old IS/OOS approach, faster iteration)
+    # Use --windows 5 for thorough validation
+    DEFAULT_WINDOWS = [
+        ("2012-01-01", "2017-12-31"),  # In-sample period
+        ("2018-01-01", "2023-12-31"),  # Out-of-sample period
+    ]
+
     def __init__(
         self,
         workspace_path: Path,
         use_local: bool = False,
         cleanup_on_start: bool = True,
+        num_windows: int = 2,
     ):
         """Initialize backtest executor.
 
@@ -165,10 +173,18 @@ class BacktestExecutor:
             workspace_path: Path to the V4 workspace
             use_local: If True, use local Docker; if False, use QC cloud
             cleanup_on_start: If True, clean up stuck backtests on init
+            num_windows: Number of walk-forward windows (2 or 5)
         """
         self.workspace_path = Path(workspace_path)
         self.validations_path = self.workspace_path / "validations"
         self.use_local = use_local
+        self.num_windows = num_windows
+
+        # Select windows based on num_windows
+        if num_windows >= 5:
+            self.windows = self.ALL_WINDOWS
+        else:
+            self.windows = self.DEFAULT_WINDOWS
 
         if cleanup_on_start and not use_local:
             self._cleanup_all_stuck_backtests()
@@ -241,7 +257,7 @@ class BacktestExecutor:
             WalkForwardResult with aggregated metrics
         """
         if windows is None:
-            windows = self.DEFAULT_WINDOWS
+            windows = self.windows
 
         wf_result = WalkForwardResult(strategy_id=strategy_id)
         total_windows = len(windows)
@@ -407,7 +423,7 @@ class BacktestExecutor:
             Tuple of (WalkForwardResult, total_correction_attempts)
         """
         if windows is None:
-            windows = self.DEFAULT_WINDOWS
+            windows = self.windows
 
         wf_result = WalkForwardResult(strategy_id=strategy_id)
         current_code = code

@@ -1034,6 +1034,13 @@ Examples:
         help="Skip verification check before running"
     )
     parser.add_argument(
+        "--windows",
+        type=int,
+        default=2,
+        choices=[2, 5],
+        help="Number of walk-forward windows: 2 (fast, IS/OOS style) or 5 (thorough). Default: 2"
+    )
+    parser.add_argument(
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
@@ -2072,6 +2079,7 @@ def cmd_v4_run(args):
     dry_run = getattr(args, 'dry_run', False)
     force_llm = getattr(args, 'force_llm', False)
     skip_verify = getattr(args, 'skip_verify', False)
+    num_windows = getattr(args, 'windows', 2)
 
     if not strategy_id and not run_all:
         print("Error: Strategy ID required or use --all")
@@ -2098,12 +2106,14 @@ def cmd_v4_run(args):
         workspace=workspace,
         llm_client=llm_client,
         use_local=use_local,
+        num_windows=num_windows,
     )
 
     print("\n" + "=" * 60)
     print("  V4 Validation Pipeline")
     print("=" * 60)
     print(f"\nBacktest mode: {'Local Docker' if use_local else 'QC Cloud'}")
+    print(f"Walk-forward windows: {num_windows}")
     if dry_run:
         print("[DRY RUN] No backtests will be executed")
     print()
