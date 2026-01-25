@@ -1115,6 +1115,101 @@ class Risk(BaseModel):
 
 
 # =============================================================================
+# TUNABLE PARAMETERS (for walk-forward optimization)
+# =============================================================================
+
+
+class ParameterType(str, Enum):
+    """Type of tunable parameter."""
+
+    INT = "int"
+    FLOAT = "float"
+    BOOL = "bool"
+    CHOICE = "choice"
+
+
+class TunableParameter(BaseModel):
+    """A single tunable parameter with optimization range.
+
+    Used for walk-forward optimization where parameters are
+    re-optimized at each step using historical data.
+    """
+
+    type: ParameterType = Field(..., description="Parameter type")
+    default: int | float | bool | str = Field(..., description="Default value")
+    description: str | None = Field(None, description="Parameter description")
+
+    # For numeric types (int, float)
+    min: int | float | None = Field(None, description="Minimum value")
+    max: int | float | None = Field(None, description="Maximum value")
+    step: int | float | None = Field(None, description="Step size for optimization")
+
+    # For choice type
+    choices: list[str] | None = Field(None, description="Valid choices")
+
+    @model_validator(mode="after")
+    def validate_parameter_config(self) -> "TunableParameter":
+        """Validate parameter configuration based on type."""
+        if self.type in (ParameterType.INT, ParameterType.FLOAT):
+            if self.min is not None and self.max is not None:
+                if self.min >= self.max:
+                    raise ValueError(f"min ({self.min}) must be less than max ({self.max})")
+                if self.step is not None and self.step <= 0:
+                    raise ValueError(f"step must be positive, got {self.step}")
+        elif self.type == ParameterType.CHOICE:
+            if not self.choices or len(self.choices) < 2:
+                raise ValueError("choice type requires at least 2 choices")
+        return self
+
+    def get_search_space_size(self) -> int:
+        """Calculate the number of values in the parameter search space."""
+        if self.type == ParameterType.BOOL:
+            return 2
+        elif self.type == ParameterType.CHOICE:
+            return len(self.choices) if self.choices else 1
+        elif self.min is not None and self.max is not None and self.step is not None:
+            return int((self.max - self.min) / self.step) + 1
+        return 1  # Fixed value, not optimizable
+
+
+class TunableParameters(BaseModel):
+    """Collection of tunable parameters for a strategy.
+
+    Example YAML:
+        tunable_parameters:
+          sma_fast:
+            type: int
+            default: 10
+            min: 5
+            max: 30
+            step: 5
+          sma_slow:
+            type: int
+            default: 50
+            min: 20
+            max: 100
+            step: 10
+    """
+
+    parameters: dict[str, TunableParameter] = Field(
+        default_factory=dict, description="Named tunable parameters"
+    )
+
+    def get_total_search_space_size(self) -> int:
+        """Calculate total combinations in the parameter search space."""
+        if not self.parameters:
+            return 1
+        size = 1
+        for param in self.parameters.values():
+            size *= param.get_search_space_size()
+        return size
+
+    def get_defaults(self) -> dict[str, int | float | bool | str]:
+        """Get dictionary of default values for all parameters."""
+        return {name: param.default for name, param in self.parameters.items()}
+
+
+# =============================================================================
 # BACKTEST PARAMETERS
 # =============================================================================
 
@@ -1189,6 +1284,11 @@ class V4Strategy(BaseModel):
 
     # Backtest parameters
     backtest_params: BacktestParams | None = Field(None, description="Backtest parameters")
+
+    # Tunable parameters for walk-forward optimization
+    tunable_parameters: TunableParameters | None = Field(
+        None, description="Tunable parameters for optimization"
+    )
 
     @model_validator(mode="after")
     def validate_strategy_mode(self) -> "V4Strategy":
