@@ -1,0 +1,165 @@
+{# V4 Regime-Adaptive Strategy Template #}
+{# Switches between strategies based on market regime detection #}
+# region imports
+from AlgorithmImports import *
+from datetime import timedelta
+# endregion
+
+
+class {{ class_name }}(QCAlgorithm):
+    """
+    {{ strategy.name }}
+
+    {{ strategy.description | default("V4 regime-adaptive strategy.", true) }}
+
+    Strategy ID: {{ strategy.id }}
+    Type: Regime Adaptive
+    Generated: {{ timestamp }}
+    """
+
+    def initialize(self):
+        """Initialize the regime-adaptive strategy."""
+        self.set_cash(100000)
+
+        # Regime detection parameters
+        self._regime_lookback = {{ strategy.parameters.regime_lookback | default(50, true) }}
+        self._vol_lookback = {{ strategy.parameters.vol_lookback | default(20, true) }}
+        self.set_warm_up(timedelta(days=max(self._regime_lookback, self._vol_lookback) + 20))
+
+        # Benchmark
+        self.set_benchmark("SPY")
+
+        # Market indicator for regime detection
+        self._market = self.add_equity("SPY", Resolution.DAILY).symbol
+
+        # Volatility indicator (VIX proxy)
+{% if strategy.parameters.vol_indicator %}
+        self._vol_indicator = self.add_equity("{{ strategy.parameters.vol_indicator }}", Resolution.DAILY).symbol
+{% else %}
+        self._vol_indicator = self.add_equity("VIXY", Resolution.DAILY).symbol
+{% endif %}
+
+        # Asset universe
+        self._risk_on_assets = []
+{% for symbol in strategy.parameters.risk_on_assets | default(["QQQ", "IWM"], true) %}
+        self._risk_on_assets.append(self.add_equity("{{ symbol }}", Resolution.DAILY).symbol)
+{% endfor %}
+
+        self._risk_off_assets = []
+{% for symbol in strategy.parameters.risk_off_assets | default(["TLT", "GLD"], true) %}
+        self._risk_off_assets.append(self.add_equity("{{ symbol }}", Resolution.DAILY).symbol)
+{% endfor %}
+
+        # Regime thresholds
+        self._trend_threshold = {{ strategy.parameters.trend_threshold | default(0.0, true) }}
+        self._vol_threshold = {{ strategy.parameters.vol_threshold | default(0.20, true) }}
+
+        # Position sizing
+        self._leverage = {{ strategy.parameters.leverage | default(1.0, true) }}
+
+        # Current regime
+        self._current_regime = None
+
+        # Schedule weekly regime check
+{% if strategy.parameters.rebalance_frequency == "daily" %}
+        self.schedule.on(
+            self.date_rules.every_day(),
+            self.time_rules.after_market_open("SPY", 30),
+            self.check_regime_and_rebalance
+        )
+{% else %}
+        self.schedule.on(
+            self.date_rules.every(DayOfWeek.MONDAY),
+            self.time_rules.after_market_open("SPY", 30),
+            self.check_regime_and_rebalance
+        )
+{% endif %}
+
+    def check_regime_and_rebalance(self):
+        """Check market regime and rebalance accordingly."""
+        if self.is_warming_up:
+            return
+
+        # Detect current regime
+        regime = self.detect_regime()
+        if regime is None:
+            return
+
+        # Only rebalance on regime change or if not invested
+        if regime != self._current_regime or not self.portfolio.invested:
+            self._current_regime = regime
+            self.execute_regime_strategy(regime)
+
+    def detect_regime(self) -> str | None:
+        """Detect current market regime.
+
+        Returns:
+            "risk_on" for bullish/low-vol regime
+            "risk_off" for bearish/high-vol regime
+            None if unable to determine
+        """
+        # Get market trend (SMA crossover)
+        trend = self.get_trend_signal()
+        if trend is None:
+            return None
+
+        # Get volatility regime
+        vol = self.get_volatility_regime()
+        if vol is None:
+            return None
+
+        # Regime logic:
+        # Risk-on: Positive trend AND low volatility
+        # Risk-off: Negative trend OR high volatility
+        if trend > self._trend_threshold and not vol:
+            return "risk_on"
+        else:
+            return "risk_off"
+
+    def get_trend_signal(self) -> float | None:
+        """Calculate trend signal using momentum.
+
+        Returns:
+            Trend value (positive = uptrend, negative = downtrend)
+        """
+        history = self.history(self._market, self._regime_lookback, Resolution.DAILY)
+        if history.empty or len(history) < self._regime_lookback * 0.8:
+            return None
+
+        close = history["close"]
+        # Simple momentum: current vs lookback-period-ago
+        return (close.iloc[-1] / close.iloc[0]) - 1.0
+
+    def get_volatility_regime(self) -> bool | None:
+        """Determine if we're in high volatility regime.
+
+        Returns:
+            True if high volatility, False if low volatility, None if unknown
+        """
+        history = self.history(self._market, self._vol_lookback, Resolution.DAILY)
+        if history.empty or len(history) < self._vol_lookback * 0.8:
+            return None
+
+        # Calculate realized volatility
+        returns = history["close"].pct_change().dropna()
+        vol = returns.std() * (252 ** 0.5)  # Annualized
+
+        return vol > self._vol_threshold
+
+    def execute_regime_strategy(self, regime: str):
+        """Execute strategy based on current regime."""
+        self.log(f"Regime change to: {regime}")
+
+        # Liquidate current positions
+        self.liquidate()
+
+        if regime == "risk_on":
+            # Equal weight risk-on assets
+            weight = (1.0 / len(self._risk_on_assets)) * self._leverage
+            for symbol in self._risk_on_assets:
+                self.set_holdings(symbol, weight)
+        else:
+            # Equal weight risk-off assets
+            weight = (1.0 / len(self._risk_off_assets)) * self._leverage
+            for symbol in self._risk_off_assets:
+                self.set_holdings(symbol, weight)

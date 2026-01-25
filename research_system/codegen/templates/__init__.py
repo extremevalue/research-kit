@@ -80,3 +80,12 @@ def get_template_for_strategy(strategy_type: str, signal_type: str | None = None
         f"Available strategy types: {list(STRATEGY_TYPE_TO_TEMPLATE.keys())}. "
         f"Available signal types: {list(SIGNAL_TO_TEMPLATE.keys())}."
     )
+
+
+# V4 Template exports
+from research_system.codegen.templates.v4 import (
+    V4_TEMPLATE_DIR,
+    V4_STRATEGY_TO_TEMPLATE,
+    get_template_for_v4_strategy,
+    list_v4_templates,
+)

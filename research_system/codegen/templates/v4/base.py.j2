@@ -1,0 +1,176 @@
+{# V4 Base Template for QuantConnect Strategies #}
+{# This template provides the common structure for all V4 strategies #}
+{# IMPORTANT: Dates are NOT set here - they are controlled by the framework #}
+# region imports
+from AlgorithmImports import *
+from datetime import timedelta
+# endregion
+
+
+class {{ class_name }}(QCAlgorithm):
+    """
+    {{ strategy.name }}
+
+    {{ strategy.description | default("V4 auto-generated strategy.", true) }}
+
+    Strategy ID: {{ strategy.id }}
+    Generated: {{ timestamp }}
+    """
+
+    def initialize(self):
+        """Initialize the algorithm.
+
+        NOTE: Start/end dates are set by the framework, NOT in this code.
+        This ensures proper walk-forward validation without date injection bugs.
+        """
+        # Capital
+        self.set_cash(100000)
+
+        # Warmup period
+{% if strategy.parameters.lookback_period %}
+        self.set_warm_up(timedelta(days={{ strategy.parameters.lookback_period }}))
+{% else %}
+        self.set_warm_up(timedelta(days=30))
+{% endif %}
+
+        # Benchmark
+        self.set_benchmark("SPY")
+
+{% block universe_setup %}
+        # Universe setup
+        self._symbols = []
+{% for symbol in strategy.universe | default(["SPY"], true) %}
+        self._symbols.append(self.add_equity("{{ symbol }}", Resolution.DAILY).symbol)
+{% endfor %}
+{% endblock %}
+
+{% block signal_params %}
+        # Signal parameters
+{% if strategy.parameters.lookback_period %}
+        self._lookback = {{ strategy.parameters.lookback_period }}
+{% endif %}
+{% if strategy.parameters.threshold %}
+        self._threshold = {{ strategy.parameters.threshold }}
+{% endif %}
+{% if strategy.parameters.top_n %}
+        self._top_n = {{ strategy.parameters.top_n }}
+{% endif %}
+{% endblock %}
+
+{% block position_sizing %}
+        # Position sizing
+        self._leverage = {{ strategy.parameters.leverage | default(1.0, true) }}
+{% if strategy.parameters.max_position_size %}
+        self._max_position_size = {{ strategy.parameters.max_position_size }}
+{% endif %}
+{% endblock %}
+
+{% block schedule_rebalance %}
+        # Schedule rebalancing
+{% if strategy.parameters.rebalance_frequency == "daily" %}
+        self.schedule.on(
+            self.date_rules.every_day(),
+            self.time_rules.after_market_open("SPY", 30),
+            self.rebalance
+        )
+{% elif strategy.parameters.rebalance_frequency == "weekly" %}
+        self.schedule.on(
+            self.date_rules.every(DayOfWeek.MONDAY),
+            self.time_rules.after_market_open("SPY", 30),
+            self.rebalance
+        )
+{% else %}
+        self.schedule.on(
+            self.date_rules.month_start(),
+            self.time_rules.after_market_open("SPY", 30),
+            self.rebalance
+        )
+{% endif %}
+{% endblock %}
+
+{% block custom_init %}
+        # Strategy-specific initialization
+{% endblock %}
+
+    def rebalance(self):
+        """Execute the rebalancing logic."""
+        if self.is_warming_up:
+            return
+
+{% block rebalance_logic %}
+        # Get target weights
+        target_weights = self.calculate_target_weights()
+
+        # Execute trades
+        self.execute_target_weights(target_weights)
+{% endblock %}
+
+    def calculate_target_weights(self) -> dict:
+        """Calculate target portfolio weights.
+
+        Returns:
+            Dictionary mapping Symbol to target weight (0.0 to 1.0)
+        """
+{% block calculate_weights %}
+        # Override in strategy-specific template
+        return {}
+{% endblock %}
+
+    def execute_target_weights(self, target_weights: dict):
+        """Execute trades to achieve target weights.
+
+        Args:
+            target_weights: Dictionary mapping Symbol to target weight
+        """
+{% block execute_trades %}
+        # Liquidate positions not in target
+        for holding in self.portfolio.values():
+            if holding.invested and holding.symbol not in target_weights:
+                self.liquidate(holding.symbol)
+
+        # Set target weights with leverage
+        for symbol, weight in target_weights.items():
+            adjusted_weight = weight * self._leverage
+{% if strategy.parameters.max_position_size %}
+            adjusted_weight = min(adjusted_weight, self._max_position_size)
+{% endif %}
+            self.set_holdings(symbol, adjusted_weight)
+{% endblock %}
+
+{% block helper_methods %}
+    def get_historical_returns(self, symbol, lookback: int) -> float:
+        """Calculate total return over lookback period.
+
+        Args:
+            symbol: The symbol to calculate returns for
+            lookback: Number of days to look back
+
+        Returns:
+            Total return as decimal (e.g., 0.05 for 5%)
+        """
+        history = self.history(symbol, lookback, Resolution.DAILY)
+        if history.empty or len(history) < 2:
+            return 0.0
+
+        close_prices = history["close"]
+        return (close_prices.iloc[-1] / close_prices.iloc[0]) - 1.0
+
+    def get_volatility(self, symbol, lookback: int) -> float:
+        """Calculate annualized volatility over lookback period.
+
+        Args:
+            symbol: The symbol to calculate volatility for
+            lookback: Number of days to look back
+
+        Returns:
+            Annualized volatility as decimal
+        """
+        history = self.history(symbol, lookback, Resolution.DAILY)
+        if history.empty or len(history) < 2:
+            return float("inf")
+
+        returns = history["close"].pct_change().dropna()
+        return returns.std() * (252 ** 0.5)
+{% endblock %}
+
+{% block additional_methods %}{% endblock %}

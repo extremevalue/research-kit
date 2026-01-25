@@ -1,0 +1,118 @@
+{# V4 Mean Reversion Strategy Template #}
+{# Z-score based entry/exit with configurable thresholds #}
+# region imports
+from AlgorithmImports import *
+from datetime import timedelta
+import numpy as np
+# endregion
+
+
+class {{ class_name }}(QCAlgorithm):
+    """
+    {{ strategy.name }}
+
+    {{ strategy.description | default("V4 mean reversion strategy.", true) }}
+
+    Strategy ID: {{ strategy.id }}
+    Type: Mean Reversion
+    Generated: {{ timestamp }}
+    """
+
+    def initialize(self):
+        """Initialize the mean reversion strategy."""
+        self.set_cash(100000)
+
+        # Lookback period for z-score calculation
+        self._lookback = {{ strategy.parameters.lookback_period | default(20, true) }}
+        self.set_warm_up(timedelta(days=self._lookback + 10))
+
+        # Benchmark
+        self.set_benchmark("SPY")
+
+        # Primary symbol
+{% if strategy.universe and strategy.universe|length > 0 %}
+        self._symbol = self.add_equity("{{ strategy.universe[0] }}", Resolution.DAILY).symbol
+{% else %}
+        self._symbol = self.add_equity("SPY", Resolution.DAILY).symbol
+{% endif %}
+
+        # Z-score thresholds
+        self._entry_threshold = {{ strategy.parameters.entry_threshold | default(-2.0, true) }}
+        self._exit_threshold = {{ strategy.parameters.exit_threshold | default(0.0, true) }}
+
+{% if strategy.parameters.short_enabled | default(false, true) %}
+        # Short side thresholds
+        self._short_entry = {{ strategy.parameters.short_entry | default(2.0, true) }}
+        self._short_exit = {{ strategy.parameters.short_exit | default(0.0, true) }}
+{% endif %}
+
+        # Position sizing
+        self._leverage = {{ strategy.parameters.leverage | default(1.0, true) }}
+{% if strategy.parameters.max_position_size %}
+        self._max_position = {{ strategy.parameters.max_position_size }}
+{% else %}
+        self._max_position = 1.0
+{% endif %}
+
+        # Schedule daily check
+        self.schedule.on(
+            self.date_rules.every_day(),
+            self.time_rules.after_market_open("SPY", 30),
+            self.check_signal
+        )
+
+    def check_signal(self):
+        """Check mean reversion signal and trade."""
+        if self.is_warming_up:
+            return
+
+        # Calculate z-score
+        z_score = self.calculate_zscore(self._symbol)
+        if z_score is None:
+            return
+
+        current_holding = self.portfolio[self._symbol].quantity
+
+        # Long entry: z-score below entry threshold (oversold)
+        if z_score < self._entry_threshold and current_holding <= 0:
+            weight = min(self._max_position, 1.0) * self._leverage
+            self.set_holdings(self._symbol, weight)
+            self.log(f"Long entry: z-score={z_score:.2f}")
+
+        # Long exit: z-score back to exit threshold
+        elif z_score > self._exit_threshold and current_holding > 0:
+            self.liquidate(self._symbol)
+            self.log(f"Long exit: z-score={z_score:.2f}")
+
+{% if strategy.parameters.short_enabled | default(false, true) %}
+        # Short entry: z-score above short entry threshold (overbought)
+        elif z_score > self._short_entry and current_holding >= 0:
+            weight = -min(self._max_position, 1.0) * self._leverage
+            self.set_holdings(self._symbol, weight)
+            self.log(f"Short entry: z-score={z_score:.2f}")
+
+        # Short exit: z-score back to short exit threshold
+        elif z_score < self._short_exit and current_holding < 0:
+            self.liquidate(self._symbol)
+            self.log(f"Short exit: z-score={z_score:.2f}")
+{% endif %}
+
+    def calculate_zscore(self, symbol) -> float | None:
+        """Calculate z-score of current price relative to lookback period.
+
+        Returns:
+            Z-score (negative = below mean, positive = above mean)
+        """
+        history = self.history(symbol, self._lookback, Resolution.DAILY)
+        if history.empty or len(history) < self._lookback * 0.8:
+            return None
+
+        close = history["close"]
+        mean = close.mean()
+        std = close.std()
+
+        if std == 0:
+            return None
+
+        current_price = close.iloc[-1]
+        return (current_price - mean) / std

@@ -1,0 +1,129 @@
+{# V4 Momentum Strategy Template #}
+{# Supports relative momentum (rotation) and absolute momentum strategies #}
+# region imports
+from AlgorithmImports import *
+from datetime import timedelta
+# endregion
+
+
+class {{ class_name }}(QCAlgorithm):
+    """
+    {{ strategy.name }}
+
+    {{ strategy.description | default("V4 momentum strategy.", true) }}
+
+    Strategy ID: {{ strategy.id }}
+    Type: Momentum
+    Generated: {{ timestamp }}
+    """
+
+    def initialize(self):
+        """Initialize the momentum strategy."""
+        self.set_cash(100000)
+
+        # Lookback period for momentum calculation
+        self._lookback = {{ strategy.parameters.lookback_period | default(126, true) }}
+        self.set_warm_up(timedelta(days=self._lookback + 10))
+
+        # Benchmark
+        self.set_benchmark("SPY")
+
+        # Universe
+        self._symbols = []
+{% for symbol in strategy.universe | default(["SPY", "QQQ", "IWM", "EFA", "EEM"], true) %}
+        self._symbols.append(self.add_equity("{{ symbol }}", Resolution.DAILY).symbol)
+{% endfor %}
+
+{% if strategy.parameters.defensive_symbol %}
+        # Defensive asset for risk-off
+        self._defensive = self.add_equity("{{ strategy.parameters.defensive_symbol }}", Resolution.DAILY).symbol
+{% else %}
+        self._defensive = self.add_equity("SHY", Resolution.DAILY).symbol
+{% endif %}
+
+        # Selection parameters
+        self._top_n = {{ strategy.parameters.top_n | default(3, true) }}
+{% if strategy.parameters.threshold %}
+        self._threshold = {{ strategy.parameters.threshold }}  # Absolute momentum threshold
+{% endif %}
+
+        # Position sizing
+        self._leverage = {{ strategy.parameters.leverage | default(1.0, true) }}
+
+        # Schedule monthly rebalancing
+{% if strategy.parameters.rebalance_frequency == "weekly" %}
+        self.schedule.on(
+            self.date_rules.every(DayOfWeek.MONDAY),
+            self.time_rules.after_market_open("SPY", 30),
+            self.rebalance
+        )
+{% else %}
+        self.schedule.on(
+            self.date_rules.month_start(),
+            self.time_rules.after_market_open("SPY", 30),
+            self.rebalance
+        )
+{% endif %}
+
+    def rebalance(self):
+        """Execute momentum-based rebalancing."""
+        if self.is_warming_up:
+            return
+
+        # Calculate momentum for each symbol
+        momentum_scores = {}
+        for symbol in self._symbols:
+            mom = self.get_momentum(symbol)
+            if mom is not None:
+                momentum_scores[symbol] = mom
+
+        if not momentum_scores:
+            return
+
+        # Sort by momentum (descending)
+        sorted_symbols = sorted(momentum_scores.items(), key=lambda x: x[1], reverse=True)
+
+        # Select top N with positive momentum (if threshold defined)
+        selected = []
+        for symbol, score in sorted_symbols[:self._top_n]:
+{% if strategy.parameters.threshold %}
+            if score > self._threshold:
+                selected.append(symbol)
+{% else %}
+            if score > 0:  # Default: require positive momentum
+                selected.append(symbol)
+{% endif %}
+
+        # Calculate target weights
+        if selected:
+            weight = (1.0 / len(selected)) * self._leverage
+            target_weights = {s: weight for s in selected}
+        else:
+            # Risk-off: go to defensive asset
+            target_weights = {self._defensive: 1.0 * self._leverage}
+
+        # Execute trades
+        self.execute_target_weights(target_weights)
+
+    def get_momentum(self, symbol) -> float | None:
+        """Calculate momentum score for a symbol.
+
+        Uses {{ strategy.parameters.lookback_period | default(126, true) }}-day return.
+        """
+        history = self.history(symbol, self._lookback, Resolution.DAILY)
+        if history.empty or len(history) < self._lookback * 0.8:
+            return None
+
+        close = history["close"]
+        return (close.iloc[-1] / close.iloc[0]) - 1.0
+
+    def execute_target_weights(self, target_weights: dict):
+        """Execute trades to achieve target weights."""
+        # Liquidate positions not in target
+        for holding in self.portfolio.values():
+            if holding.invested and holding.symbol not in target_weights:
+                self.liquidate(holding.symbol)
+
+        # Set target holdings
+        for symbol, weight in target_weights.items():
+            self.set_holdings(symbol, weight)

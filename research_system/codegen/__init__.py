@@ -20,10 +20,20 @@ Example:
 from research_system.codegen.engine import CodeGenerationError, TemplateEngine
 from research_system.codegen.filters import CUSTOM_FILTERS
 from research_system.codegen.generator import CodeGenerator
+from research_system.codegen.v4_generator import (
+    V4CodeGenerator,
+    V4CodeGenResult,
+    generate_v4_code,
+)
 
 __all__ = [
+    # Tier 1 codegen
     "TemplateEngine",
     "CodeGenerator",
     "CodeGenerationError",
     "CUSTOM_FILTERS",
+    # V4 codegen
+    "V4CodeGenerator",
+    "V4CodeGenResult",
+    "generate_v4_code",
 ]
