@@ -1083,6 +1083,81 @@ Examples:
     )
     parser.set_defaults(func=cmd_v4_cleanup)
 
+    # v4-walkforward command
+    parser = subparsers.add_parser(
+        "v4-walkforward",
+        help="Run true walk-forward optimization (V4)",
+        description="""
+Run true walk-forward optimization for a strategy with tunable parameters.
+
+Walk-forward validation:
+1. Optimize parameters on in-sample data (historical)
+2. Test optimized params on out-of-sample data (future)
+3. Repeat for each period
+4. Aggregate out-of-sample results
+
+This simulates live trading where parameters are re-optimized
+periodically using only available data.
+
+Examples:
+  research v4-walkforward STRAT-001           # Run walk-forward validation
+  research v4-walkforward STRAT-001 --json    # Output as JSON
+  research v4-walkforward STRAT-001 --params  # Show parameter evolution
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "strategy_id",
+        help="Strategy ID to analyze (e.g., STRAT-001)"
+    )
+    parser.add_argument(
+        "--start-year",
+        type=int,
+        default=2012,
+        help="Start year for walk-forward (default: 2012)"
+    )
+    parser.add_argument(
+        "--end-year",
+        type=int,
+        default=2023,
+        help="End year for walk-forward (default: 2023)"
+    )
+    parser.add_argument(
+        "--train-years",
+        type=int,
+        default=3,
+        help="Initial training period in years (default: 3)"
+    )
+    parser.add_argument(
+        "--test-years",
+        type=int,
+        default=1,
+        help="Test period in years (default: 1)"
+    )
+    parser.add_argument(
+        "--max-evals",
+        type=int,
+        default=50,
+        help="Max parameter evaluations per period (default: 50)"
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON"
+    )
+    parser.add_argument(
+        "--params",
+        action="store_true",
+        help="Show parameter evolution across periods"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to V4 workspace"
+    )
+    parser.set_defaults(func=cmd_v4_walkforward)
+
     # v4-status command
     parser = subparsers.add_parser(
         "v4-status",
@@ -2191,6 +2266,105 @@ def cmd_v4_cleanup(args):
         print("If you're still seeing 'no spare nodes', check the QC dashboard directly.")
 
     return 0
+
+
+def cmd_v4_walkforward(args):
+    """Run true walk-forward optimization (V4)."""
+    from research_system.optimization import (
+        WalkForwardConfig,
+        WalkForwardRunner,
+        format_terminal_summary,
+        format_json_output,
+        format_parameter_evolution,
+    )
+    from research_system.validation.backtest import BacktestExecutor
+    from research_system.codegen.v4_generator import V4CodeGenerator
+
+    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init --v4' to initialize a V4 workspace.")
+        return 1
+
+    strategy_id = args.strategy_id
+
+    # Load strategy
+    strategy = workspace.load_strategy(strategy_id)
+    if not strategy:
+        print(f"Error: Strategy '{strategy_id}' not found")
+        return 1
+
+    # Check for tunable parameters
+    if not strategy.get("tunable_parameters"):
+        print(f"Error: Strategy '{strategy_id}' has no tunable parameters defined")
+        print("\nTo use walk-forward optimization, add tunable_parameters to the strategy:")
+        print("  tunable_parameters:")
+        print("    parameters:")
+        print("      period:")
+        print("        type: int")
+        print("        default: 20")
+        print("        min: 10")
+        print("        max: 50")
+        print("        step: 5")
+        return 1
+
+    # Create config from CLI args
+    config = WalkForwardConfig(
+        start_year=args.start_year,
+        end_year=args.end_year,
+        initial_train_years=args.train_years,
+        test_years=args.test_years,
+        max_evaluations=args.max_evals,
+    )
+
+    # Get periods preview
+    periods = config.get_periods()
+
+    if not args.json:
+        print("\n" + "=" * 60)
+        print("  Walk-Forward Optimization")
+        print("=" * 60)
+        print(f"\nStrategy: {strategy_id} - {strategy.get('name', 'Unknown')}")
+        print(f"Periods:  {len(periods)}")
+        print(f"Config:   {config.start_year}-{config.end_year}, {config.initial_train_years}yr train, {config.test_years}yr test")
+        print(f"Max evals: {config.max_evaluations} per period")
+        print()
+
+    # Create executor and code generator
+    backtest_executor = BacktestExecutor(
+        workspace_path=workspace.path,
+        use_local=False,
+    )
+    code_generator = V4CodeGenerator()
+
+    # Create runner
+    runner = WalkForwardRunner(
+        backtest_executor=backtest_executor,
+        code_generator=code_generator,
+    )
+
+    # Run walk-forward
+    if not args.json:
+        print("Running walk-forward optimization...")
+        print("(This may take a while - each period runs optimization + OOS test)")
+        print()
+
+    result = runner.run(strategy, config)
+
+    # Output results
+    if args.json:
+        print(format_json_output(result))
+    elif args.params:
+        print(format_terminal_summary(result))
+        print()
+        print(format_parameter_evolution(result))
+    else:
+        print(format_terminal_summary(result))
+
+    return 0 if result.success else 1
 
 
 def cmd_v4_status(args):
