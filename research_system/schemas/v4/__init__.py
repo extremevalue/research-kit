@@ -150,6 +150,10 @@ from research_system.schemas.v4.strategy import (
     Risk,
     # Backtest params
     BacktestParams,
+    # Tunable parameters
+    ParameterType,
+    TunableParameter,
+    TunableParameters,
     # Main strategy model
     V4Strategy,
 )
@@ -294,6 +298,9 @@ __all__ = [
     "Assumption",
     "Risk",
     "BacktestParams",
+    "ParameterType",
+    "TunableParameter",
+    "TunableParameters",
     "V4Strategy",
     # Ingestion
     "RedFlagSeverity",
