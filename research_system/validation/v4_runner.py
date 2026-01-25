@@ -188,10 +188,23 @@ class V4Runner:
 
         # Step 3: Run walk-forward backtest
         print(f"  Running walk-forward validation...")
-        wf_result = self.backtest_executor.run_walk_forward(
-            code=code_result.code,
-            strategy_id=strategy_id,
-        )
+
+        # Use correction loop if LLM is available
+        correction_attempts = 1
+        if self.llm_client:
+            wf_result, correction_attempts = self.backtest_executor.run_walk_forward_with_correction(
+                code=code_result.code,
+                strategy_id=strategy_id,
+                strategy=strategy,
+                code_generator=self.code_generator,
+            )
+            if correction_attempts > 1:
+                print(f"    Code corrected after {correction_attempts} attempts")
+        else:
+            wf_result = self.backtest_executor.run_walk_forward(
+                code=code_result.code,
+                strategy_id=strategy_id,
+            )
 
         # Check for blocking issues
         if wf_result.determination in ("BLOCKED", "RETRY_LATER"):
