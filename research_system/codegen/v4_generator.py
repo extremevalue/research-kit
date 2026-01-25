@@ -226,8 +226,8 @@ class V4CodeGenerator:
             prompt = self._build_llm_prompt(strategy)
             response = self.llm_client.generate(prompt)
 
-            # Extract code from response
-            code = self._extract_code_from_response(response)
+            # Extract code from response (response.content is the text)
+            code = self._extract_code_from_response(response.content)
             if not code:
                 return V4CodeGenResult(
                     success=False,
