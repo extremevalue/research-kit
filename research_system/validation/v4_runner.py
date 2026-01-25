@@ -78,6 +78,7 @@ class V4Runner:
         workspace,
         llm_client=None,
         use_local: bool = False,
+        num_windows: int = 2,
     ):
         """Initialize the V4 runner.
 
@@ -85,10 +86,12 @@ class V4Runner:
             workspace: V4Workspace instance
             llm_client: Optional LLM client for code generation
             use_local: Use local Docker instead of QC cloud
+            num_windows: Number of walk-forward windows (2 or 5)
         """
         self.workspace = workspace
         self.llm_client = llm_client
         self.use_local = use_local
+        self.num_windows = num_windows
 
         # Initialize code generator
         self.code_generator = V4CodeGenerator(llm_client)
@@ -98,6 +101,7 @@ class V4Runner:
             workspace_path=workspace.path,
             use_local=use_local,
             cleanup_on_start=not use_local,
+            num_windows=num_windows,
         )
 
         # Load config for gates
@@ -476,7 +480,7 @@ class V4Runner:
         print(f"    min_consistency: {config_gates.min_consistency}")
         print(f"    max_drawdown: {config_gates.max_drawdown}")
 
-        print(f"  Walk-forward windows: 5 (default)")
+        print(f"  Walk-forward windows: {self.num_windows}")
         print(f"  Backtest mode: {'Local Docker' if self.use_local else 'QC Cloud'}")
 
         return V4RunResult(
