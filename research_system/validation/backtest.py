@@ -294,14 +294,21 @@ class BacktestExecutor:
         max_retries: int,
     ) -> BacktestResult | None:
         """Execute the backtest command and handle the result."""
+        # Check for lean.json config - required to avoid interactive prompts
+        lean_config = self.workspace_path / "lean.json"
+        if not lean_config.exists():
+            return BacktestResult(
+                success=False,
+                error=f"No lean.json found in workspace. Run 'lean init' in {self.workspace_path} first.",
+            )
+
         # Build command
         if self.use_local:
             cmd = ["lean", "backtest", str(project_dir), "--download-data"]
-            lean_config = self.workspace_path / "lean.json"
-            if lean_config.exists():
-                cmd.extend(["--lean-config", str(lean_config)])
+            cmd.extend(["--lean-config", str(lean_config)])
         else:
             cmd = ["lean", "cloud", "backtest", str(project_dir), "--push"]
+            cmd.extend(["--lean-config", str(lean_config)])
 
         logger.info(f"Running: {' '.join(cmd)}")
 
