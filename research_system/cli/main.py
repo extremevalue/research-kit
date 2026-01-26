@@ -94,20 +94,22 @@ For more information, visit: https://github.com/your-repo/research-system
 
     # Add command parsers
     _add_init_parser(subparsers)
-    _add_ingest_parser(subparsers)
+
+    # Legacy commands - disabled to avoid conflicts with new commands
+    # _add_ingest_parser(subparsers)
     _add_catalog_parser(subparsers)
     _add_data_parser(subparsers)
-    _add_run_parser(subparsers)  # The core validation + expert loop
-    _add_validate_parser(subparsers)
-    _add_status_parser(subparsers)  # Dashboard and reports
+    # _add_run_parser(subparsers)  # Conflicts with new 'run'
+    # _add_validate_parser(subparsers)  # Conflicts with new 'validate'
+    # _add_status_parser(subparsers)  # Conflicts with new 'status'
     _add_develop_parser(subparsers)  # Idea development workflow (R2)
     _add_combine_parser(subparsers)
     _add_analyze_parser(subparsers)
-    _add_ideate_parser(subparsers)  # Multi-persona ideation
+    # _add_ideate_parser(subparsers)  # Conflicts with new 'ideate'
     _add_synthesize_parser(subparsers)  # Cross-strategy synthesis
     _add_migrate_parser(subparsers)
 
-    # Add V4 commands
+    # Add main commands (formerly V4)
     _add_v4_commands(subparsers)
 
     # Add update command
@@ -144,22 +146,18 @@ def _add_init_parser(subparsers):
         description="""
 Initialize a new research workspace at the specified path.
 
-Standard workspace:
-  - inbox/           Files to be ingested
-  - reviewed/        Processed files that didn't create entries (purgeable)
-  - catalog/entries/ Catalog entry metadata (JSON)
-  - catalog/sources/ Original files that created entries
-  - data-registry/   Data source definitions
-  - validations/     Validation results
-  - combinations/    Generated combinations
-  - config.json      Workspace configuration
-
-V4 workspace (--v4):
+Workspace structure:
   - inbox/                Files to be ingested
   - strategies/           Strategy documents by status
+    - pending/            Newly ingested, awaiting validation
+    - validated/          Passed validation
+    - invalidated/        Failed validation
+    - blocked/            Missing data dependencies
   - validations/          Walk-forward validation results
   - learnings/            Extracted learnings
   - ideas/                Strategy ideas (pre-formalization)
+  - archive/              Archived/rejected items
+  - logs/                 Daily rotating logs
   - research-kit.yaml     Configuration file
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -168,7 +166,7 @@ V4 workspace (--v4):
         "path",
         nargs="?",
         default=None,
-        help="Path for new workspace (default: ~/.research-workspace or ~/.research-workspace-v4 with --v4)"
+        help="Path for new workspace (default: ~/.research-workspace)"
     )
     parser.add_argument(
         "--name",
@@ -179,11 +177,6 @@ V4 workspace (--v4):
         "--force",
         action="store_true",
         help="Overwrite existing workspace"
-    )
-    parser.add_argument(
-        "--v4",
-        action="store_true",
-        help="Initialize a V4 workspace with the new directory structure"
     )
     parser.set_defaults(func=cmd_init)
 
@@ -775,20 +768,20 @@ def _add_v4_commands(subparsers):
     """Add V4-related subcommands.
 
     V4 commands support the new research workflow:
-    - init --v4: Initialize V4 workspace
-    - v4-ingest: Ingest files from inbox with quality scoring
-    - v4-verify: Run verification tests (bias detection)
-    - v4-validate: Run walk-forward validation
-    - v4-learn: Extract learnings from validation results
-    - v4-status: Show workspace status dashboard
-    - v4-list: List strategies with filtering
-    - v4-show: Show strategy details
-    - v4-config: Show/validate configuration
+    - init: Initialize workspace
+    - ingest: Ingest files from inbox with quality scoring
+    - verify: Run verification tests (bias detection)
+    - validate: Run walk-forward validation
+    - learn: Extract learnings from validation results
+    - status: Show workspace status dashboard
+    - list: List strategies with filtering
+    - show: Show strategy details
+    - config: Show/validate configuration
     """
-    # v4-ingest command
+    # ingest command
     parser = subparsers.add_parser(
-        "v4-ingest",
-        help="Ingest files from inbox into strategies (V4)",
+        "ingest",
+        help="Ingest files from inbox into strategies ",
         description="""
 Process files from the inbox directory and create strategy documents.
 Runs quality scoring (specificity, trust) and red flag detection.
@@ -808,7 +801,7 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace (default: RESEARCH_WORKSPACE or ~/.research-workspace-v4)"
+        help="Path to workspace (default: RESEARCH_WORKSPACE or ~/.research-workspace)"
     )
     parser.add_argument(
         "--dry-run", "-n",
@@ -823,10 +816,10 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
     )
     parser.set_defaults(func=cmd_v4_ingest)
 
-    # v4-verify command
+    # verify command
     parser = subparsers.add_parser(
-        "v4-verify",
-        help="Run verification tests on a strategy (V4)",
+        "verify",
+        help="Run verification tests on a strategy ",
         description="""
 Run verification tests on a strategy to check for biases and issues.
 
@@ -848,7 +841,7 @@ Tests include:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.add_argument(
         "--dry-run",
@@ -863,10 +856,10 @@ Tests include:
     )
     parser.set_defaults(func=cmd_v4_verify)
 
-    # v4-validate command
+    # validate command
     parser = subparsers.add_parser(
-        "v4-validate",
-        help="Run walk-forward validation on a strategy (V4)",
+        "validate",
+        help="Run walk-forward validation on a strategy ",
         description="""
 Run walk-forward validation (backtesting) on a strategy.
 Applies configured gates (Sharpe, consistency, drawdown).
@@ -885,7 +878,7 @@ strategy robustness across different market regimes.
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.add_argument(
         "--results", "-r",
@@ -910,10 +903,10 @@ strategy robustness across different market regimes.
     )
     parser.set_defaults(func=cmd_v4_validate)
 
-    # v4-learn command
+    # learn command
     parser = subparsers.add_parser(
-        "v4-learn",
-        help="Extract learnings from validation results (V4)",
+        "learn",
+        help="Extract learnings from validation results ",
         description="""
 Extract learnings from validation results for future reference.
 
@@ -934,7 +927,7 @@ Analyzes validation results to identify:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.add_argument(
         "--dry-run",
@@ -949,10 +942,10 @@ Analyzes validation results to identify:
     )
     parser.set_defaults(func=cmd_v4_learn)
 
-    # v4-ideate command
+    # ideate command
     parser = subparsers.add_parser(
-        "v4-ideate",
-        help="Generate new strategy ideas (V4)",
+        "ideate",
+        help="Generate new strategy ideas ",
         description="""
 Generate new strategy ideas based on existing strategies and learnings.
 
@@ -967,7 +960,7 @@ Ideas are generated by:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.add_argument(
         "--max-ideas", "-n",
@@ -982,12 +975,12 @@ Ideas are generated by:
     )
     parser.set_defaults(func=cmd_v4_ideate)
 
-    # v4-run command
+    # run command
     parser = subparsers.add_parser(
-        "v4-run",
-        help="Run full validation pipeline (V4)",
+        "run",
+        help="Run full validation pipeline ",
         description="""
-Run the complete V4 validation pipeline for a strategy:
+Run the complete validation pipeline for a strategy:
 
 1. Generate QuantConnect Python code (template or LLM)
 2. Run walk-forward backtest via LEAN CLI
@@ -996,10 +989,10 @@ Run the complete V4 validation pipeline for a strategy:
 5. Save results
 
 Examples:
-  research v4-run STRAT-001              # Full pipeline for one strategy
-  research v4-run --all                  # Batch process all pending
-  research v4-run STRAT-001 --local      # Use local Docker instead of cloud
-  research v4-run --all --dry-run        # Preview without running
+  research run STRAT-001              # Full pipeline for one strategy
+  research run --all                  # Batch process all pending
+  research run STRAT-001 --local      # Use local Docker instead of cloud
+  research run --all --dry-run        # Preview without running
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -1044,14 +1037,14 @@ Examples:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_run)
 
-    # v4-cleanup command
+    # cleanup command
     parser = subparsers.add_parser(
-        "v4-cleanup",
-        help="Clean up stuck QC backtests (V4)",
+        "cleanup",
+        help="Clean up stuck QC backtests ",
         description="""
 Clean up stuck or queued backtests on QuantConnect cloud.
 
@@ -1059,9 +1052,9 @@ Use this when you see "no spare nodes available" errors. This command
 will cancel running/queued backtests that may be blocking resources.
 
 Examples:
-  research v4-cleanup                    # Clean backtests older than 5 min
-  research v4-cleanup --aggressive       # Clean ALL running backtests
-  research v4-cleanup --dry-run          # Show what would be cleaned
+  research cleanup                    # Clean backtests older than 5 min
+  research cleanup --aggressive       # Clean ALL running backtests
+  research cleanup --dry-run          # Show what would be cleaned
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -1079,14 +1072,14 @@ Examples:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_cleanup)
 
-    # v4-walkforward command
+    # walkforward command
     parser = subparsers.add_parser(
-        "v4-walkforward",
-        help="Run true walk-forward optimization (V4)",
+        "walkforward",
+        help="Run true walk-forward optimization ",
         description="""
 Run true walk-forward optimization for a strategy with tunable parameters.
 
@@ -1100,9 +1093,9 @@ This simulates live trading where parameters are re-optimized
 periodically using only available data.
 
 Examples:
-  research v4-walkforward STRAT-001           # Run walk-forward validation
-  research v4-walkforward STRAT-001 --json    # Output as JSON
-  research v4-walkforward STRAT-001 --params  # Show parameter evolution
+  research walkforward STRAT-001           # Run walk-forward validation
+  research walkforward STRAT-001 --json    # Output as JSON
+  research walkforward STRAT-001 --params  # Show parameter evolution
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -1154,14 +1147,14 @@ Examples:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_walkforward)
 
-    # v4-status command
+    # status command
     parser = subparsers.add_parser(
-        "v4-status",
-        help="Show workspace status dashboard (V4)",
+        "status",
+        help="Show workspace status dashboard ",
         description="""
 Show workspace status: strategy counts by status, recent activity.
 
@@ -1177,14 +1170,14 @@ Displays a summary of the workspace including:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_status)
 
-    # v4-list command
+    # list command
     parser = subparsers.add_parser(
-        "v4-list",
-        help="List strategies (V4)",
+        "list",
+        help="List strategies ",
         description="""
 List strategies, optionally filtered by status.
 
@@ -1216,14 +1209,14 @@ Statuses:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_list)
 
-    # v4-show command
+    # show command
     parser = subparsers.add_parser(
-        "v4-show",
-        help="Show strategy details (V4)",
+        "show",
+        help="Show strategy details ",
         description="""
 Display full details of a strategy document.
 
@@ -1250,14 +1243,14 @@ Shows all strategy metadata including:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_show)
 
-    # v4-config command
+    # config command
     parser = subparsers.add_parser(
-        "v4-config",
-        help="Show/validate V4 configuration",
+        "config",
+        help="Show/validate configuration",
         description="""
 Show current configuration, or validate with --validate flag.
 
@@ -1278,7 +1271,7 @@ Configuration includes:
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
-        help="Path to V4 workspace"
+        help="Path to workspace"
     )
     parser.set_defaults(func=cmd_v4_config)
 
@@ -1289,52 +1282,22 @@ Configuration includes:
 
 def cmd_init(args):
     """Initialize a new workspace."""
-    # Check if V4 mode
-    if getattr(args, 'v4', False):
-        return cmd_init_v4(args)
+    # Always use workspace format
+    return cmd_init_v4(args)
 
+
+def cmd_init_v4(args):
+    """Initialize a new workspace."""
     path = Path(args.path) if args.path else None
-    workspace = get_workspace(str(path) if path else None)
+    workspace = get_v4_workspace(path)
 
     if workspace.exists and not args.force:
-        print(f"Workspace already exists at {workspace.path}")
+        print(f"workspace already exists at {workspace.path}")
         print("Use --force to reinitialize")
         return 1
 
     workspace.init(name=args.name, force=args.force)
     print(f"Initialized workspace at {workspace.path}")
-    print()
-    print("Workspace structure:")
-    print(f"  {workspace.path}/")
-    print(f"  ├── inbox/           # Drop files here to ingest")
-    print(f"  ├── reviewed/        # Processed files (purgeable)")
-    print(f"  ├── catalog/")
-    print(f"  │   ├── entries/     # Catalog entry metadata")
-    print(f"  │   └── sources/     # Original source files")
-    print(f"  ├── data-registry/   # Data source definitions")
-    print(f"  ├── validations/     # Validation results")
-    print(f"  ├── combinations/    # Generated combinations")
-    print(f"  └── config.json      # Configuration")
-    print()
-    print("Next steps:")
-    print(f"  1. Add files to {workspace.inbox_path}/")
-    print("  2. Run 'research ingest process' to create catalog entries")
-    print("  3. Run 'research validate start <ID>' to validate an entry")
-    return 0
-
-
-def cmd_init_v4(args):
-    """Initialize a new V4 workspace."""
-    path = Path(args.path) if args.path else None
-    workspace = get_v4_workspace(path)
-
-    if workspace.exists and not args.force:
-        print(f"V4 workspace already exists at {workspace.path}")
-        print("Use --force to reinitialize")
-        return 1
-
-    workspace.init(name=args.name, force=args.force)
-    print(f"Initialized V4 workspace at {workspace.path}")
     print()
     print("Workspace structure:")
     print(f"  {workspace.path}/")
@@ -1357,9 +1320,9 @@ def cmd_init_v4(args):
     print("Next steps:")
     print(f"  1. Copy .env.template to .env and add your API keys")
     print(f"  2. Add files to {workspace.inbox_path}/")
-    print("  3. Run 'research v4-ingest' to create strategy documents")
-    print("  4. Run 'research v4-verify STRAT-001' to run verification tests")
-    print("  5. Run 'research v4-validate STRAT-001' to run walk-forward validation")
+    print("  3. Run 'research ingest' to create strategy documents")
+    print("  4. Run 'research verify STRAT-001' to run verification tests")
+    print("  5. Run 'research validate STRAT-001' to run walk-forward validation")
     return 0
 
 
@@ -1369,14 +1332,14 @@ def cmd_init_v4(args):
 
 
 def cmd_v4_ingest(args):
-    """Ingest files from inbox into strategies (V4)."""
+    """Ingest files from inbox into strategies ."""
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     # Import processor and LLM client
@@ -1596,7 +1559,7 @@ def _cmd_v4_validate_all(workspace, args):
     # Find strategies with verification results
     validations_path = workspace.validations_path
     if not validations_path.exists():
-        print("No verification results found. Run 'research v4-verify --all' first.")
+        print("No verification results found. Run 'research verify --all' first.")
         return 0
 
     # Get unique strategy IDs from verification files
@@ -1609,7 +1572,7 @@ def _cmd_v4_validate_all(workspace, args):
             strategy_ids.add(parts[0])
 
     if not strategy_ids:
-        print("No verified strategies found. Run 'research v4-verify --all' first.")
+        print("No verified strategies found. Run 'research verify --all' first.")
         return 0
 
     print(f"\nValidating {len(strategy_ids)} verified strategy(ies)...")
@@ -1672,7 +1635,7 @@ def _cmd_v4_learn_all(workspace, args):
     # Find strategies with validation results
     validations_path = workspace.validations_path
     if not validations_path.exists():
-        print("No validation results found. Run 'research v4-validate --all' first.")
+        print("No validation results found. Run 'research validate --all' first.")
         return 0
 
     # Get unique strategy IDs from validation files
@@ -1734,7 +1697,7 @@ def _cmd_v4_learn_all(workspace, args):
 
 
 def cmd_v4_verify(args):
-    """Run verification tests on a strategy (V4)."""
+    """Run verification tests on a strategy ."""
     from research_system.validation import V4Verifier, VerificationStatus
 
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
@@ -1743,7 +1706,7 @@ def cmd_v4_verify(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     process_all = getattr(args, 'process_all', False)
@@ -1755,8 +1718,8 @@ def cmd_v4_verify(args):
 
     if not strategy_id:
         print("Error: Strategy ID required")
-        print("Usage: research v4-verify STRAT-001")
-        print("       research v4-verify --all")
+        print("Usage: research verify STRAT-001")
+        print("       research verify --all")
         return 1
 
     # Load strategy
@@ -1812,7 +1775,7 @@ def cmd_v4_verify(args):
 
 
 def cmd_v4_validate(args):
-    """Run walk-forward validation on a strategy (V4)."""
+    """Run walk-forward validation on a strategy ."""
     import json
     import yaml
     from research_system.validation import (
@@ -1828,7 +1791,7 @@ def cmd_v4_validate(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     process_all = getattr(args, 'process_all', False)
@@ -1840,8 +1803,8 @@ def cmd_v4_validate(args):
 
     if not strategy_id:
         print("Error: Strategy ID required")
-        print("Usage: research v4-validate STRAT-001")
-        print("       research v4-validate --all --results backtest.json")
+        print("Usage: research validate STRAT-001")
+        print("       research validate --all --results backtest.json")
         return 1
 
     # Load strategy
@@ -1864,7 +1827,7 @@ def cmd_v4_validate(args):
 
     if verify_result.overall_status == VerificationStatus.FAIL:
         print(f"  FAILED - Strategy has {verify_result.failed} verification failures")
-        print("  Run 'research v4-verify' to see details")
+        print("  Run 'research verify' to see details")
         print("\n  Validation cannot proceed until verification passes.")
         return 1
     elif verify_result.overall_status == VerificationStatus.WARN:
@@ -1889,7 +1852,7 @@ def cmd_v4_validate(args):
         print("\n  Next steps:")
         print("  1. Run backtest using this configuration")
         print("  2. Save results to a JSON file with: sharpe_ratio, max_drawdown, win_rate")
-        print(f"  3. Re-run: research v4-validate {strategy_id} --results <results.json>")
+        print(f"  3. Re-run: research validate {strategy_id} --results <results.json>")
         return 0
 
     # Step 4: Load backtest results if provided
@@ -1965,7 +1928,7 @@ def cmd_v4_validate(args):
 
 
 def cmd_v4_learn(args):
-    """Extract learnings from validation results (V4)."""
+    """Extract learnings from validation results ."""
     from research_system.validation import V4Learner
 
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
@@ -1974,7 +1937,7 @@ def cmd_v4_learn(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     process_all = getattr(args, 'process_all', False)
@@ -1986,8 +1949,8 @@ def cmd_v4_learn(args):
 
     if not strategy_id:
         print("Error: Strategy ID required")
-        print("Usage: research v4-learn STRAT-001")
-        print("       research v4-learn --all")
+        print("Usage: research learn STRAT-001")
+        print("       research learn --all")
         return 1
 
     # Load strategy
@@ -2010,7 +1973,7 @@ def cmd_v4_learn(args):
 
     if not verification_results and not validation_results:
         print("\nNo validation results found for this strategy.")
-        print("Run 'research v4-verify' and 'research v4-validate' first.")
+        print("Run 'research verify' and 'research validate' first.")
         return 0
 
     # Extract learnings
@@ -2062,7 +2025,7 @@ def cmd_v4_learn(args):
 
 
 def cmd_v4_ideate(args):
-    """Generate new strategy ideas (V4)."""
+    """Generate new strategy ideas ."""
     from research_system.validation import V4Ideator, V4Learner
 
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
@@ -2071,7 +2034,7 @@ def cmd_v4_ideate(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     dry_run = getattr(args, 'dry_run', False)
@@ -2136,7 +2099,7 @@ def cmd_v4_ideate(args):
 
 
 def cmd_v4_run(args):
-    """Run full validation pipeline (V4)."""
+    """Run full validation pipeline ."""
     from research_system.validation.v4_runner import V4Runner
 
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
@@ -2145,7 +2108,7 @@ def cmd_v4_run(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     strategy_id = getattr(args, 'strategy_id', None)
@@ -2158,8 +2121,8 @@ def cmd_v4_run(args):
 
     if not strategy_id and not run_all:
         print("Error: Strategy ID required or use --all")
-        print("Usage: research v4-run STRAT-001")
-        print("       research v4-run --all")
+        print("Usage: research run STRAT-001")
+        print("       research run --all")
         return 1
 
     # Initialize LLM client for code generation fallback
@@ -2185,7 +2148,7 @@ def cmd_v4_run(args):
     )
 
     print("\n" + "=" * 60)
-    print("  V4 Validation Pipeline")
+    print("  Validation Pipeline")
     print("=" * 60)
     print(f"\nBacktest mode: {'Local Docker' if use_local else 'QC Cloud'}")
     print(f"Walk-forward windows: {num_windows}")
@@ -2213,7 +2176,7 @@ def cmd_v4_run(args):
 
 
 def cmd_v4_cleanup(args):
-    """Clean up stuck QC backtests (V4)."""
+    """Clean up stuck QC backtests ."""
     from research_system.validation.backtest import BacktestExecutor
 
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
@@ -2222,7 +2185,7 @@ def cmd_v4_cleanup(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     aggressive = getattr(args, 'aggressive', False)
@@ -2269,7 +2232,7 @@ def cmd_v4_cleanup(args):
 
 
 def cmd_v4_walkforward(args):
-    """Run true walk-forward optimization (V4)."""
+    """Run true walk-forward optimization ."""
     from research_system.optimization import (
         WalkForwardConfig,
         WalkForwardRunner,
@@ -2286,7 +2249,7 @@ def cmd_v4_walkforward(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     strategy_id = args.strategy_id
@@ -2368,14 +2331,14 @@ def cmd_v4_walkforward(args):
 
 
 def cmd_v4_status(args):
-    """Show workspace status dashboard (V4)."""
+    """Show workspace status dashboard ."""
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     status = workspace.status()
@@ -2383,7 +2346,7 @@ def cmd_v4_status(args):
     # Header
     print()
     print("=" * 60)
-    print("  Research-Kit V4 Workspace Status")
+    print("  Research-Kit Workspace Status")
     print("=" * 60)
 
     # Workspace info
@@ -2439,11 +2402,11 @@ def cmd_v4_status(args):
     actions = []
 
     if inbox_count > 0:
-        actions.append(f"Run 'research v4-ingest' to process {inbox_count} inbox file(s)")
+        actions.append(f"Run 'research ingest' to process {inbox_count} inbox file(s)")
 
     pending_count = status['strategies'].get('pending', 0)
     if pending_count > 0:
-        actions.append(f"Run 'research v4-list --status pending' to see {pending_count} pending strategy(ies)")
+        actions.append(f"Run 'research list --status pending' to see {pending_count} pending strategy(ies)")
 
     blocked_count = status['strategies'].get('blocked', 0)
     if blocked_count > 0:
@@ -2451,7 +2414,7 @@ def cmd_v4_status(args):
 
     if not actions:
         if total_strategies == 0:
-            actions.append("Add research documents to inbox/ and run 'research v4-ingest'")
+            actions.append("Add research documents to inbox/ and run 'research ingest'")
         else:
             actions.append("All caught up!")
 
@@ -2463,14 +2426,14 @@ def cmd_v4_status(args):
 
 
 def cmd_v4_list(args):
-    """List strategies (V4)."""
+    """List strategies ."""
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
 
     try:
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     # Get filter options
@@ -2530,7 +2493,7 @@ def cmd_v4_list(args):
 
 
 def cmd_v4_show(args):
-    """Show strategy details (V4)."""
+    """Show strategy details ."""
     import yaml
 
     workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
@@ -2539,7 +2502,7 @@ def cmd_v4_show(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     strategy_id = args.strategy_id
@@ -2772,7 +2735,7 @@ def cmd_v4_config(args):
         workspace.require_initialized()
     except V4WorkspaceError as e:
         print(f"Error: {e}")
-        print("Run 'research init --v4' to initialize a V4 workspace.")
+        print("Run 'research init' to initialize a workspace.")
         return 1
 
     config = workspace.config
@@ -2791,7 +2754,7 @@ def cmd_v4_config(args):
             return 0
 
     # Show configuration
-    print("V4 Configuration:")
+    print("Configuration:")
     print(f"  Version: {config.version}")
     print()
     print("Gates (validation thresholds):")

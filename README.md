@@ -4,7 +4,7 @@ A structured workflow for ingesting, organizing, and validating trading strategy
 
 ## What This Tool Does
 
-Research-Kit V4 helps you:
+Research-Kit helps you:
 
 1. **Ingest research** - Drop transcripts, papers, and notes into your inbox
 2. **Verify strategies** - Check for look-ahead bias, survivorship bias, and other issues
@@ -45,11 +45,11 @@ pip3 install git+https://github.com/extremevalue/research-kit.git
 
 > **Note:** If you see "externally managed environment" error on macOS, use `uv` or create a virtual environment first.
 
-### 2. Initialize a V4 Workspace
+### 2. Initialize a Workspace
 
 ```bash
-# Create a new V4 workspace
-research init --v4 ~/my-research
+# Create a new workspace
+research init  ~/my-research
 cd ~/my-research
 ```
 
@@ -82,23 +82,23 @@ cp ~/Downloads/strategy_transcript.txt inbox/
 
 ```bash
 # Process all files in inbox
-research v4-ingest --force
+research ingest --force
 
 # Preview what would happen (no changes made)
-research v4-ingest --force --dry-run
+research ingest --force --dry-run
 ```
 
 ### 5. View Your Strategies
 
 ```bash
 # Check workspace status
-research v4-status
+research status
 
 # List all strategies
-research v4-list
+research list
 
 # View strategy details
-research v4-show STRAT-001
+research show STRAT-001
 ```
 
 ## Complete Example Workflow
@@ -111,7 +111,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # 2. Initialize workspace
-research init --v4 ~/trading-research
+research init  ~/trading-research
 cd ~/trading-research
 
 # 3. Add a file to inbox
@@ -127,62 +127,62 @@ Position size is 10% of portfolio. Sharpe ratio has been around 1.2.
 EOF
 
 # 4. Ingest the file
-research v4-ingest --force
+research ingest --force
 
 # 5. View the strategy
-research v4-show STRAT-001
+research show STRAT-001
 
 # 6. Run verification tests
-research v4-verify STRAT-001
+research verify STRAT-001
 
 # 7. Generate backtest config (for external backtesting)
-research v4-validate STRAT-001 --generate-config
+research validate STRAT-001 --generate-config
 
 # 8. After running backtest externally, apply validation gates
 cat > backtest_results.json << 'EOF'
 {"sharpe_ratio": 1.5, "max_drawdown": 0.15, "win_rate": 0.55}
 EOF
-research v4-validate STRAT-001 --results backtest_results.json
+research validate STRAT-001 --results backtest_results.json
 
 # 9. Extract learnings
-research v4-learn STRAT-001
+research learn STRAT-001
 
 # 10. Generate new ideas based on what you learned
-research v4-ideate
+research ideate
 
 # 11. Check final status
-research v4-status
+research status
 ```
 
 ## Commands Reference
 
-### `research init --v4 [path]`
+### `research init  [path]`
 
-Initialize a new V4 workspace.
+Initialize a new workspace.
 
 ```bash
-research init --v4                      # Default: ~/.research-workspace-v4
-research init --v4 ~/my-workspace       # Specific location
-research init --v4 --force              # Reinitialize existing
+research init                       # Default: ~/.research-workspace
+research init  ~/my-workspace       # Specific location
+research init  --force              # Reinitialize existing
 ```
 
-### `research v4-status`
+### `research status`
 
 Show workspace dashboard with strategy counts, inbox status, and suggested next actions.
 
 ```bash
-research v4-status
-research v4-status --workspace ~/my-workspace
+research status
+research status --workspace ~/my-workspace
 ```
 
-### `research v4-ingest [file]`
+### `research ingest [file]`
 
 Process inbox files into strategy documents.
 
 ```bash
-research v4-ingest --force              # Process all inbox files
-research v4-ingest --force --dry-run    # Preview without changes
-research v4-ingest --force file.txt     # Process specific file
+research ingest --force              # Process all inbox files
+research ingest --force --dry-run    # Preview without changes
+research ingest --force file.txt     # Process specific file
 ```
 
 **What happens during ingest:**
@@ -190,37 +190,37 @@ research v4-ingest --force file.txt     # Process specific file
 2. Strategy document is created with extracted metadata
 3. Original file is archived
 
-### `research v4-list`
+### `research list`
 
 List strategies with optional filtering.
 
 ```bash
-research v4-list                        # All strategies
-research v4-list --status pending       # Filter by status
-research v4-list --tags momentum        # Filter by tags
-research v4-list --format json          # JSON output
+research list                        # All strategies
+research list --status pending       # Filter by status
+research list --tags momentum        # Filter by tags
+research list --format json          # JSON output
 ```
 
 **Output columns:** ID, Name, Status, Created
 
-### `research v4-show <strategy_id>`
+### `research show <strategy_id>`
 
 Display full strategy details.
 
 ```bash
-research v4-show STRAT-001              # Human-readable format
-research v4-show STRAT-001 --format yaml  # Raw YAML
-research v4-show STRAT-001 --format json  # JSON output
+research show STRAT-001              # Human-readable format
+research show STRAT-001 --format yaml  # Raw YAML
+research show STRAT-001 --format json  # JSON output
 ```
 
-### `research v4-verify <strategy_id>`
+### `research verify <strategy_id>`
 
 Run verification tests to check for common issues before backtesting.
 
 ```bash
-research v4-verify STRAT-001            # Verify a single strategy
-research v4-verify --all                # Verify all pending strategies
-research v4-verify STRAT-001 --dry-run  # Preview without saving results
+research verify STRAT-001            # Verify a single strategy
+research verify --all                # Verify all pending strategies
+research verify STRAT-001 --dry-run  # Preview without saving results
 ```
 
 **Tests include:**
@@ -232,19 +232,19 @@ research v4-verify STRAT-001 --dry-run  # Preview without saving results
 - `exit_defined` - Check exit conditions include stop loss
 - `universe_defined` - Verify universe is properly defined
 
-### `research v4-validate <strategy_id>`
+### `research validate <strategy_id>`
 
 Run validation with configurable gates after backtesting.
 
 ```bash
 # Generate backtest configuration
-research v4-validate STRAT-001 --generate-config
+research validate STRAT-001 --generate-config
 
 # Apply validation gates to backtest results
-research v4-validate STRAT-001 --results backtest_results.json
+research validate STRAT-001 --results backtest_results.json
 
 # Validate all strategies with verification results
-research v4-validate --all --results backtest_results.json
+research validate --all --results backtest_results.json
 ```
 
 **Validation gates (configurable in research-kit.yaml):**
@@ -261,14 +261,14 @@ research v4-validate --all --results backtest_results.json
 }
 ```
 
-### `research v4-learn <strategy_id>`
+### `research learn <strategy_id>`
 
 Extract learnings from verification and validation results.
 
 ```bash
-research v4-learn STRAT-001             # Extract and save learnings
-research v4-learn --all                 # Extract learnings from all strategies
-research v4-learn STRAT-001 --dry-run   # Preview without saving
+research learn STRAT-001             # Extract and save learnings
+research learn --all                 # Extract learnings from all strategies
+research learn STRAT-001 --dry-run   # Preview without saving
 ```
 
 **Learnings include:**
@@ -277,14 +277,14 @@ research v4-learn STRAT-001 --dry-run   # Preview without saving
 - Strategy definition quality assessment
 - Actionable insights for improvement
 
-### `research v4-ideate`
+### `research ideate`
 
 Generate new strategy ideas based on existing strategies and learnings.
 
 ```bash
-research v4-ideate                      # Generate up to 5 ideas
-research v4-ideate --max-ideas 10       # Generate up to 10 ideas
-research v4-ideate --dry-run            # Preview without saving
+research ideate                      # Generate up to 5 ideas
+research ideate --max-ideas 10       # Generate up to 10 ideas
+research ideate --dry-run            # Preview without saving
 ```
 
 **Ideas are generated by:**
@@ -316,18 +316,18 @@ research v4-ideate --dry-run            # Preview without saving
 
 ## Workspace Location
 
-By default, all V4 commands use `~/.research-workspace-v4`. To use a different location, you have two options:
+By default, all commands use `~/.research-workspace`. To use a different location, you have two options:
 
 **Option 1: Set environment variable (recommended)**
 ```bash
 export RESEARCH_WORKSPACE=~/my-research
-research v4-status  # Uses ~/my-research
+research status  # Uses ~/my-research
 ```
 
 **Option 2: Use --workspace flag on each command**
 ```bash
-research v4-status --workspace ~/my-research
-research v4-list --workspace ~/my-research
+research status --workspace ~/my-research
+research list --workspace ~/my-research
 ```
 
 > **Note:** Simply `cd`ing into a workspace directory does NOT automatically select it. You must use one of the options above.
@@ -336,18 +336,18 @@ research v4-list --workspace ~/my-research
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RESEARCH_WORKSPACE` | Path to V4 workspace | `~/.research-workspace-v4` |
+| `RESEARCH_WORKSPACE` | Path to workspace | `~/.research-workspace` |
 
 ## Troubleshooting
 
-### "V4 workspace not initialized"
+### "workspace not initialized"
 
-Run `research init --v4` to create a workspace:
+Run `research init ` to create a workspace:
 
 ```bash
-research init --v4 ~/my-research
+research init  ~/my-research
 export RESEARCH_WORKSPACE=~/my-research
-research v4-status
+research status
 ```
 
 ### "Strategy not found"
@@ -355,7 +355,7 @@ research v4-status
 Check available strategies:
 
 ```bash
-research v4-list
+research list
 ```
 
 ## Advanced: LLM-Based Extraction
@@ -371,7 +371,7 @@ cp .env.template .env
 Then run ingest without `--force`:
 
 ```bash
-research v4-ingest  # Uses LLM for metadata extraction
+research ingest  # Uses LLM for metadata extraction
 ```
 
 This enables:
@@ -383,14 +383,14 @@ This enables:
 
 ```bash
 research --help                     # General help
-research v4-ingest --help           # Command help
-research v4-verify --help
-research v4-validate --help
-research v4-learn --help
-research v4-ideate --help
-research v4-list --help
-research v4-show --help
-research v4-status --help
+research ingest --help           # Command help
+research verify --help
+research validate --help
+research learn --help
+research ideate --help
+research list --help
+research show --help
+research status --help
 ```
 
 ## License
