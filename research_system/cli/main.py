@@ -2292,7 +2292,7 @@ def cmd_v4_walkforward(args):
     strategy_id = args.strategy_id
 
     # Load strategy
-    strategy = workspace.load_strategy(strategy_id)
+    strategy = workspace.get_strategy(strategy_id)
     if not strategy:
         print(f"Error: Strategy '{strategy_id}' not found")
         return 1
