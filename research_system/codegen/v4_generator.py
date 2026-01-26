@@ -12,6 +12,8 @@ fall back to LLM for strategies that don't fit templates.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -133,11 +135,18 @@ class V4CodeGenerator:
             if result.success:
                 result.code = self._fix_qc_api_issues(result.code)
             return result
-        else:
-            return V4CodeGenResult(
-                success=False,
-                error="No LLM client available and strategy doesn't match template",
-            )
+
+        # Fall back to Claude CLI if available
+        if self._claude_cli_available():
+            result = self._generate_from_claude_cli(strategy)
+            if result.success:
+                result.code = self._fix_qc_api_issues(result.code)
+            return result
+
+        return V4CodeGenResult(
+            success=False,
+            error="No LLM client available, Claude CLI not found, and strategy doesn't match template",
+        )
 
     def _matches_template(self, strategy: dict[str, Any]) -> bool:
         """Check if strategy matches a known template.
@@ -265,6 +274,127 @@ class V4CodeGenerator:
                 error=f"LLM generation failed: {e}",
             )
 
+    def _claude_cli_available(self) -> bool:
+        """Check if Claude CLI is available."""
+        return shutil.which("claude") is not None
+
+    def _generate_from_claude_cli(self, strategy: dict[str, Any]) -> V4CodeGenResult:
+        """Generate code using Claude CLI.
+
+        Falls back to Claude Code CLI when no API client is configured.
+
+        Args:
+            strategy: Strategy document
+
+        Returns:
+            V4CodeGenResult with generated code
+        """
+        try:
+            prompt = self._build_llm_prompt(strategy)
+
+            # Call claude CLI with the prompt
+            result = subprocess.run(
+                ["claude", "-p", prompt],
+                capture_output=True,
+                text=True,
+                timeout=120,  # 2 minute timeout
+            )
+
+            if result.returncode != 0:
+                return V4CodeGenResult(
+                    success=False,
+                    error=f"Claude CLI failed: {result.stderr}",
+                )
+
+            # Extract code from response
+            code = self._extract_code_from_response(result.stdout)
+            if not code:
+                return V4CodeGenResult(
+                    success=False,
+                    error="Claude CLI response did not contain valid Python code",
+                )
+
+            return V4CodeGenResult(
+                success=True,
+                code=code,
+                method="claude_cli",
+            )
+
+        except subprocess.TimeoutExpired:
+            return V4CodeGenResult(
+                success=False,
+                error="Claude CLI timed out after 120 seconds",
+            )
+        except Exception as e:
+            return V4CodeGenResult(
+                success=False,
+                error=f"Claude CLI generation failed: {e}",
+            )
+
+    def _correct_code_with_claude_cli(
+        self,
+        original_code: str,
+        error_message: str,
+        strategy: dict[str, Any],
+        attempt: int,
+    ) -> V4CodeCorrectionResult:
+        """Correct code using Claude CLI.
+
+        Args:
+            original_code: The code that failed
+            error_message: Error from backtest
+            strategy: Original strategy document
+            attempt: Current correction attempt number
+
+        Returns:
+            V4CodeCorrectionResult with corrected code or error
+        """
+        try:
+            prompt = self._build_correction_prompt(original_code, error_message, strategy)
+
+            result = subprocess.run(
+                ["claude", "-p", prompt],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+
+            if result.returncode != 0:
+                return V4CodeCorrectionResult(
+                    success=False,
+                    error=f"Claude CLI failed: {result.stderr}",
+                    attempt=attempt,
+                )
+
+            corrected = self._extract_code_from_response(result.stdout)
+            if not corrected:
+                return V4CodeCorrectionResult(
+                    success=False,
+                    error="Could not extract corrected code from Claude CLI response",
+                    attempt=attempt,
+                )
+
+            corrected = self._fix_qc_api_issues(corrected)
+
+            return V4CodeCorrectionResult(
+                success=True,
+                corrected_code=corrected,
+                attempt=attempt,
+            )
+
+        except subprocess.TimeoutExpired:
+            return V4CodeCorrectionResult(
+                success=False,
+                error="Claude CLI timed out",
+                attempt=attempt,
+            )
+        except Exception as e:
+            return V4CodeCorrectionResult(
+                success=False,
+                error=f"Claude CLI correction failed: {e}",
+                attempt=attempt,
+            )
+
     def correct_code_error(
         self,
         original_code: str,
@@ -284,9 +414,14 @@ class V4CodeGenerator:
             V4CodeCorrectionResult with corrected code or error
         """
         if not self.llm_client:
+            # Fall back to Claude CLI if available
+            if self._claude_cli_available():
+                return self._correct_code_with_claude_cli(
+                    original_code, error_message, strategy, attempt
+                )
             return V4CodeCorrectionResult(
                 success=False,
-                error="No LLM client available for correction",
+                error="No LLM client available and Claude CLI not found",
                 attempt=attempt,
             )
 
