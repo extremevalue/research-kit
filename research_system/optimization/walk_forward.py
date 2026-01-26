@@ -103,6 +103,10 @@ class WalkForwardPeriod:
     success: bool = False
     error: str | None = None
 
+    # Debug info for failed optimizations
+    first_backtest_error: str | None = None  # First actual backtest error
+    evaluations_attempted: int = 0  # How many parameter combos were tried
+
 
 @dataclass
 class WalkForwardResult:
@@ -155,6 +159,8 @@ class WalkForwardResult:
                     "oos_max_drawdown": p.oos_max_drawdown,
                     "success": p.success,
                     "error": p.error,
+                    "first_backtest_error": p.first_backtest_error,
+                    "evaluations_attempted": p.evaluations_attempted,
                 }
                 for p in self.periods
             ],
@@ -319,6 +325,14 @@ class WalkForwardRunner:
 
         if not opt_result.success:
             period.error = f"Optimization failed: {opt_result.error}"
+            period.evaluations_attempted = opt_result.total_evaluated
+
+            # Capture first actual backtest error for debugging
+            for evaluation in opt_result.evaluations:
+                if not evaluation.success and evaluation.error:
+                    period.first_backtest_error = evaluation.error
+                    break
+
             return period
 
         period.optimized_params = opt_result.best_params

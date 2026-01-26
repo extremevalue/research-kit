@@ -65,6 +65,12 @@ def format_terminal_summary(result: WalkForwardResult) -> str:
                 lines.append(f"    Params:     {params_str}")
         else:
             lines.append(f"    Error: {period.error}")
+            if period.evaluations_attempted:
+                lines.append(f"    Tried:  {period.evaluations_attempted} parameter combinations")
+            if period.first_backtest_error:
+                # Truncate long errors and show first line
+                error_preview = period.first_backtest_error.split('\n')[0][:100]
+                lines.append(f"    Sample: {error_preview}")
 
     lines.append("")
 
