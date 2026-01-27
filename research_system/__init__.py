@@ -10,5 +10,5 @@ Usage:
     research validate start IND-002
 """
 
-__version__ = "0.1.0"
+__version__ = "4.0.0"
 __author__ = "Research System"
