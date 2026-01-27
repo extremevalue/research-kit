@@ -51,6 +51,13 @@ from research_system.core.v4 import (
 )
 
 
+def get_workspace_from_args(args) -> V4Workspace:
+    """Get V4 workspace from args, checking both global and subparser workspace flags."""
+    # Check subparser-specific flag first, then global flag
+    path = getattr(args, 'v4_workspace', None) or getattr(args, 'workspace', None)
+    return get_v4_workspace(path)
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
@@ -1333,7 +1340,7 @@ def cmd_init_v4(args):
 
 def cmd_v4_ingest(args):
     """Ingest files from inbox into strategies ."""
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -1700,7 +1707,7 @@ def cmd_v4_verify(args):
     """Run verification tests on a strategy ."""
     from research_system.validation import V4Verifier, VerificationStatus
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -1785,7 +1792,7 @@ def cmd_v4_validate(args):
         GateStatus,
     )
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -1931,7 +1938,7 @@ def cmd_v4_learn(args):
     """Extract learnings from validation results ."""
     from research_system.validation import V4Learner
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2028,7 +2035,7 @@ def cmd_v4_ideate(args):
     """Generate new strategy ideas ."""
     from research_system.validation import V4Ideator, V4Learner
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2102,7 +2109,7 @@ def cmd_v4_run(args):
     """Run full validation pipeline ."""
     from research_system.validation.v4_runner import V4Runner
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2179,7 +2186,7 @@ def cmd_v4_cleanup(args):
     """Clean up stuck QC backtests ."""
     from research_system.validation.backtest import BacktestExecutor
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2243,7 +2250,7 @@ def cmd_v4_walkforward(args):
     from research_system.validation.backtest import BacktestExecutor
     from research_system.codegen.v4_generator import V4CodeGenerator
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2332,7 +2339,7 @@ def cmd_v4_walkforward(args):
 
 def cmd_v4_status(args):
     """Show workspace status dashboard ."""
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2427,7 +2434,7 @@ def cmd_v4_status(args):
 
 def cmd_v4_list(args):
     """List strategies ."""
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2496,7 +2503,7 @@ def cmd_v4_show(args):
     """Show strategy details ."""
     import yaml
 
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
@@ -2729,7 +2736,7 @@ def _print_strategy_details(strategy: dict) -> None:
 
 def cmd_v4_config(args):
     """Show/validate V4 configuration."""
-    workspace = get_v4_workspace(getattr(args, 'v4_workspace', None))
+    workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
