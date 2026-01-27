@@ -15,7 +15,7 @@ A workspace contains all user data separate from the application code:
 The workspace path can be set via:
 1. Explicit path parameter
 2. RESEARCH_WORKSPACE environment variable
-3. ~/.research-workspace-v4 (default)
+3. ~/.research-workspace (default)
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from research_system.core.v4.config import V4Config, get_default_config
 # =============================================================================
 
 # Default workspace location
-DEFAULT_V4_WORKSPACE = Path.home() / ".research-workspace-v4"
+DEFAULT_V4_WORKSPACE = Path.home() / ".research-workspace"
 
 # Environment variable for workspace
 WORKSPACE_ENV_VAR = "RESEARCH_WORKSPACE"
