@@ -163,13 +163,34 @@ class DataRegistry:
         "iv_percentile",       # Derivable from options chain
         "iv_rank",             # Derivable from options chain
         "put_call_ratio",      # Derivable from options chain
+        # Options aliases (LLM variations)
+        "option_chain_data",   # Alias for options_data
+        "options_chains",      # Alias for options_data
+        "option_chains",       # Alias for options_data
+        "options_prices",      # Alias for options_data
+        "option_prices",       # Alias for options_data
         # Returns and volatility (derivable from price data)
         "historical_returns",  # Derivable from price data
         "historical_volatility", # Derivable from price data
         "realized_volatility", # Derivable from price data
+        "volatility_measures", # Derivable from price data
         # Breadth indicators
         "market_breadth",      # Derivable from constituent data
         "advance_decline",     # Derivable from constituent data
+        # Price-related (always derivable from OHLCV)
+        "underlying_prices",   # Just price data
+        "price_levels",        # Derivable from price data
+        # Technical indicators (all derivable from price data)
+        "support_resistance_levels",  # Computed from price data
+        "support_levels",      # Computed from price data
+        "resistance_levels",   # Computed from price data
+        "moving_averages",     # Computed from price data
+        "breakout_levels",     # Computed from price data
+        "trend_indicators",    # Computed from price data
+        "momentum_indicators", # Computed from price data
+        "position_sizing_data", # Computed/user-defined
+        "daily_high_low",      # Standard OHLCV data
+        "intraday_prices",     # Standard price data
     }
 
     # Mapping of semantic data requirement names to QC Native symbols/data types
