@@ -478,14 +478,18 @@ class V4Runner:
 
     def _dry_run(self, strategy_id: str, strategy: dict[str, Any]) -> V4RunResult:
         """Show what would happen without executing."""
-        strategy_type = strategy.get("strategy_type", "unknown")
-        signal_type = strategy.get("signal_type", "unknown")
+        # V4 schema: tags.hypothesis_type (list), entry.type, hypothesis.summary
+        tags = strategy.get("tags", {})
+        hypothesis_type_list = tags.get("hypothesis_type", [])
+        strategy_type = ", ".join(hypothesis_type_list) if hypothesis_type_list else "unknown"
+        signal_type = strategy.get("entry", {}).get("type", "unknown")
+        description = strategy.get("hypothesis", {}).get("summary", "No description")
 
         print(f"\n[DRY RUN] Would process {strategy_id}:")
         print(f"  Name: {strategy.get('name', 'Unknown')}")
         print(f"  Type: {strategy_type}")
         print(f"  Signal: {signal_type}")
-        print(f"  Description: {strategy.get('description', 'No description')[:80]}...")
+        print(f"  Description: {description[:80]}...")
 
         # Check if template would match
         from research_system.codegen.templates.v4 import get_template_for_v4_strategy
