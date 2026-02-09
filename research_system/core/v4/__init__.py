@@ -51,6 +51,7 @@ from research_system.core.v4.config import (
     VerificationConfig,
     ScoringConfig,
     RedFlagsConfig,
+    BacktestConfig,
     LoggingConfig,
     APIConfig,
     # Loading functions
@@ -89,6 +90,7 @@ __all__ = [
     "VerificationConfig",
     "ScoringConfig",
     "RedFlagsConfig",
+    "BacktestConfig",
     "LoggingConfig",
     "APIConfig",
     # Loading functions

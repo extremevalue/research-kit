@@ -204,6 +204,17 @@ class RedFlagsConfig(BaseModel):
     )
 
 
+class BacktestConfig(BaseModel):
+    """Backtest execution configuration.
+
+    Controls timeouts and other execution parameters for backtests.
+    """
+
+    timeout: int = Field(
+        600, ge=60, description="Backtest execution timeout in seconds (default: 600)"
+    )
+
+
 class LoggingConfig(BaseModel):
     """Logging configuration."""
 
@@ -260,6 +271,9 @@ class V4Config(BaseModel):
     )
     red_flags: RedFlagsConfig = Field(
         default_factory=RedFlagsConfig, description="Red flag configuration"
+    )
+    backtest: BacktestConfig = Field(
+        default_factory=BacktestConfig, description="Backtest execution configuration"
     )
     logging: LoggingConfig = Field(
         default_factory=LoggingConfig, description="Logging configuration"
