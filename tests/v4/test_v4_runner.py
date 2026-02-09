@@ -368,3 +368,90 @@ class TestBatchProcessing:
 
         captured = capsys.readouterr()
         assert "No pending strategies" in captured.out
+
+
+# =============================================================================
+# TEST FORCE FLAG FOR BLOCKED STRATEGIES
+# =============================================================================
+
+
+class TestForceBlockedRetry:
+    """Test --force flag re-runs blocked strategies."""
+
+    @pytest.fixture
+    def blocked_strategy(self, v4_workspace):
+        """Create a strategy in the blocked directory."""
+        strategy = {
+            "id": "STRAT-010",
+            "name": "Blocked Momentum Strategy",
+            "description": "A strategy that was blocked due to transient failure",
+            "strategy_type": "momentum",
+            "signal_type": "relative_momentum",
+            "universe": ["SPY", "QQQ"],
+            "parameters": {"lookback_period": 126},
+            "status": "blocked",
+        }
+
+        blocked_path = v4_workspace.strategies_path / "blocked"
+        blocked_path.mkdir(parents=True, exist_ok=True)
+        strategy_file = blocked_path / "STRAT-010.yaml"
+        strategy_file.write_text(yaml.dump(strategy))
+
+        return strategy
+
+    def test_blocked_strategy_rejected_without_force(self, runner, blocked_strategy):
+        """Test that blocked strategies are rejected without --force."""
+        result = runner.run("STRAT-010")
+
+        assert not result.success
+        assert result.determination == "BLOCKED"
+        assert "--force" in result.error
+
+    def test_force_moves_blocked_to_pending(self, runner, blocked_strategy, v4_workspace):
+        """Test --force moves strategy from blocked/ to pending/."""
+        # Run with force + dry_run to avoid needing full backtest infrastructure
+        result = runner.run("STRAT-010", force=True, dry_run=True)
+
+        assert result.dry_run
+        assert result.determination == "PENDING"
+
+        # File should now be in pending, not blocked
+        assert (v4_workspace.strategies_path / "pending" / "STRAT-010.yaml").exists()
+        assert not (v4_workspace.strategies_path / "blocked" / "STRAT-010.yaml").exists()
+
+    def test_force_resets_yaml_status(self, runner, blocked_strategy, v4_workspace):
+        """Test --force resets the status field in the YAML to 'pending'."""
+        runner.run("STRAT-010", force=True, dry_run=True)
+
+        strategy_file = v4_workspace.strategies_path / "pending" / "STRAT-010.yaml"
+        data = yaml.safe_load(strategy_file.read_text())
+        assert data["status"] == "pending"
+
+    def test_force_prints_message(self, runner, blocked_strategy, capsys):
+        """Test --force prints a message about moving the strategy."""
+        runner.run("STRAT-010", force=True, dry_run=True)
+
+        captured = capsys.readouterr()
+        assert "--force" in captured.out
+        assert "STRAT-010" in captured.out
+        assert "blocked" in captured.out
+        assert "pending" in captured.out
+
+    def test_force_on_pending_strategy_is_noop(self, runner, v4_workspace):
+        """Test --force on an already-pending strategy proceeds normally."""
+        strategy = {
+            "id": "STRAT-011",
+            "name": "Pending Strategy",
+            "strategy_type": "momentum",
+            "parameters": {"lookback_period": 126},
+            "status": "pending",
+        }
+        pending_path = v4_workspace.strategies_path / "pending"
+        pending_path.mkdir(parents=True, exist_ok=True)
+        (pending_path / "STRAT-011.yaml").write_text(yaml.dump(strategy))
+
+        result = runner.run("STRAT-011", force=True, dry_run=True)
+
+        assert result.dry_run
+        assert result.determination == "PENDING"
+        assert (v4_workspace.strategies_path / "pending" / "STRAT-011.yaml").exists()
