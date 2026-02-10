@@ -558,6 +558,17 @@ Usage:
         action="store_true",
         help="With --finalize: also run walk-forward validation on created strategy"
     )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Run all steps without prompts, using LLM suggestions or defaults"
+    )
+    parser.add_argument(
+        "--input",
+        type=str,
+        metavar="FILE",
+        help="JSON file with step outputs for non-interactive mode"
+    )
 
     parser.set_defaults(func=cmd_develop)
 
@@ -3906,9 +3917,12 @@ def cmd_develop(args):
             print("You can run validation directly with: research run {args.id} --walk-forward")
             print()
             print("Start development anyway? This will help document the strategy formally.")
-            response = input("Continue? [y/N]: ").strip().lower()
-            if response != 'y':
-                return 0
+            if getattr(args, 'non_interactive', False):
+                print("Non-interactive mode: proceeding with development.")
+            else:
+                response = input("Continue? [y/N]: ").strip().lower()
+                if response != 'y':
+                    return 0
 
         state = workflow.start(args.id, idea_text)
         print(f"Started development for {args.id}")
@@ -3975,6 +3989,19 @@ def cmd_develop(args):
         else:
             print(f"To validate: research run {strategy_id} --walk-forward")
 
+        return 0
+
+    # Non-interactive mode
+    if getattr(args, 'non_interactive', False):
+        input_data = None
+        if getattr(args, 'input', None):
+            input_path = Path(args.input)
+            if not input_path.exists():
+                print(f"Error: Input file not found: {args.input}")
+                return 1
+            with open(input_path) as f:
+                input_data = json.load(f)
+        _run_non_interactive_develop(workflow, state, llm_client, input_data)
         return 0
 
     # Interactive development
@@ -4084,6 +4111,49 @@ def _run_interactive_step(workflow, state, llm_client):
         next_info = STEP_DEFINITIONS[state.current_step]
         print(f"\nNext step: {next_info['name']}")
         print("Run 'research develop {state.entry_id}' to continue.")
+
+
+def _run_non_interactive_develop(workflow, state, llm_client, input_data=None):
+    """Run all remaining development steps non-interactively.
+
+    Uses provided input_data (from --input JSON file) or falls back to
+    LLM suggestions for each required output. If no LLM is available,
+    uses placeholder text.
+    """
+    from scripts.develop.workflow import STEP_DEFINITIONS, STEP_ORDER
+
+    while not state.is_complete:
+        step = state.current_step
+        info = STEP_DEFINITIONS[step]
+        step_key = step.value
+
+        print(f"Step {STEP_ORDER.index(step) + 1}/10: {info['name']}")
+
+        # Build outputs for this step
+        outputs = {}
+        for output_name in info['required_outputs']:
+            # Priority: input_data > LLM suggestion > placeholder
+            if input_data and step_key in input_data and output_name in input_data[step_key]:
+                outputs[output_name] = input_data[step_key][output_name]
+                print(f"  {output_name}: (from input file)")
+            elif llm_client and not llm_client.is_offline:
+                suggestion = _get_llm_suggestion(
+                    llm_client, state.original_idea, step, output_name, info
+                )
+                outputs[output_name] = suggestion
+                print(f"  {output_name}: (LLM suggestion)")
+            else:
+                outputs[output_name] = f"TODO: {output_name}"
+                print(f"  {output_name}: (placeholder - needs manual review)")
+
+        # Complete step
+        state = workflow.complete_step(state, step, outputs)
+        print(f"  -> Done")
+        print()
+
+    print("All 10 steps complete.")
+    print(f"Run 'research develop {state.entry_id} --complete' to generate strategy spec.")
+    print(f"Run 'research develop {state.entry_id} --finalize' to create strategy entry.")
 
 
 def _get_llm_suggestion(llm_client, original_idea, step, output_name, step_info):
