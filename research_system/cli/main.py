@@ -1034,6 +1034,11 @@ Examples:
         help="Skip verification check before running"
     )
     parser.add_argument(
+        "--force", "-f",
+        action="store_true",
+        help="Re-run blocked strategies (moves from blocked/ to pending/ and retries)"
+    )
+    parser.add_argument(
         "--windows",
         type=int,
         default=1,
@@ -2124,6 +2129,7 @@ def cmd_v4_run(args):
     dry_run = getattr(args, 'dry_run', False)
     force_llm = getattr(args, 'force_llm', False)
     skip_verify = getattr(args, 'skip_verify', False)
+    force = getattr(args, 'force', False)
     num_windows = getattr(args, 'windows', 1)
 
     if not strategy_id and not run_all:
@@ -2172,7 +2178,7 @@ def cmd_v4_run(args):
         failed_count = sum(1 for r in results if not r.success)
         return 1 if failed_count > 0 else 0
     else:
-        result = runner.run(strategy_id, dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify)
+        result = runner.run(strategy_id, dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify, force=force)
 
         if not result.success:
             print(f"\nPipeline failed: {result.error}")

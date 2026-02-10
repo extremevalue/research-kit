@@ -114,6 +114,7 @@ class V4Runner:
         dry_run: bool = False,
         force_llm: bool = False,
         skip_verify: bool = False,
+        force: bool = False,
     ) -> V4RunResult:
         """Run the full pipeline for a single strategy.
 
@@ -122,6 +123,7 @@ class V4Runner:
             dry_run: If True, show what would happen without executing
             force_llm: Force LLM code generation instead of template
             skip_verify: If True, skip verification check
+            force: If True, re-run blocked strategies by moving them back to pending
 
         Returns:
             V4RunResult with pipeline outcome
@@ -140,12 +142,17 @@ class V4Runner:
 
         current_status = self._get_strategy_status(strategy_id)
         if current_status == "blocked":
-            return V4RunResult(
-                strategy_id=strategy_id,
-                success=False,
-                determination="BLOCKED",
-                error=f"Strategy is blocked",
-            )
+            if force:
+                print(f"  --force: Moving {strategy_id} from blocked to pending")
+                self._update_status(strategy_id, "pending")
+                self._reset_strategy_status(strategy_id)
+            else:
+                return V4RunResult(
+                    strategy_id=strategy_id,
+                    success=False,
+                    determination="BLOCKED",
+                    error=f"Strategy is blocked (use --force to retry)",
+                )
 
         # Step 1b: Run verification check (unless skipped)
         if not skip_verify and not dry_run:
@@ -412,6 +419,19 @@ class V4Runner:
                 logger.info(f"Moved {strategy_id} from {current_status} to {new_status}")
             except Exception as e:
                 logger.error(f"Failed to move strategy: {e}")
+
+    def _reset_strategy_status(self, strategy_id: str) -> None:
+        """Reset the status field inside the strategy YAML to 'pending'."""
+        path = self.workspace.strategies_path / "pending" / f"{strategy_id}.yaml"
+        if path.exists():
+            try:
+                data = yaml.safe_load(path.read_text())
+                if isinstance(data, dict) and data.get("status") != "pending":
+                    data["status"] = "pending"
+                    path.write_text(yaml.dump(data, default_flow_style=False))
+                    logger.info(f"Reset {strategy_id} YAML status to pending")
+            except Exception as e:
+                logger.error(f"Failed to reset strategy status: {e}")
 
     def _save_result(self, strategy_id: str, result: V4RunResult) -> None:
         """Save run result to validations directory."""
