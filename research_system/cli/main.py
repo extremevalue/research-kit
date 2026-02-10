@@ -4470,8 +4470,8 @@ def cmd_ideate_catalog(args):
     return 0
 
 
-def cmd_synthesize(args):
-    """Run cross-strategy synthesis with expert panel."""
+def cmd_synthesize_catalog(args):
+    """Run cross-strategy synthesis with expert panel (catalog-based, legacy)."""
     ws = require_workspace(args.workspace)
 
     # Initialize LLM client
