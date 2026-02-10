@@ -56,14 +56,14 @@ research-codegen = "research_system.codegen.cli:main"
 "Bug Tracker" = "https://github.com/your-repo/research-kit/issues"
 
 [tool.setuptools]
-packages = ["research_system", "research_system.cli", "research_system.core", "research_system.core.v4", "research_system.ingest", "research_system.llm", "research_system.schemas", "research_system.schemas.v4", "research_system.db", "research_system.codegen", "research_system.codegen.templates", "research_system.codegen.templates.v4", "research_system.validation", "research_system.optimization", "research_system.synthesis", "agents", "agents.personas", "agents.prompts", "scripts", "scripts.validate", "scripts.utils", "scripts.data", "scripts.catalog", "scripts.backtest", "scripts.combinations", "scripts.status", "scripts.develop", "scripts.ingest"]
+packages = ["research_system", "research_system.cli", "research_system.core", "research_system.core.v4", "research_system.ingest", "research_system.llm", "research_system.schemas", "research_system.schemas.v4", "research_system.db", "research_system.codegen", "research_system.codegen.templates", "research_system.codegen.templates.v4", "research_system.validation", "research_system.optimization", "research_system.synthesis", "research_system.data", "research_system.agents", "research_system.agents.personas", "research_system.agents.prompts", "research_system.scripts", "research_system.scripts.validate", "research_system.scripts.utils", "research_system.scripts.data", "research_system.scripts.catalog", "research_system.scripts.backtest", "research_system.scripts.combinations", "research_system.scripts.status", "research_system.scripts.develop", "research_system.scripts.ingest", "agents", "scripts", "scripts.validate", "scripts.develop", "scripts.status", "scripts.utils"]
 include-package-data = true
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.md", "*.j2"]
-"schemas" = ["*.json"]
-"agents.personas" = ["*.md"]
-"agents.prompts" = ["*.md"]
+"research_system.data" = ["*.json"]
+"research_system.agents.personas" = ["*.md"]
+"research_system.agents.prompts" = ["*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -78,7 +78,9 @@ target-version = "py310"
 # Exclude legacy v1 code and generated golden files
 exclude = [
     "agents/",
+    "research_system/agents/",
     "scripts/",
+    "research_system/scripts/",
     "research_system/cli/",
     "research_system/core/",
     "research_system/ingest/",
@@ -100,7 +102,9 @@ plugins = ["pydantic.mypy"]
 # Only check new v2 code
 exclude = [
     "agents/",
+    "research_system/agents/",
     "scripts/",
+    "research_system/scripts/",
     "research_system/cli/",
     "research_system/core/",
     "research_system/ingest/",

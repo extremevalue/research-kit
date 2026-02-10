@@ -1,8 +1,8 @@
 """Persona-specific prompt construction with actual backtest metrics.
 
 Builds system and user prompts for LLM synthesis by combining:
-- Persona definitions (agents/personas/*.md)
-- Prompt templates (agents/prompts/*.md)
+- Persona definitions (research_system/agents/personas/*.md)
+- Prompt templates (research_system/agents/prompts/*.md)
 - Actual workspace context (validated/invalidated strategies with metrics)
 
 Different personas receive different metrics emphasis:
@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 # Directory constants (relative to project root)
 # ---------------------------------------------------------------------------
 
-PERSONAS_DIR = Path(__file__).parent.parent.parent / "agents" / "personas"
-PROMPTS_DIR = Path(__file__).parent.parent.parent / "agents" / "prompts"
+PERSONAS_DIR = Path(__file__).parent.parent / "agents" / "personas"
+PROMPTS_DIR = Path(__file__).parent.parent / "agents" / "prompts"
 
 # ---------------------------------------------------------------------------
 # JSON output schemas embedded in prompts
@@ -167,7 +167,7 @@ class PromptBuilder:
         self._load_prompts()
 
     def _load_personas(self) -> None:
-        """Load persona markdown files from agents/personas/."""
+        """Load persona markdown files from research_system/agents/personas/."""
         if not PERSONAS_DIR.is_dir():
             logger.warning("Personas directory not found: %s", PERSONAS_DIR)
             return
@@ -177,7 +177,7 @@ class PromptBuilder:
             logger.debug("Loaded persona: %s", name)
 
     def _load_prompts(self) -> None:
-        """Load prompt templates from agents/prompts/."""
+        """Load prompt templates from research_system/agents/prompts/."""
         if not PROMPTS_DIR.is_dir():
             logger.warning("Prompts directory not found: %s", PROMPTS_DIR)
             return
@@ -598,8 +598,8 @@ CRITICAL INSTRUCTIONS:
     def _render_template(template: str, replacements: dict[str, str]) -> str:
         """Render a prompt template with simple ``{{ key }}`` replacement.
 
-        Uses the same pattern as existing ``agents/runner.py`` and
-        ``agents/synthesis.py`` -- plain string replacement with
+        Uses the same pattern as existing ``research_system/agents/runner.py`` and
+        ``research_system/agents/synthesis.py`` -- plain string replacement with
         Jinja-style double-brace placeholders.
         """
         rendered = template

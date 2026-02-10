@@ -73,6 +73,8 @@ venv.bak/
 
 # Workspace data (user-specific)
 .research-workspace/
+inbox/
+logs/
 
 # Local development
 *.local

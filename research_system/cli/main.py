@@ -3316,7 +3316,7 @@ def cmd_validate_start(args):
         return 1
 
     # Import and initialize orchestrator
-    from scripts.validate.orchestrator import ValidationOrchestrator
+    from research_system.scripts.validate.orchestrator import ValidationOrchestrator
 
     val_dir = ws.validations_path / args.id
     orchestrator = ValidationOrchestrator(args.id, validation_dir=val_dir)
@@ -3367,7 +3367,7 @@ def cmd_validate_audit(args):
     """Run data audit."""
     ws = require_workspace(args.workspace)
 
-    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from research_system.scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     val_dir = ws.validations_path / args.id
     if not val_dir.exists():
@@ -3401,7 +3401,7 @@ def cmd_validate_run(args):
     """Run next validation step."""
     ws = require_workspace(args.workspace)
 
-    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from research_system.scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     val_dir = ws.validations_path / args.id
     if not val_dir.exists():
@@ -3524,7 +3524,7 @@ def cmd_validate_hypothesis(args):
     """Submit hypothesis for validation."""
     ws = require_workspace(args.workspace)
 
-    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from research_system.scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     # Load hypothesis file
     hypothesis_file = Path(args.file)
@@ -3564,7 +3564,7 @@ def cmd_validate_submit_is(args):
     """Submit in-sample backtest results."""
     ws = require_workspace(args.workspace)
 
-    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from research_system.scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     # Load results file
     results_file = Path(args.file)
@@ -3624,7 +3624,7 @@ def cmd_validate_submit_oos(args):
     """Submit out-of-sample results (ONE SHOT)."""
     ws = require_workspace(args.workspace)
 
-    from scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
+    from research_system.scripts.validate.orchestrator import ValidationOrchestrator, ValidationState, ValidationGateError
 
     if not args.confirm:
         print("WARNING: OOS testing is ONE SHOT - no retries allowed!")
@@ -3739,7 +3739,7 @@ def cmd_validate_check(args):
 def cmd_status_reports(args):
     """View dashboard and reports."""
     import subprocess
-    from scripts.status.generate_reports import (
+    from research_system.scripts.status.generate_reports import (
         scan_strategies,
         refresh_all_reports,
     )
@@ -3851,8 +3851,8 @@ def cmd_status_reports(args):
 
 def cmd_develop(args):
     """Develop ideas through 10-step framework."""
-    from scripts.develop.classifier import classify_idea, MaturityLevel
-    from scripts.develop.workflow import (
+    from research_system.scripts.develop.classifier import classify_idea, MaturityLevel
+    from research_system.scripts.develop.workflow import (
         DevelopmentWorkflow, DevelopmentStep, STEP_DEFINITIONS, STEP_ORDER
     )
 
@@ -3976,7 +3976,7 @@ def cmd_develop(args):
             print(f"Running walk-forward validation for {strategy_id}...")
             print()
             # Import and run the pipeline
-            from scripts.validate.full_pipeline import FullPipelineRunner
+            from research_system.scripts.validate.full_pipeline import FullPipelineRunner
             runner = FullPipelineRunner(ws, llm_client, use_walk_forward=True)
             result = runner.run(strategy_id)
 
@@ -4011,7 +4011,7 @@ def cmd_develop(args):
 
 def _show_development_status(state):
     """Show development progress."""
-    from scripts.develop.workflow import STEP_ORDER, STEP_DEFINITIONS
+    from research_system.scripts.develop.workflow import STEP_ORDER, STEP_DEFINITIONS
 
     print(f"Development Status: {state.entry_id}")
     print("=" * 50)
@@ -4042,7 +4042,7 @@ def _show_development_status(state):
 
 def _run_interactive_step(workflow, state, llm_client):
     """Run interactive development for current step."""
-    from scripts.develop.workflow import STEP_DEFINITIONS
+    from research_system.scripts.develop.workflow import STEP_DEFINITIONS
 
     step = state.current_step
     info = STEP_DEFINITIONS[step]
@@ -4120,7 +4120,7 @@ def _run_non_interactive_develop(workflow, state, llm_client, input_data=None):
     LLM suggestions for each required output. If no LLM is available,
     uses placeholder text.
     """
-    from scripts.develop.workflow import STEP_DEFINITIONS, STEP_ORDER
+    from research_system.scripts.develop.workflow import STEP_DEFINITIONS, STEP_ORDER
 
     while not state.is_complete:
         step = state.current_step
@@ -4237,7 +4237,7 @@ def cmd_analyze_run(args):
         print(f"Warning: Could not initialize LLM client: {e}")
         print("Running in offline mode.")
 
-    from agents.runner import PersonaRunner, run_persona_analysis, save_analysis_result
+    from research_system.agents.runner import PersonaRunner, run_persona_analysis, save_analysis_result
 
     if args.persona:
         # Run single persona
@@ -4440,7 +4440,7 @@ def cmd_ideate_catalog(args):
         print(f"Warning: Could not initialize LLM client: {e}")
         print("Running in offline mode.")
 
-    from agents.ideation import IdeationRunner, save_ideation_result
+    from research_system.agents.ideation import IdeationRunner, save_ideation_result
 
     runner = IdeationRunner(ws, llm_client)
 
@@ -4470,7 +4470,7 @@ def cmd_ideate_catalog(args):
 
         if not args.dry_run:
             # Create a result to add to catalog
-            from agents.ideation import IdeationResult
+            from research_system.agents.ideation import IdeationResult
             result = IdeationResult(ideas=ideas, personas_run=[args.persona])
             created_ids = runner.add_ideas_to_catalog(result)
             print(f"Added {len(created_ids)} ideas to catalog: {', '.join(created_ids)}")
@@ -4561,7 +4561,7 @@ def cmd_synthesize_catalog(args):
         print(f"Warning: Could not initialize LLM client: {e}")
         print("Running in offline mode.")
 
-    from agents.synthesis import (
+    from research_system.agents.synthesis import (
         SynthesisRunner,
         ContextAggregator,
         save_synthesis_result,
@@ -4761,7 +4761,7 @@ def cmd_run_catalog(args):
 
     # Import the full pipeline runner
     try:
-        from scripts.validate.full_pipeline import FullPipelineRunner
+        from research_system.scripts.validate.full_pipeline import FullPipelineRunner
     except ImportError:
         print("Error: Full pipeline runner not yet implemented.")
         print("This will run the complete validation + expert loop.")
