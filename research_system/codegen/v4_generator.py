@@ -160,6 +160,12 @@ class V4CodeGenerator:
         strategy_type = strategy.get("strategy_type", "")
         signal_type = strategy.get("signal_type", "")
 
+        # Fallback: extract type from tags.hypothesis_type (V4 ingestion format)
+        if not strategy_type and "tags" in strategy:
+            hypothesis_types = strategy.get("tags", {}).get("hypothesis_type", [])
+            if hypothesis_types:
+                strategy_type = hypothesis_types[0]
+
         # Check parameters - need at least some defined
         params = strategy.get("parameters", {})
         if not params:
@@ -181,6 +187,13 @@ class V4CodeGenerator:
         try:
             strategy_type = strategy.get("strategy_type", "")
             signal_type = strategy.get("signal_type", "")
+
+            # Fallback: extract type from tags.hypothesis_type (V4 ingestion format)
+            if not strategy_type and "tags" in strategy:
+                hypothesis_types = strategy.get("tags", {}).get("hypothesis_type", [])
+                if hypothesis_types:
+                    strategy_type = hypothesis_types[0]
+
             template_name = get_template_for_v4_strategy(strategy_type, signal_type)
 
             template = self._jinja_env.get_template(template_name)
@@ -490,14 +503,23 @@ Return ONLY the corrected Python code, no explanations."""
 
     def _build_llm_prompt(self, strategy: dict[str, Any]) -> str:
         """Build LLM prompt for code generation."""
+        strategy_type = strategy.get("strategy_type", "")
+        signal_type = strategy.get("signal_type", "")
+
+        # Fallback: extract type from tags.hypothesis_type (V4 ingestion format)
+        if not strategy_type and "tags" in strategy:
+            hypothesis_types = strategy.get("tags", {}).get("hypothesis_type", [])
+            if hypothesis_types:
+                strategy_type = hypothesis_types[0]
+
         return f"""Generate a QuantConnect Python algorithm for this strategy:
 
 Strategy ID: {strategy.get('id', 'unknown')}
 Name: {strategy.get('name', 'Unknown Strategy')}
 Description: {strategy.get('description', 'No description')}
 
-Signal Type: {strategy.get('signal_type', 'Not specified')}
-Strategy Type: {strategy.get('strategy_type', 'Not specified')}
+Signal Type: {signal_type or 'Not specified'}
+Strategy Type: {strategy_type or 'Not specified'}
 
 Parameters:
 {self._format_parameters(strategy.get('parameters', {}))}
