@@ -26,6 +26,7 @@ Run 'research <command> --help' for more information on a command.
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Optional
@@ -1335,6 +1336,11 @@ def cmd_init_v4(args):
     print("  3. Run 'research ingest' to create strategy documents")
     print("  4. Run 'research verify STRAT-001' to run verification tests")
     print("  5. Run 'research validate STRAT-001' to run walk-forward validation")
+
+    if shutil.which("lean"):
+        print()
+        print("Note: Run 'lean init' in your workspace to enable QuantConnect backtesting.")
+
     return 0
 
 

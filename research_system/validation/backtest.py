@@ -549,7 +549,7 @@ class BacktestExecutor:
         if not lean_config.exists():
             return BacktestResult(
                 success=False,
-                error=f"No lean.json found in workspace. Run 'lean init' in {self.workspace_path} first.",
+                error=f"No lean.json found. Run 'lean init' in your workspace directory to set up QuantConnect backtesting. See the README for details.",
             )
 
         # Build command
