@@ -47,6 +47,7 @@ CORRECTABLE_ERROR_PATTERNS = [
     r"missing \d+ required positional argument",
     r"object is not callable",
     r"object is not subscriptable",
+    r"[Zz]ero trades executed",
 ]
 
 
@@ -722,7 +723,7 @@ class BacktestExecutor:
                 return float(s.replace("%", "").replace("$", "").replace(",", ""))
             return 0.0
 
-        return BacktestResult(
+        result = BacktestResult(
             success=True,
             cagr=parse_pct(stats.get("Compounding Annual Return", 0)) / 100,
             sharpe=parse_pct(stats.get("Sharpe Ratio", 0)),
@@ -734,6 +735,13 @@ class BacktestExecutor:
             benchmark_cagr=0.10,
             raw_output=raw_output,
         )
+
+        # Flag zero-trade backtests as failure
+        if result.success and result.total_trades == 0:
+            result.success = False
+            result.error = "Zero trades executed - strategy logic may not match specification"
+
+        return result
 
     def _parse_lean_output_table(self, stdout: str) -> BacktestResult:
         """Parse LEAN table output as fallback."""
