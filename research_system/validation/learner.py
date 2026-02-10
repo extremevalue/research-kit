@@ -7,6 +7,8 @@ to help inform future strategy development.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -407,8 +409,22 @@ class Learner:
         filename = f"{doc.strategy_id}_learnings_{doc.timestamp.strftime('%Y%m%d_%H%M%S')}.yaml"
         filepath = learnings_path / filename
 
-        with open(filepath, "w") as f:
-            yaml.dump(doc.to_dict(), f, default_flow_style=False, sort_keys=False)
+        # Atomic write: temp file + rename
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=filepath.parent,
+            suffix=".yaml.tmp",
+            prefix=f".{doc.strategy_id}_",
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                yaml.dump(doc.to_dict(), f, default_flow_style=False, sort_keys=False)
+            os.replace(tmp_path, filepath)  # Atomic on POSIX
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
         return filepath
 

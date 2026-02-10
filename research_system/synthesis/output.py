@@ -8,6 +8,8 @@ Handles serialization of synthesis results into the workspace file structure:
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
@@ -103,11 +105,25 @@ def save_idea_as_strategy(
             "price": [{"type": "ohlcv", "symbols": idea.data_requirements}],
         }
 
-    # Save to workspace
+    # Save to workspace (atomic write: temp file + rename)
     filepath = workspace.strategies_path / "pending" / f"{strategy_id}.yaml"
     filepath.parent.mkdir(parents=True, exist_ok=True)
-    with open(filepath, "w") as f:
-        yaml.dump(strategy, f, default_flow_style=False, sort_keys=False)
+
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=filepath.parent,
+        suffix=".yaml.tmp",
+        prefix=f".{strategy_id}_",
+    )
+    try:
+        with os.fdopen(tmp_fd, "w") as f:
+            yaml.dump(strategy, f, default_flow_style=False, sort_keys=False)
+        os.replace(tmp_path, filepath)  # Atomic on POSIX
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
     logger.info("Saved strategy %s to %s", strategy_id, filepath)
     return filepath
@@ -148,8 +164,22 @@ def save_synthesis_report(
         / f"synthesis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.yaml"
     )
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(report_path, "w") as f:
-        yaml.dump(report, f, default_flow_style=False, sort_keys=False)
+
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=report_path.parent,
+        suffix=".yaml.tmp",
+        prefix=".synthesis_",
+    )
+    try:
+        with os.fdopen(tmp_fd, "w") as f:
+            yaml.dump(report, f, default_flow_style=False, sort_keys=False)
+        os.replace(tmp_path, report_path)  # Atomic on POSIX
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
     logger.info("Saved synthesis report to %s", report_path)
     return report_path

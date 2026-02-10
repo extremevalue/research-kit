@@ -11,7 +11,9 @@ This module tests the V4 ingestion functionality:
 8. Error handling
 """
 
+import glob as glob_mod
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -824,3 +826,195 @@ class TestOfflineMode:
         # Should create minimal strategy without calling LLM
         assert strategy is not None
         assert strategy.name == "test"
+
+
+# =============================================================================
+# TEST ATOMIC WRITES
+# =============================================================================
+
+
+class TestAtomicWrites:
+    """Test that _save_strategy uses atomic writes (temp file + rename)."""
+
+    def test_save_strategy_creates_valid_yaml(self, processor, workspace):
+        """Test that _save_strategy produces a valid, complete YAML file."""
+        from research_system.schemas.v4 import (
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Hypothesis, Universe, UniverseType,
+            Entry, EntryType, TechnicalConfig,
+            Position, PositionType, PositionLeg, Direction, LegInstrument,
+            InstrumentSource, InstrumentAssetType,
+            Exit, ExitPath, ExitType, ExitPriority,
+        )
+        from datetime import datetime
+
+        strategy = Strategy(
+            id="STRAT-001",
+            name="Atomic Write Test Strategy",
+            created=datetime.now(),
+            status=StrategyStatus.PENDING,
+            source=StrategySource(
+                reference="test.txt",
+                excerpt="Test",
+                hash="abc123",
+                extracted_date=datetime.now(),
+            ),
+            hypothesis=Hypothesis(
+                summary="Test hypothesis for atomic write",
+                detail="Detailed description",
+            ),
+            strategy_mode=StrategyMode.SIMPLE,
+            universe=Universe(type=UniverseType.STATIC),
+            entry=Entry(
+                type=EntryType.TECHNICAL,
+                technical=TechnicalConfig(
+                    indicator="SMA", params={}, condition="cross"
+                ),
+            ),
+            position=Position(
+                type=PositionType.SINGLE_LEG,
+                legs=[PositionLeg(
+                    name="main",
+                    direction=Direction.LONG,
+                    instrument=LegInstrument(source=InstrumentSource.FROM_UNIVERSE),
+                    asset_type=InstrumentAssetType.EQUITY,
+                )],
+            ),
+            exit=Exit(
+                paths=[ExitPath(name="exit", type=ExitType.SIGNAL_REVERSAL)],
+                priority=ExitPriority.FIRST_TRIGGERED,
+            ),
+        )
+
+        saved_path = processor._save_strategy(strategy)
+
+        # File must exist
+        assert saved_path.exists()
+
+        # File must be valid YAML with the correct strategy id
+        with open(saved_path) as f:
+            data = yaml.safe_load(f)
+        assert data["id"] == "STRAT-001"
+        assert data["name"] == "Atomic Write Test Strategy"
+
+    def test_no_tmp_files_after_successful_write(self, processor, workspace):
+        """Test that no .tmp files remain after a successful save."""
+        from research_system.schemas.v4 import (
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Hypothesis, Universe, UniverseType,
+            Entry, EntryType, TechnicalConfig,
+            Position, PositionType, PositionLeg, Direction, LegInstrument,
+            InstrumentSource, InstrumentAssetType,
+            Exit, ExitPath, ExitType, ExitPriority,
+        )
+        from datetime import datetime
+
+        strategy = Strategy(
+            id="STRAT-002",
+            name="No Temp Files Test",
+            created=datetime.now(),
+            status=StrategyStatus.PENDING,
+            source=StrategySource(
+                reference="test.txt",
+                excerpt="Test",
+                hash="abc123",
+                extracted_date=datetime.now(),
+            ),
+            hypothesis=Hypothesis(summary="Test", detail="Test"),
+            strategy_mode=StrategyMode.SIMPLE,
+            universe=Universe(type=UniverseType.STATIC),
+            entry=Entry(
+                type=EntryType.TECHNICAL,
+                technical=TechnicalConfig(
+                    indicator="SMA", params={}, condition="cross"
+                ),
+            ),
+            position=Position(
+                type=PositionType.SINGLE_LEG,
+                legs=[PositionLeg(
+                    name="main",
+                    direction=Direction.LONG,
+                    instrument=LegInstrument(source=InstrumentSource.FROM_UNIVERSE),
+                    asset_type=InstrumentAssetType.EQUITY,
+                )],
+            ),
+            exit=Exit(
+                paths=[ExitPath(name="exit", type=ExitType.SIGNAL_REVERSAL)],
+                priority=ExitPriority.FIRST_TRIGGERED,
+            ),
+        )
+
+        saved_path = processor._save_strategy(strategy)
+        pending_dir = saved_path.parent
+
+        # No .tmp files should exist in the pending directory
+        tmp_files = list(pending_dir.glob("*.yaml.tmp"))
+        assert tmp_files == [], f"Leftover tmp files: {tmp_files}"
+
+    def test_interrupt_during_write_leaves_no_partial_file(
+        self, processor, workspace
+    ):
+        """Test that KeyboardInterrupt during yaml.dump leaves no partial file."""
+        from research_system.schemas.v4 import (
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Hypothesis, Universe, UniverseType,
+            Entry, EntryType, TechnicalConfig,
+            Position, PositionType, PositionLeg, Direction, LegInstrument,
+            InstrumentSource, InstrumentAssetType,
+            Exit, ExitPath, ExitType, ExitPriority,
+        )
+        from datetime import datetime
+
+        strategy = Strategy(
+            id="STRAT-003",
+            name="Interrupt Test Strategy",
+            created=datetime.now(),
+            status=StrategyStatus.PENDING,
+            source=StrategySource(
+                reference="test.txt",
+                excerpt="Test",
+                hash="abc123",
+                extracted_date=datetime.now(),
+            ),
+            hypothesis=Hypothesis(summary="Test", detail="Test"),
+            strategy_mode=StrategyMode.SIMPLE,
+            universe=Universe(type=UniverseType.STATIC),
+            entry=Entry(
+                type=EntryType.TECHNICAL,
+                technical=TechnicalConfig(
+                    indicator="SMA", params={}, condition="cross"
+                ),
+            ),
+            position=Position(
+                type=PositionType.SINGLE_LEG,
+                legs=[PositionLeg(
+                    name="main",
+                    direction=Direction.LONG,
+                    instrument=LegInstrument(source=InstrumentSource.FROM_UNIVERSE),
+                    asset_type=InstrumentAssetType.EQUITY,
+                )],
+            ),
+            exit=Exit(
+                paths=[ExitPath(name="exit", type=ExitType.SIGNAL_REVERSAL)],
+                priority=ExitPriority.FIRST_TRIGGERED,
+            ),
+        )
+
+        strategy_path = workspace.strategy_path(strategy.id, status="pending")
+        pending_dir = strategy_path.parent
+        pending_dir.mkdir(parents=True, exist_ok=True)
+
+        # Mock yaml.dump to raise KeyboardInterrupt mid-write
+        with patch("research_system.ingest.strategy_processor.yaml.dump",
+                    side_effect=KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                processor._save_strategy(strategy)
+
+        # The final strategy file must NOT exist (write was interrupted)
+        assert not strategy_path.exists(), (
+            "Partial strategy file should not exist after interrupted write"
+        )
+
+        # No temp files should remain either
+        tmp_files = list(pending_dir.glob("*.yaml.tmp"))
+        assert tmp_files == [], f"Leftover tmp files after interrupt: {tmp_files}"
