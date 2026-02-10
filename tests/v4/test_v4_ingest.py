@@ -1,7 +1,7 @@
 """Tests for V4 ingest processor.
 
 This module tests the V4 ingestion functionality:
-1. V4IngestProcessor initialization
+1. IngestProcessor initialization
 2. Processing single files
 3. Processing entire inbox
 4. Quality scoring (specificity, trust)
@@ -18,18 +18,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from research_system.core.v4 import V4Workspace, V4Config, get_default_config
-from research_system.ingest.v4_processor import (
-    V4IngestProcessor,
-    V4IngestResult,
-    V4IngestSummary,
+from research_system.core.v4 import Workspace, Config, get_default_config
+from research_system.ingest.strategy_processor import (
+    IngestProcessor,
+    IngestResult,
+    IngestSummary,
 )
 from research_system.schemas.v4 import (
     IngestionDecision,
     IngestionQuality,
     SpecificityScore,
     TrustScore,
-    V4Strategy,
+    Strategy,
 )
 
 
@@ -41,7 +41,7 @@ from research_system.schemas.v4 import (
 @pytest.fixture
 def workspace(tmp_path):
     """Create an initialized V4 workspace."""
-    ws = V4Workspace(tmp_path)
+    ws = Workspace(tmp_path)
     ws.init()
     return ws
 
@@ -62,8 +62,8 @@ def mock_llm_client():
 
 @pytest.fixture
 def processor(workspace, config, mock_llm_client):
-    """Create a V4IngestProcessor."""
-    return V4IngestProcessor(workspace, config, mock_llm_client)
+    """Create a IngestProcessor."""
+    return IngestProcessor(workspace, config, mock_llm_client)
 
 
 @pytest.fixture
@@ -107,11 +107,11 @@ Backtested from 2010-2023 with a Sharpe ratio of 1.2 and max drawdown of 18%.
 
 
 class TestProcessorInit:
-    """Test V4IngestProcessor initialization."""
+    """Test IngestProcessor initialization."""
 
     def test_processor_initializes(self, workspace, config, mock_llm_client):
         """Test processor initializes with required components."""
-        processor = V4IngestProcessor(workspace, config, mock_llm_client)
+        processor = IngestProcessor(workspace, config, mock_llm_client)
 
         assert processor.workspace is workspace
         assert processor.config is config
@@ -119,7 +119,7 @@ class TestProcessorInit:
 
     def test_processor_without_llm_client(self, workspace, config):
         """Test processor works without LLM client (offline mode)."""
-        processor = V4IngestProcessor(workspace, config, None)
+        processor = IngestProcessor(workspace, config, None)
 
         assert processor.llm_client is None
 
@@ -344,7 +344,7 @@ class TestQualityScoring:
     def test_specificity_score_calculation(self, processor, workspace):
         """Test specificity score calculation."""
         from research_system.schemas.v4 import (
-            V4Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
             Hypothesis, Universe, UniverseType, Entry, EntryType,
             Position, PositionType, PositionLeg, Direction, LegInstrument,
             InstrumentSource, InstrumentAssetType, PositionSizing, SizingMethod,
@@ -353,7 +353,7 @@ class TestQualityScoring:
         from datetime import datetime
 
         # Create a complete strategy
-        strategy = V4Strategy(
+        strategy = Strategy(
             id="STRAT-001",
             name="Test Strategy",
             created=datetime.now(),
@@ -404,7 +404,7 @@ class TestQualityScoring:
     def test_trust_score_with_edge(self, processor, workspace):
         """Test trust score increases with edge information."""
         from research_system.schemas.v4 import (
-            V4Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
             Hypothesis, StrategyEdge, EdgeCategory, Universe, UniverseType,
             Entry, EntryType, TechnicalConfig,
             Position, PositionType, PositionLeg, Direction, LegInstrument,
@@ -413,7 +413,7 @@ class TestQualityScoring:
         )
         from datetime import datetime
 
-        strategy = V4Strategy(
+        strategy = Strategy(
             id="STRAT-001",
             name="Test Strategy",
             created=datetime.now(),
@@ -474,7 +474,7 @@ class TestRedFlagDetection:
     def test_detects_no_transaction_costs(self, processor, workspace):
         """Test detection of missing transaction costs."""
         from research_system.schemas.v4 import (
-            V4Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
             Hypothesis, Universe, UniverseType,
             Entry, EntryType, TechnicalConfig,
             Position, PositionType, PositionLeg, Direction, LegInstrument,
@@ -483,7 +483,7 @@ class TestRedFlagDetection:
         )
         from datetime import datetime
 
-        strategy = V4Strategy(
+        strategy = Strategy(
             id="STRAT-001",
             name="Test Strategy",
             created=datetime.now(),
@@ -529,7 +529,7 @@ class TestRedFlagDetection:
     def test_detects_selling_author(self, processor, workspace):
         """Test detection of author selling courses."""
         from research_system.schemas.v4 import (
-            V4Strategy, StrategyStatus, StrategyMode, StrategySource,
+            Strategy, StrategyStatus, StrategyMode, StrategySource,
             Hypothesis, Universe, UniverseType,
             Entry, EntryType, TechnicalConfig,
             Position, PositionType, PositionLeg, Direction, LegInstrument,
@@ -538,7 +538,7 @@ class TestRedFlagDetection:
         )
         from datetime import datetime
 
-        strategy = V4Strategy(
+        strategy = Strategy(
             id="STRAT-001",
             name="Test Strategy",
             created=datetime.now(),
@@ -750,8 +750,8 @@ class TestResultClasses:
     """Test result data classes."""
 
     def test_ingest_result_to_dict(self):
-        """Test V4IngestResult.to_dict()."""
-        result = V4IngestResult(
+        """Test IngestResult.to_dict()."""
+        result = IngestResult(
             filename="test.txt",
             file_path="/path/to/test.txt",
             success=True,
@@ -768,8 +768,8 @@ class TestResultClasses:
         assert d["decision"] == "accept"
 
     def test_ingest_summary_to_dict(self):
-        """Test V4IngestSummary.to_dict()."""
-        summary = V4IngestSummary(
+        """Test IngestSummary.to_dict()."""
+        summary = IngestSummary(
             total_files=5,
             processed=4,
             accepted=3,
@@ -813,7 +813,7 @@ class TestOfflineMode:
         mock_client = MagicMock()
         mock_client.is_offline = True
 
-        processor = V4IngestProcessor(workspace, config, mock_client)
+        processor = IngestProcessor(workspace, config, mock_client)
 
         test_file = workspace.inbox_path / "test.txt"
         test_file.write_text("Test content")

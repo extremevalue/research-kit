@@ -11,9 +11,9 @@ This module tests:
 import pytest
 from unittest.mock import Mock, MagicMock, patch
 
-from research_system.codegen.v4_generator import (
-    V4CodeGenerator,
-    V4CodeCorrectionResult,
+from research_system.codegen.strategy_generator import (
+    CodeGenerator,
+    CodeCorrectionResult,
 )
 from research_system.validation.backtest import (
     BacktestExecutor,
@@ -123,8 +123,8 @@ class TestCorrectionPrompt:
 
     @pytest.fixture
     def generator(self):
-        """Create a V4CodeGenerator without LLM client."""
-        return V4CodeGenerator(llm_client=None)
+        """Create a CodeGenerator without LLM client."""
+        return CodeGenerator(llm_client=None)
 
     def test_correction_prompt_includes_strategy_name(self, generator):
         """Test prompt includes strategy name."""
@@ -188,14 +188,15 @@ class TestCodeCorrection:
     """Test correct_code_error() method."""
 
     def test_correction_without_llm_client_fails(self):
-        """Test correction fails without LLM client."""
-        generator = V4CodeGenerator(llm_client=None)
+        """Test correction fails without LLM client and no CLI fallback."""
+        generator = CodeGenerator(llm_client=None)
 
-        result = generator.correct_code_error(
-            original_code="class Test: pass",
-            error_message="Some error",
-            strategy={"name": "Test", "id": "STRAT-001"},
-        )
+        with patch.object(generator, '_claude_cli_available', return_value=False):
+            result = generator.correct_code_error(
+                original_code="class Test: pass",
+                error_message="Some error",
+                strategy={"name": "Test", "id": "STRAT-001"},
+            )
 
         assert not result.success
         assert "No LLM client" in result.error
@@ -213,7 +214,7 @@ class TestAlgorithm(QCAlgorithm):
 ```"""
         mock_llm.generate.return_value = mock_response
 
-        generator = V4CodeGenerator(llm_client=mock_llm)
+        generator = CodeGenerator(llm_client=mock_llm)
 
         result = generator.correct_code_error(
             original_code="class Test: pass",
@@ -239,7 +240,7 @@ class Test(QCAlgorithm):
 ```"""
         mock_llm.generate.return_value = mock_response
 
-        generator = V4CodeGenerator(llm_client=mock_llm)
+        generator = CodeGenerator(llm_client=mock_llm)
 
         result = generator.correct_code_error(
             original_code="class Test: pass",
@@ -260,7 +261,7 @@ class Test(QCAlgorithm):
         mock_response.content = "```python\nclass Test: pass\n```"
         mock_llm.generate.return_value = mock_response
 
-        generator = V4CodeGenerator(llm_client=mock_llm)
+        generator = CodeGenerator(llm_client=mock_llm)
 
         result = generator.correct_code_error(
             original_code="class Test: pass",
@@ -276,7 +277,7 @@ class Test(QCAlgorithm):
         mock_llm = Mock()
         mock_llm.generate.side_effect = Exception("LLM API error")
 
-        generator = V4CodeGenerator(llm_client=mock_llm)
+        generator = CodeGenerator(llm_client=mock_llm)
 
         result = generator.correct_code_error(
             original_code="class Test: pass",
@@ -294,7 +295,7 @@ class Test(QCAlgorithm):
         mock_response.content = "I don't know how to fix this."
         mock_llm.generate.return_value = mock_response
 
-        generator = V4CodeGenerator(llm_client=mock_llm)
+        generator = CodeGenerator(llm_client=mock_llm)
 
         result = generator.correct_code_error(
             original_code="class Test: pass",
@@ -307,16 +308,16 @@ class Test(QCAlgorithm):
 
 
 # =============================================================================
-# TEST V4CodeCorrectionResult DATACLASS
+# TEST CodeCorrectionResult DATACLASS
 # =============================================================================
 
 
-class TestV4CodeCorrectionResult:
-    """Test V4CodeCorrectionResult dataclass."""
+class TestCodeCorrectionResult:
+    """Test CodeCorrectionResult dataclass."""
 
     def test_to_dict_success(self):
         """Test to_dict for successful correction."""
-        result = V4CodeCorrectionResult(
+        result = CodeCorrectionResult(
             success=True,
             corrected_code="class Test: pass",
             attempt=2,
@@ -331,7 +332,7 @@ class TestV4CodeCorrectionResult:
 
     def test_to_dict_failure(self):
         """Test to_dict for failed correction."""
-        result = V4CodeCorrectionResult(
+        result = CodeCorrectionResult(
             success=False,
             error="No LLM client",
             attempt=1,
@@ -390,7 +391,7 @@ class TestRetryLogic:
         strategy = {"name": "Test", "id": "STRAT-001"}
 
         mock_generator = Mock()
-        mock_generator.correct_code_error.return_value = V4CodeCorrectionResult(
+        mock_generator.correct_code_error.return_value = CodeCorrectionResult(
             success=True,
             corrected_code="class Fixed: pass",
         )
@@ -426,7 +427,7 @@ class TestRetryLogic:
         strategy = {"name": "Test", "id": "STRAT-001"}
 
         mock_generator = Mock()
-        mock_generator.correct_code_error.return_value = V4CodeCorrectionResult(
+        mock_generator.correct_code_error.return_value = CodeCorrectionResult(
             success=True,
             corrected_code="class StillBroken: pass",
         )
@@ -535,7 +536,7 @@ class TestRetryLogic:
         strategy = {"name": "Test", "id": "STRAT-001"}
 
         mock_generator = Mock()
-        mock_generator.correct_code_error.return_value = V4CodeCorrectionResult(
+        mock_generator.correct_code_error.return_value = CodeCorrectionResult(
             success=False,
             error="Could not extract code",
         )

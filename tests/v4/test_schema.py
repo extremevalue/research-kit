@@ -15,7 +15,7 @@ import pytest
 
 from research_system.schemas.v4 import (
     # Strategy models
-    V4Strategy,
+    Strategy,
     StrategyMode,
     StrategyStatus,
     SourceType,
@@ -573,7 +573,7 @@ class TestStrategyParsing:
 
     def test_parse_strategy_1_dividend_capture(self):
         """Test parsing Strategy 1: Dividend Capture with Covered Call."""
-        strategy = V4Strategy(**STRATEGY_1_DATA)
+        strategy = Strategy(**STRATEGY_1_DATA)
 
         assert strategy.id == "TEST-001"
         assert strategy.name == "Dividend Capture with Covered Call"
@@ -626,7 +626,7 @@ class TestStrategyParsing:
 
     def test_parse_strategy_2_fx_correlation(self):
         """Test parsing Strategy 2: FX Correlation Mean Reversion."""
-        strategy = V4Strategy(**STRATEGY_2_DATA)
+        strategy = Strategy(**STRATEGY_2_DATA)
 
         assert strategy.id == "TEST-002"
         assert strategy.name == "FX Correlation Mean Reversion"
@@ -658,7 +658,7 @@ class TestStrategyParsing:
 
     def test_parse_strategy_3_earnings_sentiment(self):
         """Test parsing Strategy 3: Earnings Momentum + Sentiment."""
-        strategy = V4Strategy(**STRATEGY_3_DATA)
+        strategy = Strategy(**STRATEGY_3_DATA)
 
         assert strategy.id == "TEST-003"
         assert strategy.name == "Earnings Beat with Positive Sentiment"
@@ -680,7 +680,7 @@ class TestStrategyParsing:
 
     def test_parse_strategy_4_regime_adaptive(self):
         """Test parsing Strategy 4: Regime-Adaptive Trend/Mean Reversion."""
-        strategy = V4Strategy(**STRATEGY_4_DATA)
+        strategy = Strategy(**STRATEGY_4_DATA)
 
         assert strategy.id == "TEST-004"
         assert strategy.name == "Regime-Adaptive Trend and Mean Reversion"
@@ -725,7 +725,7 @@ class TestStrategyParsing:
 
     def test_parse_strategy_5_volatility_arbitrage(self):
         """Test parsing Strategy 5: Options Volatility Arbitrage."""
-        strategy = V4Strategy(**STRATEGY_5_DATA)
+        strategy = Strategy(**STRATEGY_5_DATA)
 
         assert strategy.id == "TEST-005"
         assert strategy.name == "Implied vs Realized Volatility Arbitrage"
@@ -773,7 +773,7 @@ class TestStrategyValidation:
         data["exit"] = None
 
         with pytest.raises(ValueError, match="Simple mode strategy must have entry"):
-            V4Strategy(**data)
+            Strategy(**data)
 
     def test_regime_adaptive_requires_regimes(self):
         """Test that regime_adaptive mode requires regimes."""
@@ -781,7 +781,7 @@ class TestStrategyValidation:
         data["regimes"] = None
 
         with pytest.raises(ValueError, match="Regime-adaptive strategy must have regimes"):
-            V4Strategy(**data)
+            Strategy(**data)
 
     def test_position_requires_legs(self):
         """Test that position requires at least one leg."""
@@ -789,7 +789,7 @@ class TestStrategyValidation:
         data["position"]["legs"] = []
 
         with pytest.raises(ValueError):
-            V4Strategy(**data)
+            Strategy(**data)
 
 
 # =============================================================================
@@ -1109,18 +1109,18 @@ class TestEdgeCases:
             },
         }
 
-        strategy = V4Strategy(**data)
+        strategy = Strategy(**data)
         assert strategy.id == "MIN-001"
 
     def test_strategy_serialization_roundtrip(self):
         """Test that strategies can be serialized and deserialized."""
-        strategy = V4Strategy(**STRATEGY_1_DATA)
+        strategy = Strategy(**STRATEGY_1_DATA)
 
         # Serialize to dict
         data = strategy.model_dump()
 
         # Deserialize back
-        strategy2 = V4Strategy(**data)
+        strategy2 = Strategy(**data)
 
         assert strategy2.id == strategy.id
         assert strategy2.name == strategy.name
@@ -1137,7 +1137,7 @@ class TestEdgeCases:
 
     def test_enum_string_values(self):
         """Test that enums serialize to string values."""
-        strategy = V4Strategy(**STRATEGY_1_DATA)
+        strategy = Strategy(**STRATEGY_1_DATA)
         data = strategy.model_dump()
 
         # Check that enums are serialized as strings

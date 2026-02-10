@@ -9,8 +9,8 @@ This module tests:
 
 import pytest
 
-from research_system.codegen.v4_generator import V4CodeGenerator
-from research_system.codegen.templates.v4 import get_template_for_v4_strategy
+from research_system.codegen.strategy_generator import CodeGenerator
+from research_system.codegen.templates.v4 import get_template_for_strategy
 
 
 # =============================================================================
@@ -23,32 +23,32 @@ class TestOptionsTemplateSelection:
 
     def test_options_income_selects_template(self):
         """Test options_income strategy type selects options_income.py.j2."""
-        template = get_template_for_v4_strategy("options_income")
+        template = get_template_for_strategy("options_income")
         assert template == "options_income.py.j2"
 
     def test_options_income_hyphenated_selects_template(self):
         """Test options-income (hyphenated) selects template."""
-        template = get_template_for_v4_strategy("options-income")
+        template = get_template_for_strategy("options-income")
         assert template == "options_income.py.j2"
 
     def test_cash_secured_put_selects_template(self):
         """Test cash_secured_put strategy type selects options_income.py.j2."""
-        template = get_template_for_v4_strategy("cash_secured_put")
+        template = get_template_for_strategy("cash_secured_put")
         assert template == "options_income.py.j2"
 
     def test_put_credit_spread_selects_template(self):
         """Test put_credit_spread strategy type selects options_income.py.j2."""
-        template = get_template_for_v4_strategy("put_credit_spread")
+        template = get_template_for_strategy("put_credit_spread")
         assert template == "options_income.py.j2"
 
     def test_covered_call_selects_template(self):
         """Test covered_call strategy type selects options_income.py.j2."""
-        template = get_template_for_v4_strategy("covered_call")
+        template = get_template_for_strategy("covered_call")
         assert template == "options_income.py.j2"
 
     def test_generic_options_selects_template(self):
         """Test generic 'options' strategy type selects options_income.py.j2."""
-        template = get_template_for_v4_strategy("options")
+        template = get_template_for_strategy("options")
         assert template == "options_income.py.j2"
 
 
@@ -63,7 +63,7 @@ class TestOptionsCodeGeneration:
     @pytest.fixture
     def generator(self):
         """Create a code generator without LLM client."""
-        return V4CodeGenerator(llm_client=None)
+        return CodeGenerator(llm_client=None)
 
     @pytest.fixture
     def cash_secured_put_strategy(self):
@@ -181,7 +181,7 @@ class TestOptionsRequiredComponents:
 
     @pytest.fixture
     def generator(self):
-        return V4CodeGenerator(llm_client=None)
+        return CodeGenerator(llm_client=None)
 
     @pytest.fixture
     def options_strategy(self):
@@ -278,7 +278,7 @@ class TestOptionsParameterHandling:
 
     @pytest.fixture
     def generator(self):
-        return V4CodeGenerator(llm_client=None)
+        return CodeGenerator(llm_client=None)
 
     def test_custom_underlying(self, generator):
         """Test custom underlying symbol is used."""

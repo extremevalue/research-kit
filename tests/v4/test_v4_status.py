@@ -16,9 +16,9 @@ import yaml
 @pytest.fixture
 def v4_workspace(tmp_path):
     """Create an initialized V4 workspace."""
-    from research_system.core.v4.workspace import V4Workspace
+    from research_system.core.v4.workspace import Workspace
 
-    ws = V4Workspace(tmp_path)
+    ws = Workspace(tmp_path)
     ws.init()
     return ws
 
@@ -63,29 +63,29 @@ class TestV4StatusBasic:
 
     def test_status_empty_workspace(self, v4_workspace, capsys):
         """Shows status for empty workspace."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        result = cmd_v4_status(args)
+        result = cmd_status(args)
         assert result == 0
 
         captured = capsys.readouterr()
-        assert "Research-Kit V4" in captured.out
+        assert "Research-Kit Workspace Status" in captured.out
         assert str(v4_workspace.path) in captured.out
         assert "No strategies yet" in captured.out
 
     def test_status_with_content(self, workspace_with_content, capsys):
         """Shows status with strategies and inbox files."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(workspace_with_content.path)
         )
 
-        result = cmd_v4_status(args)
+        result = cmd_status(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -96,13 +96,13 @@ class TestV4StatusBasic:
 
     def test_status_shows_workspace_path(self, v4_workspace, capsys):
         """Shows workspace path in output."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert str(v4_workspace.path) in captured.out
@@ -118,13 +118,13 @@ class TestV4StatusCounts:
 
     def test_counts_by_status(self, workspace_with_content, capsys):
         """Shows correct counts by status."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(workspace_with_content.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         # 2 pending, 1 validated
@@ -134,13 +134,13 @@ class TestV4StatusCounts:
 
     def test_shows_total(self, workspace_with_content, capsys):
         """Shows total strategy count."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(workspace_with_content.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "Total" in captured.out
@@ -157,26 +157,26 @@ class TestV4StatusInbox:
 
     def test_empty_inbox_message(self, v4_workspace, capsys):
         """Shows empty inbox message."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "Inbox is empty" in captured.out
 
     def test_inbox_file_count(self, workspace_with_content, capsys):
         """Shows inbox file count."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(workspace_with_content.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "2 file(s) ready to ingest" in captured.out
@@ -192,13 +192,13 @@ class TestV4StatusCounters:
 
     def test_shows_next_ids(self, v4_workspace, capsys):
         """Shows next ID numbers."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "Next strategy: STRAT-001" in captured.out
@@ -210,13 +210,13 @@ class TestV4StatusCounters:
         v4_workspace.next_strategy_id()
         v4_workspace.next_strategy_id()
 
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "STRAT-003" in captured.out  # Next would be 003
@@ -232,26 +232,26 @@ class TestV4StatusRecent:
 
     def test_no_recent_when_empty(self, v4_workspace, capsys):
         """No recent section when no strategies."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "STRAT-" not in captured.out or "Recent" not in captured.out
 
     def test_shows_recent_strategies(self, workspace_with_content, capsys):
         """Shows recent strategies."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(workspace_with_content.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "Recent Strategies" in captured.out
@@ -268,26 +268,26 @@ class TestV4StatusActions:
 
     def test_suggests_ingest_when_inbox_has_files(self, workspace_with_content, capsys):
         """Suggests running ingest when inbox has files."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(workspace_with_content.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
-        assert "v4-ingest" in captured.out
+        assert "ingest" in captured.out
 
     def test_suggests_adding_to_inbox_when_empty(self, v4_workspace, capsys):
         """Suggests adding docs when empty workspace."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(v4_workspace.path)
         )
 
-        cmd_v4_status(args)
+        cmd_status(args)
 
         captured = capsys.readouterr()
         assert "inbox" in captured.out.lower()
@@ -303,13 +303,13 @@ class TestV4StatusErrors:
 
     def test_uninitialized_workspace(self, tmp_path, capsys):
         """Shows error for uninitialized workspace."""
-        from research_system.cli.main import cmd_v4_status
+        from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
             v4_workspace=str(tmp_path / "nonexistent")
         )
 
-        result = cmd_v4_status(args)
+        result = cmd_status(args)
         assert result == 1
 
         captured = capsys.readouterr()

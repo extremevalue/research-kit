@@ -17,9 +17,9 @@ import yaml
 @pytest.fixture
 def v4_workspace(tmp_path):
     """Create an initialized V4 workspace."""
-    from research_system.core.v4.workspace import V4Workspace
+    from research_system.core.v4.workspace import Workspace
 
-    ws = V4Workspace(tmp_path)
+    ws = Workspace(tmp_path)
     ws.init()
     return ws
 
@@ -92,7 +92,7 @@ class TestV4ShowTextFormat:
 
     def test_show_strategy_basic(self, workspace_with_strategy, capsys):
         """Shows basic strategy information."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -100,7 +100,7 @@ class TestV4ShowTextFormat:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -110,7 +110,7 @@ class TestV4ShowTextFormat:
 
     def test_show_strategy_source(self, workspace_with_strategy, capsys):
         """Shows source information."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -118,7 +118,7 @@ class TestV4ShowTextFormat:
             format="text"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         assert "Source" in captured.out
@@ -127,7 +127,7 @@ class TestV4ShowTextFormat:
 
     def test_show_strategy_hypothesis(self, workspace_with_strategy, capsys):
         """Shows hypothesis section."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -135,7 +135,7 @@ class TestV4ShowTextFormat:
             format="text"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         assert "Hypothesis" in captured.out
@@ -144,7 +144,7 @@ class TestV4ShowTextFormat:
 
     def test_show_strategy_edge(self, workspace_with_strategy, capsys):
         """Shows edge section."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -152,7 +152,7 @@ class TestV4ShowTextFormat:
             format="text"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         assert "Edge" in captured.out
@@ -160,7 +160,7 @@ class TestV4ShowTextFormat:
 
     def test_show_strategy_universe(self, workspace_with_strategy, capsys):
         """Shows universe section."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -168,7 +168,7 @@ class TestV4ShowTextFormat:
             format="text"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         assert "Universe" in captured.out
@@ -176,7 +176,7 @@ class TestV4ShowTextFormat:
 
     def test_show_strategy_entry(self, workspace_with_strategy, capsys):
         """Shows entry section."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -184,7 +184,7 @@ class TestV4ShowTextFormat:
             format="text"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         assert "Entry" in captured.out
@@ -201,7 +201,7 @@ class TestV4ShowYamlFormat:
 
     def test_yaml_output_valid(self, workspace_with_strategy, capsys):
         """YAML output is valid YAML."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -209,7 +209,7 @@ class TestV4ShowYamlFormat:
             format="yaml"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -219,7 +219,7 @@ class TestV4ShowYamlFormat:
 
     def test_yaml_no_internal_fields(self, workspace_with_strategy, capsys):
         """YAML output doesn't include internal fields."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -227,7 +227,7 @@ class TestV4ShowYamlFormat:
             format="yaml"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         data = yaml.safe_load(captured.out)
@@ -245,7 +245,7 @@ class TestV4ShowJsonFormat:
 
     def test_json_output_valid(self, workspace_with_strategy, capsys):
         """JSON output is valid JSON."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -253,7 +253,7 @@ class TestV4ShowJsonFormat:
             format="json"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -263,7 +263,7 @@ class TestV4ShowJsonFormat:
 
     def test_json_no_internal_fields(self, workspace_with_strategy, capsys):
         """JSON output doesn't include internal fields."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -271,7 +271,7 @@ class TestV4ShowJsonFormat:
             format="json"
         )
 
-        cmd_v4_show(args)
+        cmd_show(args)
 
         captured = capsys.readouterr()
         data = json.loads(captured.out)
@@ -289,7 +289,7 @@ class TestV4ShowErrors:
 
     def test_strategy_not_found(self, v4_workspace, capsys):
         """Shows error for non-existent strategy."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-999",
@@ -297,7 +297,7 @@ class TestV4ShowErrors:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 1
 
         captured = capsys.readouterr()
@@ -306,7 +306,7 @@ class TestV4ShowErrors:
 
     def test_uninitialized_workspace(self, tmp_path, capsys):
         """Shows error for uninitialized workspace."""
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
@@ -314,7 +314,7 @@ class TestV4ShowErrors:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 1
 
         captured = capsys.readouterr()
@@ -341,7 +341,7 @@ class TestV4ShowEdgeCases:
         with open(filepath, "w") as f:
             yaml.dump(strategy, f)
 
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-002",
@@ -349,7 +349,7 @@ class TestV4ShowEdgeCases:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -367,7 +367,7 @@ class TestV4ShowEdgeCases:
         with open(filepath, "w") as f:
             yaml.dump(strategy, f)
 
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-003",
@@ -375,7 +375,7 @@ class TestV4ShowEdgeCases:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -397,7 +397,7 @@ class TestV4ShowEdgeCases:
         with open(filepath, "w") as f:
             yaml.dump(strategy, f)
 
-        from research_system.cli.main import cmd_v4_show
+        from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-004",
@@ -405,7 +405,7 @@ class TestV4ShowEdgeCases:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 0
 
         captured = capsys.readouterr()

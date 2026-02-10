@@ -20,11 +20,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from research_system.core.v4.config import V4Config, LoggingConfig, LogLevel
+from research_system.core.v4.config import Config, LoggingConfig, LogLevel
 from research_system.core.v4.logging import (
     setup_logging,
     get_logger,
-    V4LogManager,
+    LogManager,
     DEFAULT_LOGGER_NAME,
     LOG_FILE_PREFIX,
     LOG_FILE_EXTENSION,
@@ -67,7 +67,7 @@ def workspace_with_config(workspace_path):
 @pytest.fixture
 def debug_config():
     """Create a config with DEBUG level."""
-    return V4Config(logging=LoggingConfig(level=LogLevel.DEBUG))
+    return Config(logging=LoggingConfig(level=LogLevel.DEBUG))
 
 
 @pytest.fixture(autouse=True)
@@ -171,25 +171,25 @@ class TestGetLogger:
 # =============================================================================
 
 
-class TestV4LogManager:
-    """Test the V4LogManager class."""
+class TestLogManager:
+    """Test the LogManager class."""
 
     def test_init_with_workspace_path(self, workspace_path):
         """Test initializing log manager with workspace path."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         assert manager.workspace_path == workspace_path
         assert manager.logs_path == workspace_path / "logs"
 
     def test_init_with_config(self, workspace_path, debug_config):
         """Test initializing log manager with explicit config."""
-        manager = V4LogManager(workspace_path, config=debug_config)
+        manager = LogManager(workspace_path, config=debug_config)
 
         assert manager.config.logging.level == "DEBUG"
 
     def test_init_loads_config_from_workspace(self, workspace_with_config):
         """Test that log manager loads config from workspace."""
-        manager = V4LogManager(workspace_with_config)
+        manager = LogManager(workspace_with_config)
 
         assert manager.config.logging.level == "INFO"
 
@@ -204,7 +204,7 @@ class TestLogFileLocation:
 
     def test_get_log_file_path_format(self, workspace_path):
         """Test that log file path has correct format."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         log_path = manager.get_log_file_path()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -214,7 +214,7 @@ class TestLogFileLocation:
 
     def test_log_file_in_logs_directory(self, workspace_path):
         """Test that log file is in workspace/logs directory."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         log_path = manager.get_log_file_path()
 
@@ -222,7 +222,7 @@ class TestLogFileLocation:
 
     def test_log_file_has_date_in_name(self, workspace_path):
         """Test that log file name includes today's date."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         log_path = manager.get_log_file_path()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -247,7 +247,7 @@ class TestLogMessages:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Test info message" in content
@@ -261,7 +261,7 @@ class TestLogMessages:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Test warning message" in content
@@ -275,7 +275,7 @@ class TestLogMessages:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Test error message" in content
@@ -289,7 +289,7 @@ class TestLogMessages:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         # Check for timestamp format YYYY-MM-DD HH:MM:SS
@@ -306,7 +306,7 @@ class TestLogMessages:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "test.logger.name" in content
@@ -328,7 +328,7 @@ class TestLogLevel:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Debug message" in content
@@ -336,7 +336,7 @@ class TestLogLevel:
 
     def test_info_level_does_not_log_debug(self, workspace_path):
         """Test that INFO level does not log debug messages."""
-        config = V4Config(logging=LoggingConfig(level=LogLevel.INFO))
+        config = Config(logging=LoggingConfig(level=LogLevel.INFO))
         logger = setup_logging(workspace_path, config=config)
         logger.debug("Debug message that should not appear")
         logger.info("Info message that should appear")
@@ -344,7 +344,7 @@ class TestLogLevel:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Debug message that should not appear" not in content
@@ -352,7 +352,7 @@ class TestLogLevel:
 
     def test_warning_level_filters_info(self, workspace_path):
         """Test that WARNING level filters out INFO messages."""
-        config = V4Config(logging=LoggingConfig(level=LogLevel.WARNING))
+        config = Config(logging=LoggingConfig(level=LogLevel.WARNING))
         logger = setup_logging(workspace_path, config=config)
         logger.info("Info message that should not appear")
         logger.warning("Warning message that should appear")
@@ -360,7 +360,7 @@ class TestLogLevel:
         for handler in logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Info message that should not appear" not in content
@@ -447,7 +447,7 @@ class TestMultipleLoggers:
         for handler in parent_logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Child logger message" in content
@@ -466,7 +466,7 @@ class TestMultipleLoggers:
         for handler in parent_logger.handlers:
             handler.flush()
 
-        log_file = V4LogManager(workspace_path).get_log_file_path()
+        log_file = LogManager(workspace_path).get_log_file_path()
         content = log_file.read_text()
 
         assert "Message from component 1" in content
@@ -485,7 +485,7 @@ class TestListLogFiles:
 
     def test_list_log_files_empty_directory(self, workspace_path):
         """Test listing files in empty logs directory."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         files = manager.list_log_files()
 
@@ -500,7 +500,7 @@ class TestListLogFiles:
         (logs_dir / "research-kit-2026-01-21.log").touch()
         (logs_dir / "research-kit-2026-01-22.log").touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         files = manager.list_log_files()
 
         assert len(files) == 3
@@ -515,7 +515,7 @@ class TestListLogFiles:
         (logs_dir / "research-kit-2026-01-20.log").touch()
         (logs_dir / "research-kit-2026-01-21.log").touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         files = manager.list_log_files()
 
         names = [f.name for f in files]
@@ -529,7 +529,7 @@ class TestListLogFiles:
         (logs_dir / "other-file.txt").touch()
         (logs_dir / "readme.md").touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         files = manager.list_log_files()
 
         assert len(files) == 1
@@ -541,7 +541,7 @@ class TestListLogFiles:
         workspace.mkdir()
         # Don't create logs directory
 
-        manager = V4LogManager(workspace)
+        manager = LogManager(workspace)
         files = manager.list_log_files()
 
         assert files == []
@@ -569,7 +569,7 @@ class TestCleanupOldLogs:
         old_file.touch()
         recent_file.touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         deleted = manager.cleanup_old_logs(keep_days=30)
 
         assert len(deleted) == 1
@@ -586,7 +586,7 @@ class TestCleanupOldLogs:
             date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
             (logs_dir / f"research-kit-{date}.log").touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         deleted = manager.cleanup_old_logs(keep_days=30)
 
         assert len(deleted) == 0
@@ -601,7 +601,7 @@ class TestCleanupOldLogs:
             date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
             (logs_dir / f"research-kit-{date}.log").touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         deleted = manager.cleanup_old_logs(keep_days=7)
 
         # Files older than 7 days should be deleted (10, 15, 20 days ago)
@@ -617,7 +617,7 @@ class TestCleanupOldLogs:
         old_file = logs_dir / f"research-kit-{old_date}.log"
         old_file.touch()
 
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         deleted = manager.cleanup_old_logs(keep_days=30)
 
         assert len(deleted) == 1
@@ -625,7 +625,7 @@ class TestCleanupOldLogs:
 
     def test_cleanup_handles_empty_directory(self, workspace_path):
         """Test cleanup with empty logs directory."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
         deleted = manager.cleanup_old_logs(keep_days=30)
 
         assert deleted == []
@@ -635,7 +635,7 @@ class TestCleanupOldLogs:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
 
-        manager = V4LogManager(workspace)
+        manager = LogManager(workspace)
         deleted = manager.cleanup_old_logs(keep_days=30)
 
         assert deleted == []
@@ -651,7 +651,7 @@ class TestHandlerDeduplication:
 
     def test_setup_does_not_duplicate_handlers(self, workspace_path):
         """Test that calling setup multiple times doesn't duplicate handlers."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         logger1 = manager.setup()
         handler_count_1 = len(logger1.handlers)
@@ -674,7 +674,7 @@ class TestDateExtraction:
 
     def test_extract_date_from_standard_filename(self, workspace_path):
         """Test extracting date from standard log filename."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         log_file = workspace_path / "logs" / "research-kit-2026-01-24.log"
         date = manager._extract_date_from_filename(log_file)
@@ -683,7 +683,7 @@ class TestDateExtraction:
 
     def test_extract_date_from_rotated_filename(self, workspace_path):
         """Test extracting date from rotated log filename."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         log_file = workspace_path / "logs" / "research-kit-2026-01-24.log.2026-01-23"
         date = manager._extract_date_from_filename(log_file)
@@ -693,7 +693,7 @@ class TestDateExtraction:
 
     def test_extract_date_returns_none_for_invalid_filename(self, workspace_path):
         """Test that invalid filename returns None."""
-        manager = V4LogManager(workspace_path)
+        manager = LogManager(workspace_path)
 
         log_file = workspace_path / "logs" / "invalid-file.log"
         date = manager._extract_date_from_filename(log_file)

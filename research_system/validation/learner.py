@@ -56,7 +56,7 @@ class LearningsDocument:
         }
 
 
-class V4Learner:
+class Learner:
     """Learner for extracting insights from V4 validation results."""
 
     def __init__(self, workspace):
@@ -411,3 +411,7 @@ class V4Learner:
             yaml.dump(doc.to_dict(), f, default_flow_style=False, sort_keys=False)
 
         return filepath
+
+
+# Backward-compat alias
+V4Learner = Learner

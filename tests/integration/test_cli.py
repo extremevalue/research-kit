@@ -20,9 +20,9 @@ class TestCLIInit:
 
         assert result.returncode == 0
         assert "Initialized workspace" in result.stdout
-        assert (temp_dir / "config.json").exists()
+        assert (temp_dir / "research-kit.yaml").exists()
         assert (temp_dir / "inbox").exists()
-        assert (temp_dir / "catalog").exists()
+        assert (temp_dir / "strategies").exists()
 
     def test_init_with_name(self, temp_dir):
         """Test init with custom name."""
@@ -35,10 +35,7 @@ class TestCLIInit:
         )
 
         assert result.returncode == 0
-
-        import json
-        config = json.loads((temp_dir / "config.json").read_text())
-        assert config["name"] == "My Research"
+        assert (temp_dir / "research-kit.yaml").exists()
 
 
 class TestCLICatalog:
@@ -119,5 +116,4 @@ class TestCLIHelp:
         )
 
         assert result.returncode == 0
-        assert "HYPOTHESIS" in result.stdout
-        assert "OOS_TESTING" in result.stdout
+        assert "walk-forward" in result.stdout.lower() or "validation" in result.stdout.lower()

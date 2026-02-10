@@ -11,13 +11,13 @@ The schema supports:
 - Walk-forward validation results
 
 Example usage:
-    from research_system.schemas.v4 import V4Strategy, IngestionQuality, Validation
+    from research_system.schemas.v4 import Strategy, IngestionQuality, Validation
 
     # Parse a strategy from YAML
     import yaml
     with open("strategy.yaml") as f:
         data = yaml.safe_load(f)
-    strategy = V4Strategy(**data)
+    strategy = Strategy(**data)
 
     # Check ingestion quality
     quality = IngestionQuality(
@@ -155,7 +155,7 @@ from research_system.schemas.v4.strategy import (
     TunableParameter,
     TunableParameters,
     # Main strategy model
-    V4Strategy,
+    Strategy,
 )
 
 # Ingestion models
@@ -185,6 +185,9 @@ from research_system.schemas.v4.validation import (
     create_verification_test,
     create_skipped_test,
 )
+
+# Backward-compat alias
+V4Strategy = Strategy
 
 __all__ = [
     # Strategy enums
@@ -301,6 +304,7 @@ __all__ = [
     "ParameterType",
     "TunableParameter",
     "TunableParameters",
+    "Strategy",
     "V4Strategy",
     # Ingestion
     "RedFlagSeverity",

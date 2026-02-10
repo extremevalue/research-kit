@@ -81,7 +81,7 @@ class VerificationResult:
         }
 
 
-class V4Verifier:
+class Verifier:
     """Verifier for V4 strategies."""
 
     # Keywords that suggest look-ahead bias
@@ -415,3 +415,7 @@ class V4Verifier:
             yaml.dump(result.to_dict(), f, default_flow_style=False, sort_keys=False)
 
         return filepath
+
+
+# Backward-compat alias
+V4Verifier = Verifier

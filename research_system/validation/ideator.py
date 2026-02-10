@@ -45,7 +45,7 @@ class StrategyIdea:
         }
 
 
-class V4Ideator:
+class Ideator:
     """Ideator for generating new strategy ideas."""
 
     # Common variation types
@@ -303,3 +303,7 @@ class V4Ideator:
                     ideas.append(idea)
 
         return ideas
+
+
+# Backward-compat alias
+V4Ideator = Ideator

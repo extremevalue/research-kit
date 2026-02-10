@@ -85,7 +85,7 @@ DEFAULT_GATES = {
 }
 
 
-class V4Validator:
+class Validator:
     """Validator for V4 strategies."""
 
     def __init__(self, workspace, verifier=None):
@@ -354,3 +354,7 @@ class V4Validator:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
         return str(target_path)
+
+
+# Backward-compat alias
+V4Validator = Validator

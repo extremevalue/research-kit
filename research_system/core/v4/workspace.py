@@ -38,7 +38,7 @@ from research_system.core.v4.config import V4Config, get_default_config
 # =============================================================================
 
 # Default workspace location
-DEFAULT_V4_WORKSPACE = Path.home() / ".research-workspace"
+DEFAULT_WORKSPACE = Path.home() / ".research-workspace"
 
 # Environment variable for workspace
 WORKSPACE_ENV_VAR = "RESEARCH_WORKSPACE"
@@ -76,18 +76,18 @@ ANTHROPIC_API_KEY=
 # =============================================================================
 
 
-class V4WorkspaceError(Exception):
+class WorkspaceError(Exception):
     """Raised when V4 workspace operations fail."""
 
     pass
 
 
 # =============================================================================
-# V4 WORKSPACE CLASS
+# WORKSPACE CLASS
 # =============================================================================
 
 
-class V4Workspace:
+class Workspace:
     """V4 workspace management.
 
     A workspace is a directory containing all user data for the V4 research system.
@@ -138,7 +138,7 @@ class V4Workspace:
         if env_path:
             return Path(env_path).expanduser().resolve()
 
-        return DEFAULT_V4_WORKSPACE
+        return DEFAULT_WORKSPACE
 
     # =========================================================================
     # EXISTENCE AND CONFIGURATION
@@ -161,7 +161,7 @@ class V4Workspace:
             V4Config loaded from research-kit.yaml, or defaults if not found.
 
         Raises:
-            V4WorkspaceError: If workspace not initialized.
+            WorkspaceError: If workspace not initialized.
         """
         if self._config is None:
             self._config = self._load_config()
@@ -174,12 +174,12 @@ class V4Workspace:
             V4Config loaded and validated.
 
         Raises:
-            V4WorkspaceError: If workspace not initialized.
+            WorkspaceError: If workspace not initialized.
         """
         config_file = self.path / CONFIG_FILENAME
 
         if not config_file.exists():
-            raise V4WorkspaceError(
+            raise WorkspaceError(
                 f"V4 workspace not initialized at {self.path}. "
                 f"Run 'research init --v4' first."
             )
@@ -208,7 +208,7 @@ class V4Workspace:
         result = base.copy()
         for key, value in override.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = V4Workspace._deep_merge(result[key], value)
+                result[key] = Workspace._deep_merge(result[key], value)
             else:
                 result[key] = value
         return result
@@ -243,7 +243,7 @@ class V4Workspace:
             True if created, False if already exists and force=False.
 
         Raises:
-            V4WorkspaceError: If initialization fails.
+            WorkspaceError: If initialization fails.
         """
         if self.exists and not force:
             return False
@@ -442,7 +442,7 @@ class V4Workspace:
 
         Raises:
             ValueError: If status is invalid.
-            V4WorkspaceError: If strategy file not found.
+            WorkspaceError: If strategy file not found.
         """
         if from_status not in self.VALID_STATUSES:
             raise ValueError(
@@ -460,7 +460,7 @@ class V4Workspace:
         target_path = self.strategy_path(strategy_id, to_status)
 
         if not source_path.exists():
-            raise V4WorkspaceError(
+            raise WorkspaceError(
                 f"Strategy file not found: {source_path}"
             )
 
@@ -480,10 +480,10 @@ class V4Workspace:
         """Raise error if workspace not initialized.
 
         Raises:
-            V4WorkspaceError: If workspace not initialized.
+            WorkspaceError: If workspace not initialized.
         """
         if not self.exists:
-            raise V4WorkspaceError(
+            raise WorkspaceError(
                 f"V4 workspace not initialized at {self.path}. "
                 f"Run 'research init --v4' first."
             )
@@ -640,31 +640,39 @@ class V4Workspace:
 # =============================================================================
 
 
-def get_v4_workspace(path: str | Path | None = None) -> V4Workspace:
+def get_workspace(path: str | Path | None = None) -> Workspace:
     """Get V4 workspace instance.
 
     Args:
         path: Optional workspace path.
 
     Returns:
-        V4Workspace instance.
+        Workspace instance.
     """
     workspace_path = Path(path) if path else None
-    return V4Workspace(workspace_path)
+    return Workspace(workspace_path)
 
 
-def require_v4_workspace(path: str | Path | None = None) -> V4Workspace:
+def require_workspace(path: str | Path | None = None) -> Workspace:
     """Get V4 workspace, raising error if not initialized.
 
     Args:
         path: Optional workspace path.
 
     Returns:
-        Initialized V4Workspace instance.
+        Initialized Workspace instance.
 
     Raises:
-        V4WorkspaceError: If workspace not initialized.
+        WorkspaceError: If workspace not initialized.
     """
-    ws = get_v4_workspace(path)
+    ws = get_workspace(path)
     ws.require_initialized()
     return ws
+
+
+# Backward-compat aliases
+V4WorkspaceError = WorkspaceError
+V4Workspace = Workspace
+DEFAULT_V4_WORKSPACE = DEFAULT_WORKSPACE
+get_v4_workspace = get_workspace
+require_v4_workspace = require_workspace

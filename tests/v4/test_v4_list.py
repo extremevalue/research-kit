@@ -16,9 +16,9 @@ import yaml
 @pytest.fixture
 def v4_workspace(tmp_path):
     """Create an initialized V4 workspace."""
-    from research_system.core.v4.workspace import V4Workspace
+    from research_system.core.v4.workspace import Workspace
 
-    ws = V4Workspace(tmp_path)
+    ws = Workspace(tmp_path)
     ws.init()
     return ws
 
@@ -80,7 +80,7 @@ def workspace_with_strategies(v4_workspace):
 
 
 class TestListStrategies:
-    """Tests for V4Workspace.list_strategies()."""
+    """Tests for Workspace.list_strategies()."""
 
     def test_list_empty_workspace(self, v4_workspace):
         """Empty workspace returns empty list."""
@@ -155,7 +155,7 @@ class TestListStrategies:
 
 
 class TestGetStrategy:
-    """Tests for V4Workspace.get_strategy()."""
+    """Tests for Workspace.get_strategy()."""
 
     def test_get_existing_strategy(self, workspace_with_strategies):
         """Get strategy by ID returns full data."""
@@ -191,7 +191,7 @@ class TestV4ListCLI:
 
     def test_list_empty_workspace(self, v4_workspace, capsys):
         """Empty workspace shows appropriate message."""
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -201,7 +201,7 @@ class TestV4ListCLI:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -209,7 +209,7 @@ class TestV4ListCLI:
 
     def test_list_table_format(self, workspace_with_strategies, capsys):
         """Table format shows columns and summary."""
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -219,7 +219,7 @@ class TestV4ListCLI:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -232,7 +232,7 @@ class TestV4ListCLI:
 
     def test_list_json_format(self, workspace_with_strategies, capsys):
         """JSON format outputs valid JSON."""
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -242,7 +242,7 @@ class TestV4ListCLI:
             format="json"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -252,7 +252,7 @@ class TestV4ListCLI:
 
     def test_list_filter_by_status(self, workspace_with_strategies, capsys):
         """Status filter works in CLI."""
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -262,7 +262,7 @@ class TestV4ListCLI:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -272,7 +272,7 @@ class TestV4ListCLI:
 
     def test_list_filter_by_tags(self, workspace_with_strategies, capsys):
         """Tag filter works in CLI."""
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -282,7 +282,7 @@ class TestV4ListCLI:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -295,7 +295,7 @@ class TestV4ListErrorHandling:
 
     def test_uninitialized_workspace(self, tmp_path, capsys):
         """Uninitialized workspace shows error."""
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -305,7 +305,7 @@ class TestV4ListErrorHandling:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 1
 
         captured = capsys.readouterr()
@@ -319,7 +319,7 @@ class TestV4ListErrorHandling:
         malformed.parent.mkdir(parents=True, exist_ok=True)
         malformed.write_text("this: is: invalid: yaml: [")
 
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -329,7 +329,7 @@ class TestV4ListErrorHandling:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0  # Should not crash
 
         captured = capsys.readouterr()
@@ -388,7 +388,7 @@ class TestEdgeCases:
         with open(filepath, "w") as f:
             yaml.dump(strat, f)
 
-        from research_system.cli.main import cmd_v4_list
+        from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
@@ -398,7 +398,7 @@ class TestEdgeCases:
             format="table"
         )
 
-        cmd_v4_list(args)
+        cmd_list(args)
 
         captured = capsys.readouterr()
         # Name should be truncated with ..
