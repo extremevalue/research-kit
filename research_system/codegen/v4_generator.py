@@ -498,6 +498,13 @@ COMMON FIXES:
 - Access data safely: bar = data.bars.get(symbol); if bar is None: return
 - Use self.history() for historical data, not self.History()
 - Import everything from AlgorithmImports: from AlgorithmImports import *
+- CRITICAL: Do NOT shadow QC indicator methods. Use descriptive names for indicator variables:
+  WRONG: self.rsi = self.rsi(symbol, 14)     # shadows self.rsi() method!
+  RIGHT: self.rsi_indicator = self.rsi(symbol, 14)
+- If the backtest produced zero trades, the entry conditions are likely wrong. Check that:
+  1. Entry conditions match the strategy specification exactly
+  2. Indicator thresholds are realistic for the instrument
+  3. All required data subscriptions are added
 
 Return ONLY the corrected Python code, no explanations."""
 
@@ -664,6 +671,24 @@ Return ONLY the Python code, no explanations."""
                 r"\1\n        \2.set_data_normalization_mode(DataNormalizationMode.RAW)",
                 code,
             )
+
+        # Fix indicator attribute shadowing (self.rsi = self.rsi(...) shadows the method)
+        indicators = ['rsi', 'sma', 'ema', 'macd', 'bb', 'atr', 'adx', 'cci', 'roc', 'obv',
+                       'mom', 'stoch', 'willr', 'mfi', 'vwap']
+        for ind in indicators:
+            # Fix direct assignment shadowing: self.rsi = self.rsi(...) -> self.rsi_indicator = self.rsi(...)
+            pattern = rf'(self\.){ind}(\s*=\s*self\.{ind}\s*\()'
+            replacement = rf'\g<1>{ind}_indicator\2'
+            code = re.sub(pattern, replacement, code)
+            # Fix dict initialization shadowing: self.rsi = {} -> self.rsi_indicators = {}
+            code = re.sub(rf'self\.{ind}\s*=\s*\{{\}}', f'self.{ind}_indicators = {{}}', code)
+            # Fix dict access after dict init fix: self.rsi[x] -> self.rsi_indicators[x]
+            if f'self.{ind}_indicators = {{}}' in code:
+                code = re.sub(rf'self\.{ind}\[', f'self.{ind}_indicators[', code)
+            # Fix subsequent references to shadowed indicator: self.rsi.current -> self.rsi_indicator.current
+            if f'self.{ind}_indicator = self.{ind}(' in code:
+                # Update references like self.rsi.current, self.rsi.is_ready, etc.
+                code = re.sub(rf'self\.{ind}\.(current|is_ready|value|window)', rf'self.{ind}_indicator.\1', code)
 
         return code
 
