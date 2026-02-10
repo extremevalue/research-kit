@@ -4771,6 +4771,92 @@ def cmd_run_catalog(args):
 
 
 # ============================================================================
+# Installation Detection
+# ============================================================================
+
+def _check_multiple_installations():
+    """Detect and warn about multiple research-kit installations on the system.
+
+    Best-effort check — all exceptions are caught silently so this never
+    interferes with normal CLI operation.
+    """
+    try:
+        import os
+        import subprocess
+
+        # Collect candidate paths for 'research' executables
+        candidates = set()
+
+        # 1. Walk every directory on PATH looking for a 'research' executable
+        path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        for d in path_dirs:
+            candidate = os.path.join(d, "research")
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                candidates.add(candidate)
+
+        # 2. Also check common explicit locations
+        home = Path.home()
+        extra_locations = [
+            home / ".local" / "bin" / "research",
+        ]
+        # Current virtualenv bin
+        if sys.prefix != sys.base_prefix:
+            extra_locations.append(Path(sys.prefix) / "bin" / "research")
+
+        for loc in extra_locations:
+            if loc.is_file() and os.access(str(loc), os.X_OK):
+                candidates.add(str(loc))
+
+        # De-duplicate by resolved real path
+        seen_realpaths: dict[str, str] = {}  # realpath -> original path
+        for c in sorted(candidates):
+            rp = os.path.realpath(c)
+            if rp not in seen_realpaths:
+                seen_realpaths[rp] = c
+
+        if len(seen_realpaths) < 2:
+            return  # Only one (or zero) installations — nothing to warn about
+
+        # Query each distinct installation for its version
+        current_binary = shutil.which("research")
+        current_realpath = os.path.realpath(current_binary) if current_binary else None
+
+        installations: list[tuple[str, str, bool]] = []  # (path, version, is_current)
+        for rp, original_path in seen_realpaths.items():
+            try:
+                result = subprocess.run(
+                    [original_path, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                version = result.stdout.strip() or result.stderr.strip() or "unknown"
+            except Exception:
+                version = "unknown"
+            is_current = (rp == current_realpath)
+            installations.append((original_path, version, is_current))
+
+        # Only warn if there are different versions among the installations
+        versions = {v for _, v, _ in installations}
+        if len(versions) < 2:
+            return  # All installations report the same version — no conflict
+
+        # Print warning to stderr
+        print("Warning: Multiple research-kit installations detected:", file=sys.stderr)
+        for path, version, is_current in sorted(installations, key=lambda x: x[0]):
+            marker = "  <-- current" if is_current else ""
+            print(f"  {path} ({version}){marker}", file=sys.stderr)
+        print(
+            "\nRun 'research update' from each installation to keep them in sync.",
+            file=sys.stderr,
+        )
+
+    except Exception:
+        # Best-effort — never let this break the CLI
+        pass
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
@@ -4782,6 +4868,10 @@ def main():
     if not args.command:
         parser.print_help()
         return 0
+
+    # Best-effort check for conflicting installations (skip during 'update')
+    if args.command != "update":
+        _check_multiple_installations()
 
     try:
         if hasattr(args, 'func'):
@@ -4817,6 +4907,9 @@ def cmd_update(args):
         current_version = "unknown"
 
     print(f"Current version: {current_version}")
+
+    # Show all known installations
+    _check_multiple_installations()
 
     # Find how the package was installed
     try:
