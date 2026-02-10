@@ -175,6 +175,17 @@ class V4Learner:
                     source=f"validation:{gate_name}",
                 ))
 
+        # Check for zero-trade backtests
+        total_trades = metrics.get("total_trades", None) if metrics else None
+        if total_trades == 0:
+            doc.learnings.append(Learning(
+                category="performance",
+                type="warning",
+                insight="Backtest executed 0 trades. All-zero metrics indicate a data feed problem or overly restrictive entry conditions, not a genuinely unprofitable strategy.",
+                recommendation="Check data subscriptions, verify entry conditions trigger on historical data, and review generated algorithm code.",
+                source="backtest_results",
+            ))
+
         # Add performance insights
         if metrics:
             doc.learnings.append(Learning(
@@ -291,14 +302,21 @@ class V4Learner:
 
         if validations_path.exists():
             # Search flat YAML files (from verify/validate commands)
+            verify_files = []
             for filepath in validations_path.glob(f"{strategy_id}_*.yaml"):
-                with open(filepath) as f:
-                    data = yaml.safe_load(f)
-
                 if "_verify_" in filepath.name:
-                    verification_results.append(data)
+                    verify_files.append(filepath)
                 elif "_validate_" in filepath.name:
+                    with open(filepath) as f:
+                        data = yaml.safe_load(f)
                     validation_results.append(data)
+
+            # Only process the most recent verification file to avoid duplicates
+            if verify_files:
+                most_recent = sorted(verify_files)[-1]
+                with open(most_recent) as f:
+                    data = yaml.safe_load(f)
+                verification_results.append(data)
 
             # Search subdirectory for run results (from run command)
             run_result_path = validations_path / strategy_id / "run_result.json"
