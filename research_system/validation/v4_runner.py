@@ -96,16 +96,17 @@ class V4Runner:
         # Initialize code generator
         self.code_generator = V4CodeGenerator(llm_client)
 
+        # Load config for gates
+        self._config = workspace.config
+
         # Initialize backtest executor
         self.backtest_executor = BacktestExecutor(
             workspace_path=workspace.path,
             use_local=use_local,
             cleanup_on_start=not use_local,
             num_windows=num_windows,
+            timeout=self._config.backtest.timeout,
         )
-
-        # Load config for gates
-        self._config = workspace.config
 
     def run(
         self,

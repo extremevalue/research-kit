@@ -171,6 +171,7 @@ class BacktestExecutor:
         use_local: bool = False,
         cleanup_on_start: bool = True,
         num_windows: int = 1,
+        timeout: int = 600,
     ):
         """Initialize backtest executor.
 
@@ -179,11 +180,13 @@ class BacktestExecutor:
             use_local: If True, use local Docker; if False, use QC cloud
             cleanup_on_start: If True, clean up stuck backtests on init
             num_windows: Number of walk-forward windows (1, 2, or 5)
+            timeout: Backtest execution timeout in seconds (default: 600)
         """
         self.workspace_path = Path(workspace_path)
         self.validations_path = self.workspace_path / "validations"
         self.use_local = use_local
         self.num_windows = num_windows
+        self.timeout = timeout
 
         # Select windows based on num_windows
         if num_windows >= 5:
@@ -563,7 +566,7 @@ class BacktestExecutor:
             cmd,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=self.timeout,
             cwd=str(self.workspace_path),
         )
 

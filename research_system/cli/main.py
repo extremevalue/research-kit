@@ -2307,6 +2307,7 @@ def cmd_v4_walkforward(args):
     backtest_executor = BacktestExecutor(
         workspace_path=workspace.path,
         use_local=False,
+        timeout=workspace.config.backtest.timeout,
     )
     code_generator = V4CodeGenerator()
 
