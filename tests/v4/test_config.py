@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from research_system.core.v4 import (
-    V4Config,
+    Config,
     GatesConfig,
     IngestionConfig,
     VerificationConfig,
@@ -40,9 +40,9 @@ class TestDefaultConfig:
     """Test default configuration behavior."""
 
     def test_get_default_config_returns_v4config(self):
-        """Test that get_default_config returns a V4Config instance."""
+        """Test that get_default_config returns a Config instance."""
         config = get_default_config()
-        assert isinstance(config, V4Config)
+        assert isinstance(config, Config)
 
     def test_default_config_has_expected_version(self):
         """Test default config has version 1.0."""
@@ -135,7 +135,7 @@ class TestLoadConfig:
         os.chdir(tmp_path)
         config = load_config()
 
-        assert isinstance(config, V4Config)
+        assert isinstance(config, Config)
         assert config.gates.min_sharpe == 1.0
 
     def test_load_config_explicit_missing_path_returns_defaults(self, tmp_path):
@@ -143,7 +143,7 @@ class TestLoadConfig:
         missing_path = tmp_path / "nonexistent.yaml"
         config = load_config(missing_path)
 
-        assert isinstance(config, V4Config)
+        assert isinstance(config, Config)
         assert config.gates.min_sharpe == 1.0
 
     def test_load_config_from_valid_yaml(self, tmp_path):
@@ -188,7 +188,7 @@ class TestLoadConfig:
 
         config = load_config(config_file)
 
-        assert isinstance(config, V4Config)
+        assert isinstance(config, Config)
         assert config.gates.min_sharpe == 1.0
 
     def test_load_config_invalid_yaml_raises_error(self, tmp_path):
@@ -454,7 +454,7 @@ class TestValidateConfig:
 
     def test_high_min_sharpe_warning(self):
         """Test warning for unusually high min_sharpe."""
-        config = V4Config(
+        config = Config(
             gates=GatesConfig(min_sharpe=10.0)
         )
         errors = validate_config(config)
@@ -463,7 +463,7 @@ class TestValidateConfig:
 
     def test_low_min_trades_warning(self):
         """Test warning for low min_trades."""
-        config = V4Config(
+        config = Config(
             gates=GatesConfig(min_trades=5)
         )
         errors = validate_config(config)
@@ -472,7 +472,7 @@ class TestValidateConfig:
 
     def test_low_specificity_warning(self):
         """Test warning for low specificity threshold."""
-        config = V4Config(
+        config = Config(
             ingestion=IngestionConfig(min_specificity_score=2)
         )
         errors = validate_config(config)
@@ -481,7 +481,7 @@ class TestValidateConfig:
 
     def test_low_trust_warning(self):
         """Test warning for low trust threshold."""
-        config = V4Config(
+        config = Config(
             ingestion=IngestionConfig(min_trust_score=20)
         )
         errors = validate_config(config)
@@ -490,7 +490,7 @@ class TestValidateConfig:
 
     def test_verification_disabled_warning(self):
         """Test warning when verification is disabled."""
-        config = V4Config(
+        config = Config(
             verification=VerificationConfig(enabled=False)
         )
         errors = validate_config(config)
@@ -499,7 +499,7 @@ class TestValidateConfig:
 
     def test_empty_verification_tests_warning(self):
         """Test warning when verification is enabled but no tests."""
-        config = V4Config(
+        config = Config(
             verification=VerificationConfig(enabled=True, tests=[])
         )
         errors = validate_config(config)
@@ -508,7 +508,7 @@ class TestValidateConfig:
 
     def test_empty_hard_reject_warning(self):
         """Test warning when hard_reject is empty."""
-        config = V4Config(
+        config = Config(
             red_flags=RedFlagsConfig(hard_reject=[])
         )
         errors = validate_config(config)

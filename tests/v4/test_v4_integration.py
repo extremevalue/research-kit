@@ -67,9 +67,9 @@ class TestV4Integration:
 
     def test_init_creates_workspace(self, workspace_path):
         """Test init --v4 creates proper workspace."""
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.core.v4.workspace import Workspace
 
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         result = ws.init()
 
         assert result is True
@@ -80,12 +80,12 @@ class TestV4Integration:
 
     def test_ingest_processes_transcript(self, workspace_path, sample_transcript):
         """Test ingest processes transcript file."""
-        from research_system.core.v4.workspace import V4Workspace
-        from research_system.ingest.v4_processor import V4IngestProcessor
+        from research_system.core.v4.workspace import Workspace
+        from research_system.ingest.strategy_processor import IngestProcessor
         from research_system.schemas.v4.ingestion import IngestionDecision
 
         # Initialize workspace
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         # Add transcript to inbox
@@ -93,7 +93,7 @@ class TestV4Integration:
         transcript_file.write_text(sample_transcript)
 
         # Run ingest (without LLM - offline mode creates minimal strategy)
-        processor = V4IngestProcessor(ws, ws.config, llm_client=None)
+        processor = IngestProcessor(ws, ws.config, llm_client=None)
         result = processor.process_file(transcript_file)
 
         # Result should exist with a decision
@@ -108,10 +108,10 @@ class TestV4Integration:
 
     def test_list_shows_strategies(self, workspace_path):
         """Test list shows strategies after ingestion."""
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.core.v4.workspace import Workspace
 
         # Initialize and add a strategy
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         # Create a test strategy
@@ -134,10 +134,10 @@ class TestV4Integration:
 
     def test_show_displays_strategy(self, workspace_path):
         """Test show displays strategy details."""
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.core.v4.workspace import Workspace
 
         # Initialize and add a strategy
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         # Create a test strategy
@@ -161,9 +161,9 @@ class TestV4Integration:
 
     def test_status_shows_counts(self, workspace_path):
         """Test status shows correct counts."""
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.core.v4.workspace import Workspace
 
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         # Add strategies in different states
@@ -185,14 +185,14 @@ class TestV4Integration:
     def test_full_workflow(self, workspace_path, sample_transcript, capsys):
         """Test complete workflow from init to show."""
         from research_system.cli.main import (
-            cmd_v4_list,
-            cmd_v4_show,
-            cmd_v4_status,
+            cmd_list,
+            cmd_show,
+            cmd_status,
         )
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.core.v4.workspace import Workspace
 
         # 1. Initialize
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         # 2. Add content to inbox
@@ -201,7 +201,7 @@ class TestV4Integration:
 
         # 3. Check status shows inbox file
         args = SimpleNamespace(v4_workspace=str(workspace_path))
-        cmd_v4_status(args)
+        cmd_status(args)
         captured = capsys.readouterr()
         assert "1 file(s) ready to ingest" in captured.out
 
@@ -224,7 +224,7 @@ class TestV4Integration:
             tags=None,
             format="table"
         )
-        cmd_v4_list(args)
+        cmd_list(args)
         captured = capsys.readouterr()
         assert "STRAT-001" in captured.out
         assert "VIX Volatility Breakout" in captured.out
@@ -235,7 +235,7 @@ class TestV4Integration:
             v4_workspace=str(workspace_path),
             format="text"
         )
-        cmd_v4_show(args)
+        cmd_show(args)
         captured = capsys.readouterr()
         assert "STRAT-001" in captured.out
         assert "John Smith" in captured.out
@@ -251,13 +251,13 @@ class TestV4IntegrationErrors:
 
     def test_ingest_empty_inbox(self, workspace_path):
         """Test ingest handles empty inbox."""
-        from research_system.core.v4.workspace import V4Workspace
-        from research_system.ingest.v4_processor import V4IngestProcessor
+        from research_system.core.v4.workspace import Workspace
+        from research_system.ingest.strategy_processor import IngestProcessor
 
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
-        processor = V4IngestProcessor(ws, ws.config, llm_client=None)
+        processor = IngestProcessor(ws, ws.config, llm_client=None)
         summary = processor.process_inbox()
 
         assert summary.total_files == 0
@@ -265,10 +265,10 @@ class TestV4IntegrationErrors:
 
     def test_show_nonexistent_strategy(self, workspace_path, capsys):
         """Test show handles missing strategy."""
-        from research_system.cli.main import cmd_v4_show
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.cli.main import cmd_show
+        from research_system.core.v4.workspace import Workspace
 
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         args = SimpleNamespace(
@@ -277,7 +277,7 @@ class TestV4IntegrationErrors:
             format="text"
         )
 
-        result = cmd_v4_show(args)
+        result = cmd_show(args)
         assert result == 1
 
         captured = capsys.readouterr()
@@ -285,10 +285,10 @@ class TestV4IntegrationErrors:
 
     def test_list_empty_workspace(self, workspace_path, capsys):
         """Test list handles empty workspace."""
-        from research_system.cli.main import cmd_v4_list
-        from research_system.core.v4.workspace import V4Workspace
+        from research_system.cli.main import cmd_list
+        from research_system.core.v4.workspace import Workspace
 
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         args = SimpleNamespace(
@@ -298,7 +298,7 @@ class TestV4IntegrationErrors:
             format="table"
         )
 
-        result = cmd_v4_list(args)
+        result = cmd_list(args)
         assert result == 0
 
         captured = capsys.readouterr()
@@ -315,10 +315,10 @@ class TestV4DryRun:
 
     def test_ingest_dry_run_no_files_created(self, workspace_path, sample_transcript):
         """Test ingest dry-run doesn't create files."""
-        from research_system.core.v4.workspace import V4Workspace
-        from research_system.ingest.v4_processor import V4IngestProcessor
+        from research_system.core.v4.workspace import Workspace
+        from research_system.ingest.strategy_processor import IngestProcessor
 
-        ws = V4Workspace(workspace_path)
+        ws = Workspace(workspace_path)
         ws.init()
 
         # Add transcript
@@ -326,7 +326,7 @@ class TestV4DryRun:
         transcript_file.write_text(sample_transcript)
 
         # Run dry-run ingest
-        processor = V4IngestProcessor(ws, ws.config, llm_client=None)
+        processor = IngestProcessor(ws, ws.config, llm_client=None)
         result = processor.process_file(transcript_file, dry_run=True)
 
         # File should still be in inbox

@@ -9,14 +9,14 @@ This module tests:
 
 import pytest
 
-from research_system.codegen.v4_generator import (
-    V4CodeGenerator,
-    V4CodeGenResult,
-    generate_v4_code,
+from research_system.codegen.strategy_generator import (
+    CodeGenerator,
+    CodeGenResult,
+    generate_code,
 )
 from research_system.codegen.templates.v4 import (
-    get_template_for_v4_strategy,
-    V4_STRATEGY_TO_TEMPLATE,
+    get_template_for_strategy,
+    STRATEGY_TO_TEMPLATE,
 )
 
 
@@ -32,31 +32,31 @@ class TestTemplateSelection:
         """Test that momentum strategies select momentum.py.j2."""
         momentum_types = ["momentum", "momentum_rotation", "relative_momentum", "dual_momentum"]
         for strategy_type in momentum_types:
-            template = get_template_for_v4_strategy(strategy_type)
+            template = get_template_for_strategy(strategy_type)
             assert template == "momentum.py.j2", f"{strategy_type} should use momentum.py.j2"
 
     def test_mean_reversion_strategies_select_correct_template(self):
         """Test that mean reversion strategies select mean_reversion.py.j2."""
         mr_types = ["mean_reversion", "mean-reversion", "zscore"]
         for strategy_type in mr_types:
-            template = get_template_for_v4_strategy(strategy_type)
+            template = get_template_for_strategy(strategy_type)
             assert template == "mean_reversion.py.j2", f"{strategy_type} should use mean_reversion.py.j2"
 
     def test_regime_strategies_select_regime_template(self):
         """Test that regime strategies select regime_adaptive.py.j2."""
         regime_types = ["regime_adaptive", "regime-adaptive", "regime_switching", "tactical_allocation"]
         for strategy_type in regime_types:
-            template = get_template_for_v4_strategy(strategy_type)
+            template = get_template_for_strategy(strategy_type)
             assert template == "regime_adaptive.py.j2", f"{strategy_type} should use regime_adaptive.py.j2"
 
     def test_unknown_strategy_type_returns_base(self):
         """Test that unknown strategy types return base.py.j2."""
-        template = get_template_for_v4_strategy("unknown_strategy")
+        template = get_template_for_strategy("unknown_strategy")
         assert template == "base.py.j2"
 
     def test_signal_type_fallback(self):
         """Test signal_type is used as fallback when strategy_type doesn't match."""
-        template = get_template_for_v4_strategy(
+        template = get_template_for_strategy(
             strategy_type="custom",
             signal_type="momentum"
         )
@@ -74,7 +74,7 @@ class TestCodeGeneration:
     @pytest.fixture
     def generator(self):
         """Create a code generator without LLM client."""
-        return V4CodeGenerator(llm_client=None)
+        return CodeGenerator(llm_client=None)
 
     @pytest.fixture
     def momentum_strategy(self):
@@ -177,7 +177,7 @@ class TestQCAPIFixes:
 
     @pytest.fixture
     def generator(self):
-        return V4CodeGenerator(llm_client=None)
+        return CodeGenerator(llm_client=None)
 
     def test_fixes_resolution_case(self, generator):
         """Test Resolution enum is fixed to uppercase."""
@@ -227,9 +227,9 @@ class Test(QCAlgorithm):
 
 
 class TestConvenienceFunction:
-    """Test generate_v4_code convenience function."""
+    """Test generate_code convenience function."""
 
-    def test_generate_v4_code_works(self):
+    def test_generate_code_works(self):
         """Test the convenience function works."""
         strategy = {
             "id": "STRAT-TEST",
@@ -238,6 +238,6 @@ class TestConvenienceFunction:
             "parameters": {"lookback_period": 126, "top_n": 3},
         }
 
-        result = generate_v4_code(strategy)
-        assert isinstance(result, V4CodeGenResult)
+        result = generate_code(strategy)
+        assert isinstance(result, CodeGenResult)
         assert result.success

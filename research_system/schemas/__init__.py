@@ -37,6 +37,9 @@ from research_system.schemas.validation import (
     WindowResult,
 )
 
+# V4 Strategy schema
+from research_system.schemas.v4 import Strategy, V4Strategy
+
 __all__ = [
     # Common
     "EntryStatus",
@@ -69,4 +72,7 @@ __all__ = [
     "RegimeDefinition",
     "RegimeTags",
     "RegimePerformanceSummary",
+    # V4 Strategy
+    "Strategy",
+    "V4Strategy",
 ]

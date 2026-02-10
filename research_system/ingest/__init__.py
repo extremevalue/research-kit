@@ -13,18 +13,27 @@ V4 Ingest:
 
 from research_system.ingest.processor import IngestProcessor, IngestResult
 from research_system.ingest.extractor import MetadataExtractor
-from research_system.ingest.v4_processor import (
+from research_system.ingest.strategy_processor import (
     V4IngestProcessor,
     V4IngestResult,
     V4IngestSummary,
 )
 
+# New clean aliases for V4 processor (legacy IngestProcessor/IngestResult remain from processor.py)
+StrategyIngestProcessor = V4IngestProcessor
+StrategyIngestResult = V4IngestResult
+StrategyIngestSummary = V4IngestSummary
+
 __all__ = [
     "IngestProcessor",
     "IngestResult",
     "MetadataExtractor",
-    # V4
+    # V4 (backward-compat)
     "V4IngestProcessor",
     "V4IngestResult",
     "V4IngestSummary",
+    # New clean aliases
+    "StrategyIngestProcessor",
+    "StrategyIngestResult",
+    "StrategyIngestSummary",
 ]

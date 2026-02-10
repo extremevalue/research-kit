@@ -20,9 +20,14 @@ Example:
 from research_system.codegen.engine import CodeGenerationError, TemplateEngine
 from research_system.codegen.filters import CUSTOM_FILTERS
 from research_system.codegen.generator import CodeGenerator
-from research_system.codegen.v4_generator import (
-    V4CodeGenerator,
+from research_system.codegen.strategy_generator import (
+    CodeGenResult,
+    CodeCorrectionResult,
+    CodeGenerator as V4CodeGenerator,
+    generate_code,
+    # Backward-compat aliases (re-exported)
     V4CodeGenResult,
+    V4CodeCorrectionResult,
     generate_v4_code,
 )
 
@@ -32,8 +37,13 @@ __all__ = [
     "CodeGenerator",
     "CodeGenerationError",
     "CUSTOM_FILTERS",
-    # V4 codegen
+    # V4 codegen (new names)
+    "CodeGenResult",
+    "CodeCorrectionResult",
     "V4CodeGenerator",
+    "generate_code",
+    # V4 codegen (backward-compat aliases)
     "V4CodeGenResult",
+    "V4CodeCorrectionResult",
     "generate_v4_code",
 ]

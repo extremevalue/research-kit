@@ -15,13 +15,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from research_system.core.v4 import V4Workspace
+from research_system.core.v4 import Workspace
 from research_system.validation.backtest import (
     BacktestResult,
     WalkForwardResult,
     WalkForwardWindow,
 )
-from research_system.validation.v4_runner import V4Runner, V4RunResult
+from research_system.validation.runner import Runner, RunResult
 
 
 # =============================================================================
@@ -32,7 +32,7 @@ from research_system.validation.v4_runner import V4Runner, V4RunResult
 @pytest.fixture
 def v4_workspace(tmp_path):
     """Create an initialized V4 workspace."""
-    ws = V4Workspace(tmp_path)
+    ws = Workspace(tmp_path)
     ws.init()
     return ws
 
@@ -66,8 +66,8 @@ def sample_strategy(v4_workspace):
 
 @pytest.fixture
 def runner(v4_workspace):
-    """Create a V4Runner with mocked backtest executor."""
-    return V4Runner(
+    """Create a Runner with mocked backtest executor."""
+    return Runner(
         workspace=v4_workspace,
         llm_client=None,
         use_local=True,
@@ -228,7 +228,7 @@ class TestResultSaving:
             determination="VALIDATED",
         )
 
-        result = V4RunResult(
+        result = RunResult(
             strategy_id="STRAT-001",
             success=True,
             determination="VALIDATED",
@@ -262,12 +262,12 @@ class TestResultSaving:
 # =============================================================================
 
 
-class TestV4RunResult:
-    """Test V4RunResult dataclass."""
+class TestRunResult:
+    """Test RunResult dataclass."""
 
     def test_to_dict(self):
-        """Test V4RunResult.to_dict() method."""
-        result = V4RunResult(
+        """Test RunResult.to_dict() method."""
+        result = RunResult(
             strategy_id="STRAT-001",
             success=True,
             determination="VALIDATED",
@@ -284,8 +284,8 @@ class TestV4RunResult:
         assert len(d["gate_results"]) == 1
 
     def test_to_dict_with_error(self):
-        """Test V4RunResult.to_dict() with error."""
-        result = V4RunResult(
+        """Test RunResult.to_dict() with error."""
+        result = RunResult(
             strategy_id="STRAT-001",
             success=False,
             determination="FAILED",

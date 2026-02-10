@@ -14,10 +14,10 @@ Templates are selected based on the strategy's signal_type or strategy_type fiel
 from pathlib import Path
 
 # Template directory
-V4_TEMPLATE_DIR = Path(__file__).parent
+TEMPLATE_DIR = Path(__file__).parent
 
 # Strategy type to template mapping
-V4_STRATEGY_TO_TEMPLATE = {
+STRATEGY_TO_TEMPLATE = {
     # Momentum variants
     "momentum": "momentum.py.j2",
     "momentum_rotation": "momentum.py.j2",
@@ -49,7 +49,7 @@ V4_STRATEGY_TO_TEMPLATE = {
 }
 
 
-def get_template_for_v4_strategy(
+def get_template_for_strategy(
     strategy_type: str | None = None,
     signal_type: str | None = None,
 ) -> str:
@@ -65,23 +65,30 @@ def get_template_for_v4_strategy(
     # Try strategy_type first (normalized to lowercase with underscores)
     if strategy_type:
         normalized = strategy_type.lower().replace("-", "_").replace(" ", "_")
-        if normalized in V4_STRATEGY_TO_TEMPLATE:
-            return V4_STRATEGY_TO_TEMPLATE[normalized]
+        if normalized in STRATEGY_TO_TEMPLATE:
+            return STRATEGY_TO_TEMPLATE[normalized]
 
     # Try signal_type as fallback
     if signal_type:
         normalized = signal_type.lower().replace("-", "_").replace(" ", "_")
-        if normalized in V4_STRATEGY_TO_TEMPLATE:
-            return V4_STRATEGY_TO_TEMPLATE[normalized]
+        if normalized in STRATEGY_TO_TEMPLATE:
+            return STRATEGY_TO_TEMPLATE[normalized]
 
     # Default to base template
     return "base.py.j2"
 
 
-def list_v4_templates() -> list[str]:
+def list_templates() -> list[str]:
     """List all available V4 templates.
 
     Returns:
         List of template filenames
     """
-    return sorted(V4_TEMPLATE_DIR.glob("*.py.j2"))
+    return sorted(TEMPLATE_DIR.glob("*.py.j2"))
+
+
+# Backward-compat aliases
+V4_TEMPLATE_DIR = TEMPLATE_DIR
+V4_STRATEGY_TO_TEMPLATE = STRATEGY_TO_TEMPLATE
+get_template_for_v4_strategy = get_template_for_strategy
+list_v4_templates = list_templates

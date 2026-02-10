@@ -12,14 +12,14 @@ Log files are stored in the workspace's logs/ directory with the format:
     research-kit-YYYY-MM-DD.log
 
 Example usage:
-    from research_system.core.v4.logging import setup_logging, get_logger, V4LogManager
+    from research_system.core.v4.logging import setup_logging, get_logger, LogManager
 
     # Simple setup
     logger = setup_logging(workspace_path)
     logger.info("Starting ingestion process")
 
     # Using the log manager
-    log_manager = V4LogManager(workspace_path)
+    log_manager = LogManager(workspace_path)
     logger = log_manager.setup()
     logger.info("Processing file")
 
@@ -72,7 +72,7 @@ def setup_logging(
 ) -> logging.Logger:
     """Set up logging for V4 workspace.
 
-    This is a convenience function that creates a V4LogManager and sets up logging.
+    This is a convenience function that creates a LogManager and sets up logging.
 
     Args:
         workspace_path: Path to the V4 workspace.
@@ -82,7 +82,7 @@ def setup_logging(
     Returns:
         Configured logger instance.
     """
-    log_manager = V4LogManager(workspace_path, config)
+    log_manager = LogManager(workspace_path, config)
     return log_manager.setup(name)
 
 
@@ -103,11 +103,11 @@ def get_logger(name: str = DEFAULT_LOGGER_NAME) -> logging.Logger:
 
 
 # =============================================================================
-# V4 LOG MANAGER CLASS
+# LOG MANAGER CLASS
 # =============================================================================
 
 
-class V4LogManager:
+class LogManager:
     """Manages logging for V4 workspace.
 
     This class handles all logging configuration including:
@@ -299,3 +299,7 @@ class V4LogManager:
                 return None
 
         return None
+
+
+# Backward-compat aliases
+V4LogManager = LogManager

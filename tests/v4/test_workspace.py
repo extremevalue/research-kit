@@ -19,13 +19,13 @@ import pytest
 import yaml
 
 from research_system.core.v4 import (
-    V4Workspace,
-    V4WorkspaceError,
-    get_v4_workspace,
-    require_v4_workspace,
-    DEFAULT_V4_WORKSPACE,
+    Workspace,
+    WorkspaceError,
+    get_workspace,
+    require_workspace,
+    DEFAULT_WORKSPACE,
     WORKSPACE_ENV_VAR,
-    V4Config,
+    Config,
 )
 
 
@@ -39,17 +39,17 @@ class TestWorkspaceInit:
 
     def test_init_creates_all_directories(self, tmp_path):
         """Test that init creates all expected directories."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Check all workspace directories exist
-        for dir_path in V4Workspace.WORKSPACE_DIRS:
+        for dir_path in Workspace.WORKSPACE_DIRS:
             assert (tmp_path / dir_path).exists(), f"Directory {dir_path} not created"
             assert (tmp_path / dir_path).is_dir(), f"{dir_path} is not a directory"
 
     def test_init_creates_config_file(self, tmp_path):
         """Test that init creates research-kit.yaml."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         config_file = tmp_path / "research-kit.yaml"
@@ -65,7 +65,7 @@ class TestWorkspaceInit:
 
     def test_init_creates_env_template(self, tmp_path):
         """Test that init creates .env.template."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         env_template = tmp_path / ".env.template"
@@ -79,7 +79,7 @@ class TestWorkspaceInit:
 
     def test_init_creates_counters_file(self, tmp_path):
         """Test that init creates counters.json."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         counters_file = tmp_path / ".state" / "counters.json"
@@ -93,23 +93,23 @@ class TestWorkspaceInit:
 
     def test_init_with_custom_name(self, tmp_path):
         """Test that init accepts custom workspace name."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init(name="Custom Workspace")
 
-        # Name is stored in config but V4Config doesn't have a name field
+        # Name is stored in config but Config doesn't have a name field
         # The workspace was initialized successfully
         assert ws.exists
 
     def test_init_returns_true_on_success(self, tmp_path):
         """Test that init returns True when creating new workspace."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         result = ws.init()
 
         assert result is True
 
     def test_init_returns_false_if_exists(self, tmp_path):
         """Test that init returns False if workspace already exists."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         result = ws.init()
@@ -117,7 +117,7 @@ class TestWorkspaceInit:
 
     def test_init_with_force_reinitializes(self, tmp_path):
         """Test that init with force=True reinitializes workspace."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Modify counters
@@ -146,18 +146,18 @@ class TestWorkspaceExists:
 
     def test_exists_false_before_init(self, tmp_path):
         """Test that exists is False before initialization."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.exists is False
 
     def test_exists_true_after_init(self, tmp_path):
         """Test that exists is True after initialization."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
         assert ws.exists is True
 
     def test_exists_checks_config_file(self, tmp_path):
         """Test that exists checks for research-kit.yaml."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         tmp_path.mkdir(parents=True, exist_ok=True)
 
         # Directory exists but no config
@@ -178,7 +178,7 @@ class TestIDGeneration:
 
     def test_next_strategy_id_starts_at_001(self, tmp_path):
         """Test that first strategy ID is STRAT-001."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         strat_id = ws.next_strategy_id()
@@ -186,7 +186,7 @@ class TestIDGeneration:
 
     def test_next_strategy_id_increments(self, tmp_path):
         """Test that strategy ID increments correctly."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         ids = [ws.next_strategy_id() for _ in range(5)]
@@ -194,7 +194,7 @@ class TestIDGeneration:
 
     def test_next_idea_id_starts_at_001(self, tmp_path):
         """Test that first idea ID is IDEA-001."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         idea_id = ws.next_idea_id()
@@ -202,7 +202,7 @@ class TestIDGeneration:
 
     def test_next_idea_id_increments(self, tmp_path):
         """Test that idea ID increments correctly."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         ids = [ws.next_idea_id() for _ in range(5)]
@@ -210,7 +210,7 @@ class TestIDGeneration:
 
     def test_strategy_and_idea_counters_independent(self, tmp_path):
         """Test that strategy and idea counters are independent."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         strat1 = ws.next_strategy_id()
@@ -225,7 +225,7 @@ class TestIDGeneration:
 
     def test_ids_zero_padded_to_three_digits(self, tmp_path):
         """Test that IDs are zero-padded to 3 digits."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Set counter to 47
@@ -250,7 +250,7 @@ class TestIDPersistence:
 
     def test_ids_persist_across_instances(self, tmp_path):
         """Test that IDs persist when creating new workspace instance."""
-        ws1 = V4Workspace(tmp_path)
+        ws1 = Workspace(tmp_path)
         ws1.init()
 
         # Generate some IDs
@@ -259,7 +259,7 @@ class TestIDPersistence:
         ws1.next_idea_id()      # IDEA-001
 
         # Create new instance
-        ws2 = V4Workspace(tmp_path)
+        ws2 = Workspace(tmp_path)
 
         # IDs should continue from where they left off
         assert ws2.next_strategy_id() == "STRAT-003"
@@ -267,7 +267,7 @@ class TestIDPersistence:
 
     def test_counters_saved_after_each_increment(self, tmp_path):
         """Test that counters are saved immediately after each increment."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         ws.next_strategy_id()
@@ -290,7 +290,7 @@ class TestStrategyPath:
 
     def test_strategy_path_pending(self, tmp_path):
         """Test strategy path for pending status."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         path = ws.strategy_path("STRAT-001", status="pending")
@@ -298,7 +298,7 @@ class TestStrategyPath:
 
     def test_strategy_path_validated(self, tmp_path):
         """Test strategy path for validated status."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         path = ws.strategy_path("STRAT-001", status="validated")
@@ -306,7 +306,7 @@ class TestStrategyPath:
 
     def test_strategy_path_invalidated(self, tmp_path):
         """Test strategy path for invalidated status."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         path = ws.strategy_path("STRAT-001", status="invalidated")
@@ -314,7 +314,7 @@ class TestStrategyPath:
 
     def test_strategy_path_blocked(self, tmp_path):
         """Test strategy path for blocked status."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         path = ws.strategy_path("STRAT-001", status="blocked")
@@ -322,7 +322,7 @@ class TestStrategyPath:
 
     def test_strategy_path_default_is_pending(self, tmp_path):
         """Test that default status is pending."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         path = ws.strategy_path("STRAT-001")
@@ -330,7 +330,7 @@ class TestStrategyPath:
 
     def test_strategy_path_invalid_status_raises(self, tmp_path):
         """Test that invalid status raises ValueError."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         with pytest.raises(ValueError, match="Invalid status"):
@@ -347,7 +347,7 @@ class TestMoveStrategy:
 
     def test_move_strategy_pending_to_validated(self, tmp_path):
         """Test moving strategy from pending to validated."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Create a strategy file in pending
@@ -364,7 +364,7 @@ class TestMoveStrategy:
 
     def test_move_strategy_validated_to_invalidated(self, tmp_path):
         """Test moving strategy from validated to invalidated."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Create a strategy file in validated
@@ -380,7 +380,7 @@ class TestMoveStrategy:
 
     def test_move_strategy_to_blocked(self, tmp_path):
         """Test moving strategy to blocked status."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Create a strategy file in pending
@@ -395,7 +395,7 @@ class TestMoveStrategy:
 
     def test_move_strategy_invalid_from_status_raises(self, tmp_path):
         """Test that invalid from_status raises ValueError."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         with pytest.raises(ValueError, match="Invalid from_status"):
@@ -403,7 +403,7 @@ class TestMoveStrategy:
 
     def test_move_strategy_invalid_to_status_raises(self, tmp_path):
         """Test that invalid to_status raises ValueError."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         with pytest.raises(ValueError, match="Invalid to_status"):
@@ -411,10 +411,10 @@ class TestMoveStrategy:
 
     def test_move_strategy_not_found_raises(self, tmp_path):
         """Test that moving non-existent strategy raises error."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
-        with pytest.raises(V4WorkspaceError, match="Strategy file not found"):
+        with pytest.raises(WorkspaceError, match="Strategy file not found"):
             ws.move_strategy("STRAT-999", "pending", "validated")
 
 
@@ -428,16 +428,16 @@ class TestConfigLoading:
 
     def test_config_loads_after_init(self, tmp_path):
         """Test that config loads correctly after init."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         config = ws.config
-        assert isinstance(config, V4Config)
+        assert isinstance(config, Config)
         assert config.version == "1.0"
 
     def test_config_returns_cached_instance(self, tmp_path):
         """Test that config returns cached instance."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         config1 = ws.config
@@ -447,9 +447,9 @@ class TestConfigLoading:
 
     def test_config_raises_if_not_initialized(self, tmp_path):
         """Test that accessing config before init raises error."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
 
-        with pytest.raises(V4WorkspaceError, match="not initialized"):
+        with pytest.raises(WorkspaceError, match="not initialized"):
             _ = ws.config
 
 
@@ -463,47 +463,47 @@ class TestPathProperties:
 
     def test_inbox_path(self, tmp_path):
         """Test inbox_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.inbox_path == tmp_path / "inbox"
 
     def test_strategies_path(self, tmp_path):
         """Test strategies_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.strategies_path == tmp_path / "strategies"
 
     def test_validations_path(self, tmp_path):
         """Test validations_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.validations_path == tmp_path / "validations"
 
     def test_learnings_path(self, tmp_path):
         """Test learnings_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.learnings_path == tmp_path / "learnings"
 
     def test_ideas_path(self, tmp_path):
         """Test ideas_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.ideas_path == tmp_path / "ideas"
 
     def test_personas_path(self, tmp_path):
         """Test personas_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.personas_path == tmp_path / "personas"
 
     def test_archive_path(self, tmp_path):
         """Test archive_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.archive_path == tmp_path / "archive"
 
     def test_logs_path(self, tmp_path):
         """Test logs_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.logs_path == tmp_path / "logs"
 
     def test_state_path(self, tmp_path):
         """Test state_path property."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         assert ws.state_path == tmp_path / ".state"
 
 
@@ -517,12 +517,12 @@ class TestPathResolution:
 
     def test_explicit_path_used(self, tmp_path):
         """Test that explicit path is used."""
-        ws = V4Workspace(tmp_path / "custom")
+        ws = Workspace(tmp_path / "custom")
         assert ws.path == tmp_path / "custom"
 
     def test_string_path_converted(self, tmp_path):
         """Test that string path is converted to Path."""
-        ws = V4Workspace(str(tmp_path / "custom"))
+        ws = Workspace(str(tmp_path / "custom"))
         assert ws.path == tmp_path / "custom"
         assert isinstance(ws.path, Path)
 
@@ -530,21 +530,21 @@ class TestPathResolution:
         """Test that environment variable is used when no path given."""
         monkeypatch.setenv(WORKSPACE_ENV_VAR, str(tmp_path / "env-workspace"))
 
-        ws = V4Workspace()
+        ws = Workspace()
         assert ws.path == tmp_path / "env-workspace"
 
     def test_default_path_when_no_env(self, monkeypatch):
         """Test that default path is used when no env var."""
         monkeypatch.delenv(WORKSPACE_ENV_VAR, raising=False)
 
-        ws = V4Workspace()
-        assert ws.path == DEFAULT_V4_WORKSPACE
+        ws = Workspace()
+        assert ws.path == DEFAULT_WORKSPACE
 
     def test_explicit_path_overrides_env(self, tmp_path, monkeypatch):
         """Test that explicit path overrides environment variable."""
         monkeypatch.setenv(WORKSPACE_ENV_VAR, str(tmp_path / "env-workspace"))
 
-        ws = V4Workspace(tmp_path / "explicit")
+        ws = Workspace(tmp_path / "explicit")
         assert ws.path == tmp_path / "explicit"
 
 
@@ -556,32 +556,32 @@ class TestPathResolution:
 class TestHelperFunctions:
     """Test helper functions."""
 
-    def test_get_v4_workspace(self, tmp_path):
-        """Test get_v4_workspace function."""
-        ws = get_v4_workspace(tmp_path)
-        assert isinstance(ws, V4Workspace)
+    def test_get_workspace(self, tmp_path):
+        """Test get_workspace function."""
+        ws = get_workspace(tmp_path)
+        assert isinstance(ws, Workspace)
         assert ws.path == tmp_path
 
-    def test_get_v4_workspace_no_path(self, monkeypatch):
-        """Test get_v4_workspace with no path uses default."""
+    def test_get_workspace_no_path(self, monkeypatch):
+        """Test get_workspace with no path uses default."""
         monkeypatch.delenv(WORKSPACE_ENV_VAR, raising=False)
 
-        ws = get_v4_workspace()
-        assert ws.path == DEFAULT_V4_WORKSPACE
+        ws = get_workspace()
+        assert ws.path == DEFAULT_WORKSPACE
 
-    def test_require_v4_workspace_initialized(self, tmp_path):
-        """Test require_v4_workspace with initialized workspace."""
-        ws = V4Workspace(tmp_path)
+    def test_require_workspace_initialized(self, tmp_path):
+        """Test require_workspace with initialized workspace."""
+        ws = Workspace(tmp_path)
         ws.init()
 
-        required_ws = require_v4_workspace(tmp_path)
-        assert isinstance(required_ws, V4Workspace)
+        required_ws = require_workspace(tmp_path)
+        assert isinstance(required_ws, Workspace)
         assert required_ws.path == tmp_path
 
-    def test_require_v4_workspace_raises_if_not_initialized(self, tmp_path):
-        """Test require_v4_workspace raises if not initialized."""
-        with pytest.raises(V4WorkspaceError, match="not initialized"):
-            require_v4_workspace(tmp_path)
+    def test_require_workspace_raises_if_not_initialized(self, tmp_path):
+        """Test require_workspace raises if not initialized."""
+        with pytest.raises(WorkspaceError, match="not initialized"):
+            require_workspace(tmp_path)
 
 
 # =============================================================================
@@ -594,7 +594,7 @@ class TestWorkspaceStatus:
 
     def test_status_returns_dict(self, tmp_path):
         """Test that status returns a dictionary."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         status = ws.status()
@@ -602,7 +602,7 @@ class TestWorkspaceStatus:
 
     def test_status_includes_path(self, tmp_path):
         """Test that status includes workspace path."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         status = ws.status()
@@ -610,7 +610,7 @@ class TestWorkspaceStatus:
 
     def test_status_includes_strategy_counts(self, tmp_path):
         """Test that status includes strategy counts by status."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Create some strategy files
@@ -626,7 +626,7 @@ class TestWorkspaceStatus:
 
     def test_status_includes_counters(self, tmp_path):
         """Test that status includes current counters."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         ws.next_strategy_id()
@@ -639,9 +639,9 @@ class TestWorkspaceStatus:
 
     def test_status_raises_if_not_initialized(self, tmp_path):
         """Test that status raises error if not initialized."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
 
-        with pytest.raises(V4WorkspaceError, match="not initialized"):
+        with pytest.raises(WorkspaceError, match="not initialized"):
             ws.status()
 
 
@@ -655,7 +655,7 @@ class TestRequireInitialized:
 
     def test_require_initialized_passes_when_initialized(self, tmp_path):
         """Test require_initialized passes for initialized workspace."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
         ws.init()
 
         # Should not raise
@@ -663,7 +663,7 @@ class TestRequireInitialized:
 
     def test_require_initialized_raises_when_not_initialized(self, tmp_path):
         """Test require_initialized raises for uninitialized workspace."""
-        ws = V4Workspace(tmp_path)
+        ws = Workspace(tmp_path)
 
-        with pytest.raises(V4WorkspaceError, match="not initialized"):
+        with pytest.raises(WorkspaceError, match="not initialized"):
             ws.require_initialized()

@@ -1232,7 +1232,7 @@ class BacktestParams(BaseModel):
 # =============================================================================
 
 
-class V4Strategy(BaseModel):
+class Strategy(BaseModel):
     """Complete V4 strategy document.
 
     This is the main model that represents a full strategy document according
@@ -1291,7 +1291,7 @@ class V4Strategy(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_strategy_mode(self) -> "V4Strategy":
+    def validate_strategy_mode(self) -> "Strategy":
         """Validate that simple mode has entry/position/exit and regime_adaptive has regimes."""
         if self.strategy_mode == StrategyMode.SIMPLE:
             if self.entry is None and self.regimes is None:
@@ -1309,3 +1309,7 @@ class V4Strategy(BaseModel):
         """Pydantic configuration."""
 
         use_enum_values = True
+
+
+# Backward-compat alias
+V4Strategy = Strategy

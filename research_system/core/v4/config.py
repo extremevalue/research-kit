@@ -249,8 +249,8 @@ class APIConfig(BaseModel):
         return self
 
 
-class V4Config(BaseModel):
-    """Complete V4 configuration.
+class Config(BaseModel):
+    """Complete configuration.
 
     This is the main configuration model containing all configuration sections.
     Configuration is loaded from research-kit.yaml with defaults for missing values.
@@ -293,13 +293,13 @@ class V4Config(BaseModel):
 # =============================================================================
 
 
-def get_default_config() -> V4Config:
-    """Return the default V4 configuration.
+def get_default_config() -> Config:
+    """Return the default configuration.
 
     Returns:
-        V4Config with all default values.
+        Config with all default values.
     """
-    return V4Config()
+    return Config()
 
 
 # =============================================================================
@@ -329,7 +329,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
-def load_config(path: Path | str | None = None) -> V4Config:
+def load_config(path: Path | str | None = None) -> Config:
     """Load configuration from a YAML file.
 
     If no path is provided, looks for research-kit.yaml in the current directory.
@@ -341,7 +341,7 @@ def load_config(path: Path | str | None = None) -> V4Config:
               in current directory.
 
     Returns:
-        Loaded and validated V4Config.
+        Loaded and validated Config.
 
     Raises:
         ConfigurationError: If YAML is invalid or configuration values are invalid.
@@ -377,7 +377,7 @@ def load_config(path: Path | str | None = None) -> V4Config:
 
     # Create and validate config
     try:
-        return V4Config(**merged)
+        return Config(**merged)
     except Exception as e:
         raise ConfigurationError(f"Invalid configuration: {e}") from e
 
@@ -387,7 +387,7 @@ def load_config(path: Path | str | None = None) -> V4Config:
 # =============================================================================
 
 
-def validate_config(config: V4Config) -> list[str]:
+def validate_config(config: Config) -> list[str]:
     """Validate a configuration and return any errors.
 
     This performs additional validation beyond Pydantic's built-in validation,
@@ -448,3 +448,7 @@ def validate_config(config: V4Config) -> list[str]:
         )
 
     return errors
+
+
+# Backward-compat aliases
+V4Config = Config

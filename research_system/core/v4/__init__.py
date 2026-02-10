@@ -7,9 +7,9 @@ This package provides the core components for the V4 research-kit system:
 - Logging configuration with daily rotation
 
 Example usage:
-    from research_system.core.v4 import load_config, get_default_config, V4Config
-    from research_system.core.v4 import V4Workspace, get_v4_workspace
-    from research_system.core.v4 import setup_logging, get_logger, V4LogManager
+    from research_system.core.v4 import load_config, get_default_config, Config
+    from research_system.core.v4 import Workspace, get_workspace
+    from research_system.core.v4 import setup_logging, get_logger, LogManager
 
     # Load config from file or use defaults
     config = load_config()
@@ -26,8 +26,8 @@ Example usage:
     if errors:
         print(f"Configuration errors: {errors}")
 
-    # Initialize a V4 workspace
-    workspace = V4Workspace("/path/to/workspace")
+    # Initialize a workspace
+    workspace = Workspace("/path/to/workspace")
     workspace.init(name="My Research")
 
     # Generate IDs
@@ -45,7 +45,7 @@ Example usage:
 
 from research_system.core.v4.config import (
     # Configuration models
-    V4Config,
+    Config,
     GatesConfig,
     IngestionConfig,
     VerificationConfig,
@@ -64,14 +64,14 @@ from research_system.core.v4.config import (
 
 from research_system.core.v4.workspace import (
     # Workspace class
-    V4Workspace,
+    Workspace,
     # Helper functions
-    get_v4_workspace,
-    require_v4_workspace,
+    get_workspace,
+    require_workspace,
     # Exceptions
-    V4WorkspaceError,
+    WorkspaceError,
     # Constants
-    DEFAULT_V4_WORKSPACE,
+    DEFAULT_WORKSPACE,
     WORKSPACE_ENV_VAR,
 )
 
@@ -79,12 +79,21 @@ from research_system.core.v4.logging import (
     # Logging setup
     setup_logging,
     get_logger,
-    V4LogManager,
+    LogManager,
 )
 
+# Backward-compat aliases
+V4Config = Config
+V4Workspace = Workspace
+V4WorkspaceError = WorkspaceError
+get_v4_workspace = get_workspace
+require_v4_workspace = require_workspace
+DEFAULT_V4_WORKSPACE = DEFAULT_WORKSPACE
+V4LogManager = LogManager
+
 __all__ = [
-    # Configuration models
-    "V4Config",
+    # Configuration models (new names)
+    "Config",
     "GatesConfig",
     "IngestionConfig",
     "VerificationConfig",
@@ -97,18 +106,26 @@ __all__ = [
     "load_config",
     "get_default_config",
     "validate_config",
-    # Exceptions
+    # Exceptions (new names)
     "ConfigurationError",
-    # Workspace
-    "V4Workspace",
-    "get_v4_workspace",
-    "require_v4_workspace",
-    "V4WorkspaceError",
-    # Constants
-    "DEFAULT_V4_WORKSPACE",
+    "WorkspaceError",
+    # Workspace (new names)
+    "Workspace",
+    "get_workspace",
+    "require_workspace",
+    # Constants (new names)
+    "DEFAULT_WORKSPACE",
     "WORKSPACE_ENV_VAR",
-    # Logging
+    # Logging (new names)
     "setup_logging",
     "get_logger",
+    "LogManager",
+    # Backward-compat aliases (old names)
+    "V4Config",
+    "V4Workspace",
+    "V4WorkspaceError",
+    "get_v4_workspace",
+    "require_v4_workspace",
+    "DEFAULT_V4_WORKSPACE",
     "V4LogManager",
 ]
