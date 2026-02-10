@@ -10,7 +10,9 @@ This module provides the IngestProcessor class that:
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -914,7 +916,11 @@ class IngestProcessor:
         return False
 
     def _save_strategy(self, strategy: V4Strategy) -> Path:
-        """Save strategy to YAML file in strategies/pending/."""
+        """Save strategy to YAML file in strategies/pending/.
+
+        Uses atomic write (temp file + rename) so that an interrupted write
+        (e.g. Ctrl-C) never leaves a partial/corrupt YAML on disk.
+        """
         strategy_path = self.workspace.strategy_path(strategy.id, status="pending")
 
         # Ensure directory exists
@@ -923,15 +929,29 @@ class IngestProcessor:
         # Convert to dict, handling enums and dates
         strategy_dict = strategy.model_dump(mode="json")
 
-        # Write YAML
-        with open(strategy_path, "w") as f:
-            yaml.dump(
-                strategy_dict,
-                f,
-                default_flow_style=False,
-                sort_keys=False,
-                allow_unicode=True,
-            )
+        # Atomic write: write to temp file first, then rename
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=strategy_path.parent,
+            suffix=".yaml.tmp",
+            prefix=f".{strategy.id}_",
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                yaml.dump(
+                    strategy_dict,
+                    f,
+                    default_flow_style=False,
+                    sort_keys=False,
+                    allow_unicode=True,
+                )
+            os.replace(tmp_path, strategy_path)  # Atomic on POSIX
+        except BaseException:
+            # Clean up temp file on any error (including KeyboardInterrupt)
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
         return strategy_path
 
