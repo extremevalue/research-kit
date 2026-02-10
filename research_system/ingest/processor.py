@@ -501,7 +501,7 @@ class IngestProcessor:
     def _classify_maturity(self, entry, metadata: Dict[str, Any]):
         """Classify idea maturity and store in catalog (R2)."""
         try:
-            from scripts.develop.classifier import classify_idea
+            from research_system.scripts.develop.classifier import classify_idea
 
             # Get idea text
             idea_text = metadata.get("hypothesis") or metadata.get("summary") or ""

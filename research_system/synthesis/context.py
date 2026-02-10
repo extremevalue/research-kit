@@ -392,8 +392,8 @@ class WorkspaceContextAggregator:
         try:
             from research_system.core.data_registry import DataRegistry
 
-            # The workspace stores the data registry under a known path
-            registry_path = self.workspace.path / "data-registry"
+            # Data registry is bundled in the package
+            registry_path = Path(__file__).parent.parent / "data"
             if not registry_path.exists():
                 return []
 

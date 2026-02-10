@@ -27,7 +27,7 @@ class TestNonInteractiveDevelop:
 
     def test_run_non_interactive_with_input_data(self):
         """Test non-interactive mode completes all steps with provided data."""
-        from scripts.develop.workflow import (
+        from research_system.scripts.develop.workflow import (
             DevelopmentWorkflow, DevelopmentStep, STEP_DEFINITIONS, STEP_ORDER
         )
 
@@ -54,7 +54,7 @@ class TestNonInteractiveDevelop:
 
     def test_run_non_interactive_with_placeholders(self):
         """Test non-interactive mode uses placeholders when no input or LLM."""
-        from scripts.develop.workflow import DevelopmentWorkflow
+        from research_system.scripts.develop.workflow import DevelopmentWorkflow
 
         with tempfile.TemporaryDirectory() as tmpdir:
             workflow = DevelopmentWorkflow(Path(tmpdir), None)
@@ -72,7 +72,7 @@ class TestNonInteractiveDevelop:
 
     def test_run_non_interactive_from_json_file(self):
         """Test the JSON file input path."""
-        from scripts.develop.workflow import (
+        from research_system.scripts.develop.workflow import (
             DevelopmentWorkflow, STEP_DEFINITIONS, STEP_ORDER
         )
 
