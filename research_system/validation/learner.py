@@ -6,6 +6,7 @@ to help inform future strategy development.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -289,6 +290,7 @@ class V4Learner:
         validation_results = []
 
         if validations_path.exists():
+            # Search flat YAML files (from verify/validate commands)
             for filepath in validations_path.glob(f"{strategy_id}_*.yaml"):
                 with open(filepath) as f:
                     data = yaml.safe_load(f)
@@ -298,7 +300,73 @@ class V4Learner:
                 elif "_validate_" in filepath.name:
                     validation_results.append(data)
 
+            # Search subdirectory for run results (from run command)
+            run_result_path = validations_path / strategy_id / "run_result.json"
+            if run_result_path.exists():
+                with open(run_result_path) as f:
+                    run_data = json.load(f)
+
+                validation_results.append(
+                    self._adapt_run_result(run_data)
+                )
+
         return verification_results, validation_results
+
+    def _adapt_run_result(self, run_data: dict) -> dict:
+        """Adapt a run result JSON into the validation result format.
+
+        The run command saves results with a different schema than the
+        validate command. This converts run results into the format
+        expected by _extract_from_validation.
+
+        Args:
+            run_data: Raw run result dict from run_result.json
+
+        Returns:
+            Dict matching the validation result schema (gates,
+            backtest_metrics, overall_passed)
+        """
+        # Convert gate_results to the gate format expected by _extract_from_validation
+        gates = []
+        for g in run_data.get("gate_results", []):
+            gates.append({
+                "gate": g.get("gate", "unknown"),
+                "status": "pass" if g.get("passed") else "fail",
+                "threshold": g.get("threshold"),
+                "actual": g.get("actual"),
+                "message": (
+                    f"{g.get('gate', 'unknown')}: "
+                    f"actual={g.get('actual')}, threshold={g.get('threshold')}"
+                ),
+            })
+
+        # Extract backtest metrics from the nested backtest data
+        backtest_metrics = {}
+        backtest = run_data.get("backtest") or {}
+        if backtest.get("aggregate_sharpe") is not None:
+            backtest_metrics["sharpe_ratio"] = backtest["aggregate_sharpe"]
+        if backtest.get("max_drawdown") is not None:
+            backtest_metrics["max_drawdown"] = backtest["max_drawdown"]
+        if backtest.get("consistency") is not None:
+            backtest_metrics["win_rate"] = backtest["consistency"]
+
+        # Map determination to overall_passed
+        determination = run_data.get("determination", "PENDING")
+        if determination == "VALIDATED":
+            overall_passed = True
+        elif determination == "INVALIDATED":
+            overall_passed = False
+        else:
+            overall_passed = None
+
+        return {
+            "gates": gates,
+            "backtest_metrics": backtest_metrics,
+            "overall_passed": overall_passed,
+            "source": "run",
+            "determination": determination,
+            "timestamp": run_data.get("timestamp"),
+        }
 
     def save_learnings(
         self, doc: LearningsDocument, dry_run: bool = False
