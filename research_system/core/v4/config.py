@@ -181,7 +181,6 @@ class RedFlagsConfig(BaseModel):
         default_factory=lambda: [
             "sharpe_above_3",
             "no_losing_periods",
-            "works_all_conditions",
             "author_selling",
             "excessive_parameters",
             "convenient_start_date",
@@ -190,6 +189,7 @@ class RedFlagsConfig(BaseModel):
     )
     soft_warning: list[str] = Field(
         default_factory=lambda: [
+            "works_all_conditions",
             "unknown_rationale",
             "no_transaction_costs",
             "no_drawdown_mentioned",
