@@ -1093,6 +1093,11 @@ Examples:
         help="Number of walk-forward windows: 1 (fastest), 2 (IS/OOS), or 5 (thorough). Default: 1"
     )
     parser.add_argument(
+        "--no-reuse-project",
+        action="store_true",
+        help="Create a new QC cloud project per backtest (legacy mode). Default reuses a single project to avoid 100/day limit."
+    )
+    parser.add_argument(
         "--workspace", "-w",
         dest="v4_workspace",
         metavar="PATH",
@@ -2312,6 +2317,8 @@ def cmd_run(args):
     skip_verify = getattr(args, 'skip_verify', False)
     force = getattr(args, 'force', False)
     num_windows = getattr(args, 'windows', 1)
+    no_reuse = getattr(args, 'no_reuse_project', False)
+    reuse_project = not no_reuse
 
     if not strategy_id and not run_all:
         print("Error: Strategy ID required or use --all")
@@ -2339,12 +2346,15 @@ def cmd_run(args):
         llm_client=llm_client,
         use_local=use_local,
         num_windows=num_windows,
+        reuse_project=reuse_project,
     )
 
     print("\n" + "=" * 60)
     print("  Validation Pipeline")
     print("=" * 60)
     print(f"\nBacktest mode: {'Local Docker' if use_local else 'QC Cloud'}")
+    if not use_local:
+        print(f"Project mode: {'reuse single project' if reuse_project else 'new project per backtest'}")
     print(f"Walk-forward windows: {num_windows}")
     if dry_run:
         print("[DRY RUN] No backtests will be executed")

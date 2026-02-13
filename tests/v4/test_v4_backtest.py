@@ -362,3 +362,122 @@ class TestBacktestResultSerialization:
         assert d["determination"] == "VALIDATED"
         assert len(d["windows"]) == 1
         assert d["windows"][0]["window_id"] == 1
+
+
+# =============================================================================
+# TEST REUSE PROJECT MODE
+# =============================================================================
+
+
+class TestReuseProject:
+    """Test reusable project mode for avoiding QC 100/day project limit."""
+
+    def test_reuse_project_default_true_for_cloud(self, tmp_path):
+        """Reuse mode defaults to True for cloud execution."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False
+        )
+        assert executor.reuse_project is True
+
+    def test_reuse_project_disabled_for_local(self, tmp_path):
+        """Reuse mode is always disabled for local Docker execution."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=True, cleanup_on_start=False,
+            reuse_project=True,
+        )
+        assert executor.reuse_project is False
+
+    def test_reuse_project_explicit_false(self, tmp_path):
+        """Reuse mode can be explicitly disabled."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False,
+            reuse_project=False,
+        )
+        assert executor.reuse_project is False
+
+    def test_runner_project_dir(self, tmp_path):
+        """Runner project dir is at validations/_runner."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False
+        )
+        assert executor._runner_project_dir == tmp_path / "validations" / "_runner"
+
+    def test_reuse_creates_fixed_dir(self, tmp_path):
+        """Reuse mode creates files in the fixed _runner directory."""
+        import json
+        from unittest.mock import patch
+
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False,
+            reuse_project=True,
+        )
+
+        # Mock _execute_backtest to avoid actual lean CLI calls
+        mock_result = BacktestResult(success=True, cagr=0.10, sharpe=0.5)
+        with patch.object(executor, '_execute_backtest', return_value=mock_result):
+            result = executor.run_single(
+                "class Algo: pass", "2012-01-01", "2023-12-31", "STRAT-TEST"
+            )
+
+        assert result.success is True
+        # Check that main.py was written to _runner dir
+        runner_main = tmp_path / "validations" / "_runner" / "main.py"
+        assert runner_main.exists()
+        # Check config.json exists
+        runner_config = tmp_path / "validations" / "_runner" / "config.json"
+        assert runner_config.exists()
+
+    def test_reuse_does_not_cleanup_dir(self, tmp_path):
+        """Reuse mode preserves the _runner directory after backtest."""
+        from unittest.mock import patch
+
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False,
+            reuse_project=True,
+        )
+
+        mock_result = BacktestResult(success=True, cagr=0.10, sharpe=0.5)
+        with patch.object(executor, '_execute_backtest', return_value=mock_result):
+            executor.run_single("class Algo: pass", "2012-01-01", "2023-12-31", "STRAT-TEST")
+
+        # Directory should still exist
+        assert (tmp_path / "validations" / "_runner").exists()
+        assert (tmp_path / "validations" / "_runner" / "main.py").exists()
+
+    def test_reuse_overwrites_main_py(self, tmp_path):
+        """Reuse mode overwrites main.py on each run."""
+        from unittest.mock import patch
+
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False,
+            reuse_project=True,
+        )
+
+        mock_result = BacktestResult(success=True, cagr=0.10, sharpe=0.5)
+        with patch.object(executor, '_execute_backtest', return_value=mock_result):
+            # First run
+            executor.run_single("class First: pass", "2012-01-01", "2023-12-31", "STRAT-A")
+            content1 = (tmp_path / "validations" / "_runner" / "main.py").read_text()
+
+            # Second run — should overwrite
+            executor.run_single("class Second: pass", "2012-01-01", "2023-12-31", "STRAT-B")
+            content2 = (tmp_path / "validations" / "_runner" / "main.py").read_text()
+
+        assert "First" not in content2
+        assert "Second" in content2
+
+    def test_legacy_mode_creates_unique_dirs(self, tmp_path):
+        """Legacy mode (reuse_project=False) creates unique project dirs."""
+        from unittest.mock import patch
+
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=False, cleanup_on_start=False,
+            reuse_project=False,
+        )
+
+        mock_result = BacktestResult(success=True, cagr=0.10, sharpe=0.5)
+        with patch.object(executor, '_execute_backtest', return_value=mock_result):
+            executor.run_single("class Algo: pass", "2012-01-01", "2023-12-31", "STRAT-TEST")
+
+        # _runner dir should NOT exist
+        assert not (tmp_path / "validations" / "_runner").exists()

@@ -175,6 +175,7 @@ class BacktestExecutor:
         cleanup_on_start: bool = True,
         num_windows: int = 1,
         timeout: int = 600,
+        reuse_project: bool = True,
     ):
         """Initialize backtest executor.
 
@@ -184,12 +185,18 @@ class BacktestExecutor:
             cleanup_on_start: If True, clean up stuck backtests on init
             num_windows: Number of walk-forward windows (1, 2, or 5)
             timeout: Backtest execution timeout in seconds (default: 600)
+            reuse_project: If True, reuse a single QC cloud project to avoid
+                100/day project creation limit. Only applies to cloud mode.
         """
         self.workspace_path = Path(workspace_path)
         self.validations_path = self.workspace_path / "validations"
         self.use_local = use_local
+        self.reuse_project = reuse_project and not use_local
         self.num_windows = num_windows
         self.timeout = timeout
+
+        # Fixed project directory for reuse mode
+        self._runner_project_dir = self.validations_path / "_runner"
 
         # Select windows based on num_windows
         if num_windows >= 5:
@@ -220,6 +227,18 @@ class BacktestExecutor:
         Returns:
             BacktestResult with metrics or error
         """
+        if self.reuse_project:
+            return self._run_single_reuse(code, start_date, end_date, strategy_id)
+        return self._run_single_new_project(code, start_date, end_date, strategy_id)
+
+    def _run_single_new_project(
+        self,
+        code: str,
+        start_date: str,
+        end_date: str,
+        strategy_id: str,
+    ) -> BacktestResult:
+        """Execute a backtest by creating a new project each time (legacy mode)."""
         # Create project directory
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         project_name = f"{strategy_id}_{start_date[:4]}_{end_date[:4]}_{timestamp}"
@@ -251,6 +270,46 @@ class BacktestExecutor:
                 time.sleep(30)
 
         self._cleanup_project(project_dir)
+        return BacktestResult(success=False, error="Backtest failed after all retries")
+
+    def _run_single_reuse(
+        self,
+        code: str,
+        start_date: str,
+        end_date: str,
+        strategy_id: str,
+    ) -> BacktestResult:
+        """Execute a backtest by reusing a single QC cloud project.
+
+        This avoids the 100 projects/day creation limit by overwriting
+        main.py in a fixed project directory each time.
+        """
+        project_dir = self._runner_project_dir
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Overwrite algorithm code with date injection
+        main_py = project_dir / "main.py"
+        modified_code = self._inject_dates(code, start_date, end_date)
+        main_py.write_text(modified_code)
+
+        # Ensure config.json exists
+        config_file = project_dir / "config.json"
+        if not config_file.exists():
+            config = {"algorithm-language": "Python", "parameters": {}}
+            config_file.write_text(json.dumps(config))
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = self._execute_backtest(project_dir, strategy_id, attempt, max_retries)
+                if result is not None:
+                    # Do NOT clean up - we reuse this directory
+                    return result
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    return BacktestResult(success=False, error=str(e))
+                time.sleep(30)
+
         return BacktestResult(success=False, error="Backtest failed after all retries")
 
     def run_walk_forward(
