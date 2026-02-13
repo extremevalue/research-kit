@@ -180,9 +180,23 @@ class Runner:
         if dry_run:
             return self._dry_run(strategy_id, strategy)
 
-        # Step 2: Generate code
+        # Step 2: Generate code (with retry for extraction failures)
         print(f"  Generating backtest code for {strategy_id}...")
-        code_result = self._generate_code(strategy, force_llm)
+        max_codegen_attempts = 3
+        code_result = None
+        for codegen_attempt in range(1, max_codegen_attempts + 1):
+            code_result = self._generate_code(strategy, force_llm)
+            if code_result.success:
+                break
+            # Only retry if the failure is an extraction issue (LLM ran but output wasn't parseable)
+            is_extraction_failure = code_result.error and (
+                "did not contain valid Python code" in code_result.error
+                or "Could not extract" in code_result.error
+            )
+            if not is_extraction_failure or codegen_attempt >= max_codegen_attempts:
+                break
+            print(f"    Code extraction failed (attempt {codegen_attempt}/{max_codegen_attempts}), retrying...")
+
         if not code_result.success:
             return RunResult(
                 strategy_id=strategy_id,

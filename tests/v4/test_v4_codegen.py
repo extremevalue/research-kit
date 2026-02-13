@@ -222,6 +222,124 @@ class Test(QCAlgorithm):
 
 
 # =============================================================================
+# TEST CODE EXTRACTION
+# =============================================================================
+
+
+class TestCodeExtraction:
+    """Test _extract_code_from_response handles diverse LLM output formats."""
+
+    @pytest.fixture
+    def generator(self):
+        return CodeGenerator(llm_client=None)
+
+    def test_extracts_single_python_block(self, generator):
+        """Test extraction from a single ```python block."""
+        response = '```python\nclass Algo(QCAlgorithm):\n    def initialize(self):\n        pass\n```'
+        code = generator._extract_code_from_response(response)
+        assert code is not None
+        assert "class Algo" in code
+
+    def test_extracts_largest_block(self, generator):
+        """Test that when multiple code blocks exist, the largest is picked."""
+        response = (
+            "Here's a helper:\n```python\nx = 1\n```\n\n"
+            "And the full implementation:\n```python\n"
+            "from AlgorithmImports import *\n\n"
+            "class MyAlgo(QCAlgorithm):\n"
+            "    def initialize(self):\n"
+            "        self.add_equity('SPY')\n"
+            "    def on_data(self, data):\n"
+            "        pass\n```"
+        )
+        code = generator._extract_code_from_response(response)
+        assert code is not None
+        assert "class MyAlgo" in code
+        assert "def initialize" in code
+        # Should NOT just be the small snippet
+        assert len(code) > 20
+
+    def test_extracts_plain_backticks(self, generator):
+        """Test extraction from ``` without language tag."""
+        response = '```\nclass Algo(QCAlgorithm):\n    def initialize(self):\n        pass\n```'
+        code = generator._extract_code_from_response(response)
+        assert code is not None
+        assert "class Algo" in code
+
+    def test_extracts_tilde_fenced(self, generator):
+        """Test extraction from ~~~ delimiters."""
+        response = '~~~python\nclass Algo(QCAlgorithm):\n    def initialize(self):\n        pass\n~~~'
+        code = generator._extract_code_from_response(response)
+        assert code is not None
+        assert "class Algo" in code
+
+    def test_strips_preamble_text(self, generator):
+        """Test that leading explanation text is stripped when no code blocks."""
+        response = (
+            "Sure! Here's the implementation for your strategy.\n"
+            "I've used a simple SMA crossover approach.\n\n"
+            "from AlgorithmImports import *\n\n"
+            "class MyAlgo(QCAlgorithm):\n"
+            "    def initialize(self):\n"
+            "        pass\n"
+        )
+        code = generator._extract_code_from_response(response)
+        assert code is not None
+        assert "class MyAlgo" in code
+        assert "Sure!" not in code
+
+    def test_returns_none_for_empty(self, generator):
+        """Test returns None for empty input."""
+        assert generator._extract_code_from_response("") is None
+        assert generator._extract_code_from_response("   ") is None
+
+    def test_returns_none_for_no_code(self, generator):
+        """Test returns None for response with no code."""
+        response = "I don't know how to generate that strategy."
+        assert generator._extract_code_from_response(response) is None
+
+    def test_handles_py_language_tag(self, generator):
+        """Test extraction with ```py shorthand tag."""
+        response = '```py\nclass Algo(QCAlgorithm):\n    def initialize(self):\n        pass\n```'
+        code = generator._extract_code_from_response(response)
+        assert code is not None
+        assert "class Algo" in code
+
+
+# =============================================================================
+# TEST CLEAN ENV FOR CLI
+# =============================================================================
+
+
+class TestCleanEnvForCLI:
+    """Test that _clean_env_for_cli strips CLAUDECODE variables."""
+
+    def test_strips_claudecode(self, monkeypatch):
+        """Test CLAUDECODE variable is removed."""
+        monkeypatch.setenv("CLAUDECODE", "1")
+        monkeypatch.setenv("PATH", "/usr/bin")
+        env = CodeGenerator._clean_env_for_cli()
+        assert "CLAUDECODE" not in env
+        assert "PATH" in env
+
+    def test_strips_claude_code_prefixed(self, monkeypatch):
+        """Test CLAUDE_CODE_* variables are removed."""
+        monkeypatch.setenv("CLAUDE_CODE_SESSION", "abc123")
+        monkeypatch.setenv("CLAUDE_CODE_VERSION", "1.0")
+        monkeypatch.setenv("HOME", "/Users/test")
+        env = CodeGenerator._clean_env_for_cli()
+        assert "CLAUDE_CODE_SESSION" not in env
+        assert "CLAUDE_CODE_VERSION" not in env
+        assert "HOME" in env
+
+    def test_preserves_normal_env(self, monkeypatch):
+        """Test normal env vars are preserved."""
+        monkeypatch.setenv("MY_VAR", "hello")
+        env = CodeGenerator._clean_env_for_cli()
+        assert env.get("MY_VAR") == "hello"
+
+
+# =============================================================================
 # TEST CONVENIENCE FUNCTION
 # =============================================================================
 
