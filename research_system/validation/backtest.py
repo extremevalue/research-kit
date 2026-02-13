@@ -646,8 +646,8 @@ class BacktestExecutor:
             f"=== STDERR ===\n{result.stderr}"
         )
 
-        # Check for rate limiting
-        output_lower = (result.stdout + result.stderr).lower()
+        # Check for rate limiting (normalize whitespace to handle word-wrapped output)
+        output_lower = " ".join((result.stdout + result.stderr).split()).lower()
         rate_limit_patterns = ["no spare nodes", "rate limit", "too many", "throttl", "quota", "capacity limit", "maximum number of projects"]
         if any(pattern in output_lower for pattern in rate_limit_patterns):
             cleaned = self._cleanup_all_running_backtests()
@@ -739,7 +739,7 @@ class BacktestExecutor:
 
         # Check for errors
         if returncode != 0:
-            combined_lower = combined_output.lower()
+            combined_lower = " ".join(combined_output.split()).lower()
             rate_limit_patterns = [
                 "no spare nodes", "rate limit", "too many requests",
                 "quota exceeded", "throttl", "capacity limit",
