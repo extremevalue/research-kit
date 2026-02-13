@@ -79,6 +79,7 @@ class Runner:
         llm_client=None,
         use_local: bool = False,
         num_windows: int = 1,
+        reuse_project: bool = True,
     ):
         """Initialize the V4 runner.
 
@@ -87,6 +88,7 @@ class Runner:
             llm_client: Optional LLM client for code generation
             use_local: Use local Docker instead of QC cloud
             num_windows: Number of walk-forward windows (1, 2, or 5)
+            reuse_project: Reuse a single QC cloud project (avoids 100/day limit)
         """
         self.workspace = workspace
         self.llm_client = llm_client
@@ -106,6 +108,7 @@ class Runner:
             cleanup_on_start=not use_local,
             num_windows=num_windows,
             timeout=self._config.backtest.timeout,
+            reuse_project=reuse_project,
         )
 
     def run(
