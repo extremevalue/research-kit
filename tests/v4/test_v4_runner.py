@@ -117,11 +117,12 @@ class TestGateApplication:
             aggregate_sharpe=1.5,  # Above min_sharpe=1.0
             consistency=0.8,  # Above min_consistency=0.6
             max_drawdown=0.15,  # Below max_drawdown=0.25
+            aggregate_cagr=0.10,  # Above min_cagr=0.05
         )
 
         gates = runner._apply_gates(wf_result)
 
-        assert len(gates) == 3
+        assert len(gates) == 4
         assert all(g["passed"] for g in gates)
 
     def test_gates_fail_low_sharpe(self, runner):
@@ -169,6 +170,38 @@ class TestGateApplication:
         assert not dd_gate["passed"]
         assert dd_gate["actual"] == 0.35
         assert dd_gate["threshold"] == 0.25
+
+    def test_gates_fail_low_cagr(self, runner):
+        """Test gates fail when CAGR is too low."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-001",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.02,  # Below min_cagr=0.05
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        cagr_gate = next(g for g in gates if g["gate"] == "min_cagr")
+        assert not cagr_gate["passed"]
+        assert cagr_gate["actual"] == 0.02
+        assert cagr_gate["threshold"] == 0.05
+
+    def test_gates_skip_cagr_when_none(self, runner):
+        """Test CAGR gate is skipped when aggregate_cagr is None."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-001",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=None,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        gate_names = [g["gate"] for g in gates]
+        assert "min_cagr" not in gate_names
 
 
 # =============================================================================

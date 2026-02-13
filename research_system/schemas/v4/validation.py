@@ -102,6 +102,7 @@ class ValidationGates(BaseModel):
     min_sharpe: float = Field(0.5, description="Minimum Sharpe ratio")
     min_consistency: float = Field(0.6, description="Minimum consistency score")
     max_drawdown: float = Field(0.3, description="Maximum allowed drawdown")
+    min_cagr: float = Field(0.05, description="Minimum CAGR")
     min_trades: int = Field(30, description="Minimum number of trades")
 
     def check_sharpe(self, sharpe: float) -> bool:
@@ -115,6 +116,10 @@ class ValidationGates(BaseModel):
     def check_drawdown(self, drawdown: float) -> bool:
         """Check if drawdown is within threshold (drawdown should be positive)."""
         return drawdown <= self.max_drawdown
+
+    def check_cagr(self, cagr: float) -> bool:
+        """Check if CAGR meets threshold."""
+        return cagr >= self.min_cagr
 
     def check_trades(self, trades: int) -> bool:
         """Check if trade count meets threshold."""
@@ -227,6 +232,9 @@ class Validation(BaseModel):
 
         if self.results.max_drawdown is not None:
             checks.append(self.gates_applied.check_drawdown(self.results.max_drawdown))
+
+        if self.results.cagr is not None:
+            checks.append(self.gates_applied.check_cagr(self.results.cagr))
 
         if self.results.total_trades is not None:
             checks.append(self.gates_applied.check_trades(self.results.total_trades))
