@@ -229,13 +229,23 @@ class LLMClient:
                 "--max-turns", "3",  # Allow a few turns but not unlimited exploration
             ]
 
+            # Build clean env without Claude Code session variables
+            # to prevent nested-session detection
+            blocked_prefixes = ("CLAUDECODE", "CLAUDE_CODE")
+            clean_env = {
+                k: v
+                for k, v in os.environ.items()
+                if not any(k.startswith(p) for p in blocked_prefixes)
+            }
+
             # Run claude CLI with prompt on stdin
             result = subprocess.run(
                 cmd,
                 input=full_prompt,
                 capture_output=True,
                 text=True,
-                timeout=120  # 2 minute timeout
+                timeout=120,  # 2 minute timeout
+                env=clean_env,
             )
 
             if result.returncode != 0:

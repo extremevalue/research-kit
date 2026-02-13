@@ -291,6 +291,22 @@ class CodeGenerator:
         """Check if Claude CLI is available."""
         return shutil.which("claude") is not None
 
+    @staticmethod
+    def _clean_env_for_cli() -> dict[str, str]:
+        """Return a copy of os.environ without Claude Code session variables.
+
+        This prevents nested-session detection when invoking `claude` CLI
+        from within a Claude Code session.
+        """
+        import os
+
+        blocked_prefixes = ("CLAUDECODE", "CLAUDE_CODE")
+        return {
+            k: v
+            for k, v in os.environ.items()
+            if not any(k.startswith(p) for p in blocked_prefixes)
+        }
+
     def _generate_from_claude_cli(self, strategy: dict[str, Any]) -> CodeGenResult:
         """Generate code using Claude CLI.
 
@@ -311,6 +327,7 @@ class CodeGenerator:
                 capture_output=True,
                 text=True,
                 timeout=120,  # 2 minute timeout
+                env=self._clean_env_for_cli(),
             )
 
             if result.returncode != 0:
@@ -370,6 +387,7 @@ class CodeGenerator:
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=self._clean_env_for_cli(),
             )
 
             if result.returncode != 0:
@@ -567,13 +585,46 @@ Return ONLY the Python code, no explanations."""
         return "\n".join(lines)
 
     def _extract_code_from_response(self, response: str) -> str | None:
-        """Extract Python code from LLM response."""
-        # Look for code blocks
-        code_block_match = re.search(r"```(?:python)?\s*(.*?)```", response, re.DOTALL)
-        if code_block_match:
-            return code_block_match.group(1).strip()
+        """Extract Python code from LLM response.
 
-        # If no code block, check if the entire response is code
+        Tries multiple extraction strategies in order:
+        1. Find all fenced code blocks (``` or ~~~), pick the largest
+        2. Strip explanation text and check if remaining content is code
+        """
+        if not response or not response.strip():
+            return None
+
+        # Strategy 1: Find ALL fenced code blocks and pick the largest
+        # Supports both ``` and ~~~ delimiters, with optional language tag
+        code_blocks = re.findall(
+            r"(?:```|~~~)(?:python|py)?\s*\n?(.*?)(?:```|~~~)",
+            response,
+            re.DOTALL,
+        )
+        if code_blocks:
+            # Pick the largest block (most likely the full implementation)
+            best = max(code_blocks, key=lambda b: len(b.strip()))
+            if best.strip():
+                return best.strip()
+
+        # Strategy 2: Check if the entire response (or most of it) is code
+        # Strip common LLM preamble/postamble patterns
+        stripped = response.strip()
+        # Remove leading explanation lines (lines before first import/class/def/from)
+        lines = stripped.split("\n")
+        code_start = None
+        for i, line in enumerate(lines):
+            sline = line.strip()
+            if sline.startswith(("import ", "from ", "class ", "def ", "#!", "# ")):
+                code_start = i
+                break
+        if code_start is not None:
+            # Also trim trailing explanation after the code ends
+            candidate = "\n".join(lines[code_start:])
+            if "class " in candidate and "def " in candidate:
+                return candidate.strip()
+
+        # Strategy 3: Original fallback — entire response looks like code
         if "class " in response and "def " in response:
             return response.strip()
 

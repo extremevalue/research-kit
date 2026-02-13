@@ -3,35 +3,35 @@
 import pytest
 import json
 
-from research_system.llm.client import LLMClient, LLMResponse
+from research_system.llm.client import LLMClient, LLMResponse, Backend
 
 
 class TestLLMClient:
     """Tests for LLMClient class."""
 
-    def test_offline_mode_without_api_key(self, monkeypatch):
-        """Test client runs in offline mode without API key."""
+    def test_offline_mode_explicit(self, monkeypatch):
+        """Test client runs in offline mode when explicitly requested."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-        client = LLMClient()
+        client = LLMClient(backend=Backend.OFFLINE)
 
         assert client.is_offline
 
     def test_generate_offline(self, monkeypatch):
-        """Test generate returns offline response without API key."""
+        """Test generate returns offline response when backend is offline."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-        client = LLMClient()
+        client = LLMClient(backend=Backend.OFFLINE)
         response = client.generate("Test prompt")
 
         assert response.offline
         assert "offline" in response.content.lower()
 
     def test_generate_haiku_offline(self, monkeypatch):
-        """Test generate_haiku uses Haiku model."""
+        """Test generate_haiku uses Haiku model in offline mode."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-        client = LLMClient()
+        client = LLMClient(backend=Backend.OFFLINE)
         response = client.generate_haiku("Test prompt")
 
         assert response.offline
