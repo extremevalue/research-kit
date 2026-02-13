@@ -254,7 +254,8 @@ class Runner:
 
         # Print aggregates
         if wf_result.aggregate_sharpe is not None:
-            print(f"  Aggregate: Sharpe={wf_result.aggregate_sharpe:.2f}, Consistency={wf_result.consistency*100:.0f}%")
+            cagr_str = f", CAGR={wf_result.aggregate_cagr*100:.1f}%" if wf_result.aggregate_cagr is not None else ""
+            print(f"  Aggregate: Sharpe={wf_result.aggregate_sharpe:.2f}, Consistency={wf_result.consistency*100:.0f}%{cagr_str}")
             if wf_result.max_drawdown is not None:
                 print(f"             Max DD={wf_result.max_drawdown*100:.1f}%")
 
@@ -408,6 +409,15 @@ class Runner:
                 "passed": wf_result.max_drawdown <= config_gates.max_drawdown,
             })
 
+        # CAGR gate
+        if wf_result.aggregate_cagr is not None:
+            gates.append({
+                "gate": "min_cagr",
+                "threshold": config_gates.min_cagr,
+                "actual": wf_result.aggregate_cagr,
+                "passed": wf_result.aggregate_cagr >= config_gates.min_cagr,
+            })
+
         return gates
 
     def _update_status(self, strategy_id: str, new_status: str) -> None:
@@ -458,6 +468,7 @@ class Runner:
             yaml_data = {
                 "strategy_id": strategy_id,
                 "aggregate_sharpe": result.backtest.aggregate_sharpe,
+                "aggregate_cagr": result.backtest.aggregate_cagr,
                 "consistency": result.backtest.consistency,
                 "max_drawdown": result.backtest.max_drawdown,
                 "mean_return": result.backtest.mean_return,
@@ -504,6 +515,7 @@ class Runner:
         print(f"    min_sharpe: {config_gates.min_sharpe}")
         print(f"    min_consistency: {config_gates.min_consistency}")
         print(f"    max_drawdown: {config_gates.max_drawdown}")
+        print(f"    min_cagr: {config_gates.min_cagr}")
 
         print(f"  Walk-forward windows: {self.num_windows}")
         print(f"  Backtest mode: {'Local Docker' if self.use_local else 'QC Cloud'}")

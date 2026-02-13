@@ -106,6 +106,7 @@ class WalkForwardResult:
     mean_return: float | None = None
     median_return: float | None = None
     aggregate_sharpe: float | None = None
+    aggregate_cagr: float | None = None
     max_drawdown: float | None = None
     consistency: float | None = None  # % of profitable windows
     determination: str = "PENDING"  # VALIDATED, INVALIDATED, BLOCKED, RETRY_LATER
@@ -129,6 +130,7 @@ class WalkForwardResult:
             "mean_return": self.mean_return,
             "median_return": self.median_return,
             "aggregate_sharpe": self.aggregate_sharpe,
+            "aggregate_cagr": self.aggregate_cagr,
             "max_drawdown": self.max_drawdown,
             "consistency": self.consistency,
             "determination": self.determination,
@@ -527,6 +529,11 @@ class BacktestExecutor:
         sharpes = [w.result.sharpe for w in successful_windows if w.result.sharpe is not None]
         if sharpes:
             wf_result.aggregate_sharpe = sum(sharpes) / len(sharpes)
+
+        # Calculate aggregate CAGR (mean of all window CAGRs)
+        cagrs = [w.result.cagr for w in successful_windows if w.result.cagr is not None]
+        if cagrs:
+            wf_result.aggregate_cagr = sum(cagrs) / len(cagrs)
 
         # Max drawdown (worst across all windows)
         drawdowns = [w.result.max_drawdown for w in successful_windows if w.result.max_drawdown is not None]

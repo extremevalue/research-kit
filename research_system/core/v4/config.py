@@ -69,6 +69,9 @@ class GatesConfig(BaseModel):
     max_drawdown: float = Field(
         0.25, ge=0, le=1.0, description="Maximum allowed drawdown (as decimal, e.g., 0.25 for 25%)"
     )
+    min_cagr: float = Field(
+        0.05, ge=0, description="Minimum CAGR required"
+    )
     min_trades: int = Field(
         30, ge=0, description="Minimum number of trades required"
     )
