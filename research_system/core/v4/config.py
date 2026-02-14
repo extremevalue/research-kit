@@ -75,6 +75,9 @@ class GatesConfig(BaseModel):
     min_trades: int = Field(
         30, ge=0, description="Minimum number of trades required"
     )
+    min_window_pass_rate: float = Field(
+        0.8, ge=0, le=1.0, description="Minimum fraction of windows that must individually pass gates (for --windows 5)"
+    )
 
 
 class IngestionConfig(BaseModel):

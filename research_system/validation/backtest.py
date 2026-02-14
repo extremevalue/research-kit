@@ -156,17 +156,20 @@ class BacktestExecutor:
         ("2020-01-01", "2023-12-31"),
     ]
 
-    # Default: 1 window (fastest iteration for single-node accounts)
-    # Use --windows 2 for IS/OOS, --windows 5 for thorough validation
-    DEFAULT_WINDOWS = [
+    # Single window for fast iteration (use --windows 1)
+    ONE_WINDOW = [
         ("2012-01-01", "2023-12-31"),  # Full period
     ]
 
-    # 2 windows: IS/OOS style
-    TWO_WINDOWS = [
+    # Default: 2 windows IS/OOS (gates evaluate OOS window only)
+    # Use --windows 1 for fast iteration, --windows 5 for thorough validation
+    DEFAULT_WINDOWS = [
         ("2012-01-01", "2017-12-31"),  # In-sample period
         ("2018-01-01", "2023-12-31"),  # Out-of-sample period
     ]
+
+    # Alias for clarity
+    TWO_WINDOWS = DEFAULT_WINDOWS
 
     def __init__(
         self,
@@ -201,8 +204,8 @@ class BacktestExecutor:
         # Select windows based on num_windows
         if num_windows >= 5:
             self.windows = self.ALL_WINDOWS
-        elif num_windows == 2:
-            self.windows = self.TWO_WINDOWS
+        elif num_windows == 1:
+            self.windows = self.ONE_WINDOW
         else:
             self.windows = self.DEFAULT_WINDOWS
 
@@ -598,6 +601,44 @@ class BacktestExecutor:
         drawdowns = [w.result.max_drawdown for w in successful_windows if w.result.max_drawdown is not None]
         if drawdowns:
             wf_result.max_drawdown = max(drawdowns)
+
+        # Consistency: % of windows with positive CAGR
+        profitable = [1 for w in successful_windows if w.result.cagr and w.result.cagr > 0]
+        wf_result.consistency = len(profitable) / len(successful_windows) if successful_windows else 0
+
+    def _aggregate_oos_results(self, wf_result: WalkForwardResult) -> None:
+        """Calculate aggregate metrics using only the OOS (last) window.
+
+        When using IS/OOS mode (2 windows), gates should evaluate the OOS
+        window only, since the IS window is "training" data.
+        """
+        if len(wf_result.windows) < 2:
+            return self._aggregate_walk_forward_results(wf_result)
+
+        oos_window = wf_result.windows[-1]  # Last window is OOS
+
+        if not oos_window.result.success:
+            wf_result.determination = "BLOCKED"
+            wf_result.determination_reason = f"OOS window failed: {oos_window.result.error}"
+            return
+
+        # Set aggregate metrics from OOS window only
+        wf_result.aggregate_sharpe = oos_window.result.sharpe
+        wf_result.aggregate_cagr = oos_window.result.cagr
+        wf_result.max_drawdown = oos_window.result.max_drawdown
+
+        # For mean/median, still use all successful windows for reporting
+        successful_windows = [w for w in wf_result.windows if w.result.success]
+        returns = [w.result.cagr for w in successful_windows if w.result.cagr is not None]
+        if returns:
+            wf_result.mean_return = sum(returns) / len(returns)
+            sorted_returns = sorted(returns)
+            mid = len(sorted_returns) // 2
+            wf_result.median_return = (
+                sorted_returns[mid]
+                if len(sorted_returns) % 2
+                else (sorted_returns[mid - 1] + sorted_returns[mid]) / 2
+            )
 
         # Consistency: % of windows with positive CAGR
         profitable = [1 for w in successful_windows if w.result.cagr and w.result.cagr > 0]
