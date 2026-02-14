@@ -1076,6 +1076,11 @@ Examples:
         help="Force LLM code generation instead of templates"
     )
     parser.add_argument(
+        "--skip-codegen",
+        action="store_true",
+        help="Skip code generation and use existing backtest.py (for hand-written ports)"
+    )
+    parser.add_argument(
         "--skip-verify",
         action="store_true",
         help="Skip verification check before running"
@@ -1088,9 +1093,9 @@ Examples:
     parser.add_argument(
         "--windows",
         type=int,
-        default=1,
+        default=2,
         choices=[1, 2, 5],
-        help="Number of walk-forward windows: 1 (fastest), 2 (IS/OOS), or 5 (thorough). Default: 1"
+        help="Number of walk-forward windows: 1 (single period), 2 (IS/OOS, default), or 5 (thorough). Default: 2"
     )
     parser.add_argument(
         "--no-reuse-project",
@@ -2315,6 +2320,7 @@ def cmd_run(args):
     dry_run = getattr(args, 'dry_run', False)
     force_llm = getattr(args, 'force_llm', False)
     skip_verify = getattr(args, 'skip_verify', False)
+    skip_codegen = getattr(args, 'skip_codegen', False)
     force = getattr(args, 'force', False)
     num_windows = getattr(args, 'windows', 1)
     no_reuse = getattr(args, 'no_reuse_project', False)
@@ -2361,7 +2367,7 @@ def cmd_run(args):
     print()
 
     if run_all:
-        results = runner.run_all(dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify)
+        results = runner.run_all(dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify, skip_codegen=skip_codegen)
         if not results:
             return 0
 
@@ -2369,7 +2375,7 @@ def cmd_run(args):
         failed_count = sum(1 for r in results if not r.success)
         return 1 if failed_count > 0 else 0
     else:
-        result = runner.run(strategy_id, dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify, force=force)
+        result = runner.run(strategy_id, dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify, force=force, skip_codegen=skip_codegen)
 
         if not result.success:
             print(f"\nPipeline failed: {result.error}")

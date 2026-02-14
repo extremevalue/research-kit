@@ -118,6 +118,7 @@ class Runner:
         force_llm: bool = False,
         skip_verify: bool = False,
         force: bool = False,
+        skip_codegen: bool = False,
     ) -> RunResult:
         """Run the full pipeline for a single strategy.
 
@@ -183,37 +184,56 @@ class Runner:
         if dry_run:
             return self._dry_run(strategy_id, strategy)
 
-        # Step 2: Generate code (with retry for extraction failures)
-        print(f"  Generating backtest code for {strategy_id}...")
-        max_codegen_attempts = 3
-        code_result = None
-        for codegen_attempt in range(1, max_codegen_attempts + 1):
-            code_result = self._generate_code(strategy, force_llm)
-            if code_result.success:
-                break
-            # Only retry if the failure is an extraction issue (LLM ran but output wasn't parseable)
-            is_extraction_failure = code_result.error and (
-                "did not contain valid Python code" in code_result.error
-                or "Could not extract" in code_result.error
-            )
-            if not is_extraction_failure or codegen_attempt >= max_codegen_attempts:
-                break
-            print(f"    Code extraction failed (attempt {codegen_attempt}/{max_codegen_attempts}), retrying...")
+        # Step 2: Generate code (or use existing if --skip-codegen)
+        if skip_codegen:
+            existing_code_path = self.workspace.validations_path / strategy_id / "backtest.py"
+            if existing_code_path.exists():
+                existing_code = existing_code_path.read_text()
+                code_result = V4CodeGenResult(
+                    success=True,
+                    code=existing_code,
+                    method="existing",
+                )
+                print(f"  Using existing backtest code for {strategy_id}...")
+                print(f"    Method: existing (--skip-codegen)")
+            else:
+                return RunResult(
+                    strategy_id=strategy_id,
+                    success=False,
+                    determination="FAILED",
+                    error=f"--skip-codegen specified but no backtest.py found at {existing_code_path}",
+                )
+        else:
+            print(f"  Generating backtest code for {strategy_id}...")
+            max_codegen_attempts = 3
+            code_result = None
+            for codegen_attempt in range(1, max_codegen_attempts + 1):
+                code_result = self._generate_code(strategy, force_llm)
+                if code_result.success:
+                    break
+                # Only retry if the failure is an extraction issue (LLM ran but output wasn't parseable)
+                is_extraction_failure = code_result.error and (
+                    "did not contain valid Python code" in code_result.error
+                    or "Could not extract" in code_result.error
+                )
+                if not is_extraction_failure or codegen_attempt >= max_codegen_attempts:
+                    break
+                print(f"    Code extraction failed (attempt {codegen_attempt}/{max_codegen_attempts}), retrying...")
 
-        if not code_result.success:
-            return RunResult(
-                strategy_id=strategy_id,
-                success=False,
-                determination="FAILED",
-                code_gen=code_result,
-                error=f"Code generation failed: {code_result.error}",
-            )
+            if not code_result.success:
+                return RunResult(
+                    strategy_id=strategy_id,
+                    success=False,
+                    determination="FAILED",
+                    code_gen=code_result,
+                    error=f"Code generation failed: {code_result.error}",
+                )
 
-        # Save generated code
-        self._save_code(strategy_id, code_result.code)
-        print(f"    Method: {code_result.method}")
-        if code_result.template_used:
-            print(f"    Template: {code_result.template_used}")
+            # Save generated code
+            self._save_code(strategy_id, code_result.code)
+            print(f"    Method: {code_result.method}")
+            if code_result.template_used:
+                print(f"    Template: {code_result.template_used}")
 
         # Step 3: Run walk-forward backtest
         print(f"  Running walk-forward validation...")
@@ -262,17 +282,26 @@ class Runner:
                 error=wf_result.determination_reason,
             )
 
+        # Re-aggregate with OOS-specific logic for 2-window mode
+        if self.num_windows == 2:
+            self.backtest_executor._aggregate_oos_results(wf_result)
+            print(f"  (Gating on OOS window only)")
+
         # Print window results
         for w in wf_result.windows:
             if w.result.success:
-                print(f"    Window {w.window_id}: CAGR={w.result.cagr*100:.1f}%, Sharpe={w.result.sharpe:.2f}")
+                label = ""
+                if self.num_windows == 2:
+                    label = " [IS]" if w.window_id == 1 else " [OOS]"
+                print(f"    Window {w.window_id}{label}: CAGR={w.result.cagr*100:.1f}%, Sharpe={w.result.sharpe:.2f}")
             else:
                 print(f"    Window {w.window_id}: FAILED - {w.result.error}")
 
         # Print aggregates
         if wf_result.aggregate_sharpe is not None:
             cagr_str = f", CAGR={wf_result.aggregate_cagr*100:.1f}%" if wf_result.aggregate_cagr is not None else ""
-            print(f"  Aggregate: Sharpe={wf_result.aggregate_sharpe:.2f}, Consistency={wf_result.consistency*100:.0f}%{cagr_str}")
+            gate_source = "OOS" if self.num_windows == 2 else "Aggregate"
+            print(f"  {gate_source}: Sharpe={wf_result.aggregate_sharpe:.2f}, Consistency={wf_result.consistency*100:.0f}%{cagr_str}")
             if wf_result.max_drawdown is not None:
                 print(f"             Max DD={wf_result.max_drawdown*100:.1f}%")
 
@@ -280,6 +309,14 @@ class Runner:
         print(f"  Applying validation gates...")
         gate_results = self._apply_gates(wf_result)
         gates_passed = all(g["passed"] for g in gate_results)
+
+        # Step 4b: Window consistency gate (for --windows 5)
+        if self.num_windows >= 5:
+            window_gate = self._apply_window_consistency_gate(wf_result)
+            if window_gate is not None:
+                gate_results.append(window_gate)
+                if not window_gate["passed"]:
+                    gates_passed = False
 
         for gate in gate_results:
             status = "PASS" if gate["passed"] else "FAIL"
@@ -315,6 +352,7 @@ class Runner:
         dry_run: bool = False,
         force_llm: bool = False,
         skip_verify: bool = False,
+        skip_codegen: bool = False,
     ) -> list[RunResult]:
         """Run pipeline for all pending strategies.
 
@@ -322,6 +360,7 @@ class Runner:
             dry_run: If True, show what would happen without executing
             force_llm: Force LLM code generation
             skip_verify: Skip verification check
+            skip_codegen: Skip code generation, use existing backtest.py
 
         Returns:
             List of RunResult for each strategy
@@ -339,7 +378,7 @@ class Runner:
             strategy_id = strat["id"]
             print(f"\n[{i}/{len(strategies)}] Processing {strategy_id}: {strat.get('name', 'Unknown')}")
 
-            result = self.run(strategy_id, dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify)
+            result = self.run(strategy_id, dry_run=dry_run, force_llm=force_llm, skip_verify=skip_verify, skip_codegen=skip_codegen)
             results.append(result)
 
             # Summary for this strategy
@@ -436,6 +475,46 @@ class Runner:
             })
 
         return gates
+
+    def _apply_window_consistency_gate(self, wf_result: WalkForwardResult) -> dict[str, Any] | None:
+        """Check that individual windows pass gates at a minimum rate.
+
+        For --windows 5, evaluates each window against the standard gates
+        and requires min_window_pass_rate fraction to pass all gates.
+        """
+        config_gates = self._config.gates
+        min_pass_rate = config_gates.min_window_pass_rate
+
+        successful_windows = [w for w in wf_result.windows if w.result.success]
+        if not successful_windows:
+            return None
+
+        windows_passing = 0
+        for w in successful_windows:
+            r = w.result
+            passes = True
+            if r.sharpe is not None and r.sharpe < config_gates.min_sharpe:
+                passes = False
+            if r.max_drawdown is not None and r.max_drawdown > config_gates.max_drawdown:
+                passes = False
+            if r.cagr is not None and r.cagr < config_gates.min_cagr:
+                passes = False
+            if passes:
+                windows_passing += 1
+
+        actual_rate = windows_passing / len(successful_windows)
+        passed = actual_rate >= min_pass_rate
+
+        status = "PASS" if passed else "FAIL"
+        print(f"    min_window_pass_rate: {status} ({windows_passing}/{len(successful_windows)} windows pass, "
+              f"actual={actual_rate:.2f}, threshold={min_pass_rate:.2f})")
+
+        return {
+            "gate": "min_window_pass_rate",
+            "threshold": min_pass_rate,
+            "actual": actual_rate,
+            "passed": passed,
+        }
 
     def _update_status(self, strategy_id: str, new_status: str) -> None:
         """Move strategy to new status directory."""

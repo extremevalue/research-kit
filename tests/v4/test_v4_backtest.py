@@ -369,6 +369,136 @@ class TestBacktestResultSerialization:
 # =============================================================================
 
 
+class TestOOSAggregation:
+    """Test OOS-specific aggregation for IS/OOS mode."""
+
+    @pytest.fixture
+    def executor(self, tmp_path):
+        return BacktestExecutor(workspace_path=tmp_path, use_local=True, cleanup_on_start=False)
+
+    def test_oos_aggregation_uses_last_window(self, executor):
+        """Test that OOS aggregation uses only the last window for gates."""
+        wf_result = WalkForwardResult(strategy_id="TEST-OOS-1")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=1,
+                start_date="2012-01-01",
+                end_date="2017-12-31",
+                result=BacktestResult(success=True, cagr=0.25, sharpe=2.0, max_drawdown=0.10),
+            ),
+            WalkForwardWindow(
+                window_id=2,
+                start_date="2018-01-01",
+                end_date="2023-12-31",
+                result=BacktestResult(success=True, cagr=0.08, sharpe=0.5, max_drawdown=0.30),
+            ),
+        ]
+
+        executor._aggregate_oos_results(wf_result)
+
+        # Gates should be based on OOS (window 2) only
+        assert wf_result.aggregate_sharpe == pytest.approx(0.5)
+        assert wf_result.aggregate_cagr == pytest.approx(0.08)
+        assert wf_result.max_drawdown == pytest.approx(0.30)
+        # Mean return uses both windows
+        assert wf_result.mean_return == pytest.approx(0.165, rel=0.01)
+
+    def test_oos_aggregation_failed_oos_window(self, executor):
+        """Test that failed OOS window marks result as BLOCKED."""
+        wf_result = WalkForwardResult(strategy_id="TEST-OOS-2")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=1,
+                start_date="2012-01-01",
+                end_date="2017-12-31",
+                result=BacktestResult(success=True, cagr=0.20, sharpe=1.5, max_drawdown=0.10),
+            ),
+            WalkForwardWindow(
+                window_id=2,
+                start_date="2018-01-01",
+                end_date="2023-12-31",
+                result=BacktestResult(success=False, error="Runtime error"),
+            ),
+        ]
+
+        executor._aggregate_oos_results(wf_result)
+
+        assert wf_result.determination == "BLOCKED"
+        assert "OOS window failed" in wf_result.determination_reason
+
+    def test_oos_aggregation_single_window_falls_back(self, executor):
+        """Test that single-window mode falls back to standard aggregation."""
+        wf_result = WalkForwardResult(strategy_id="TEST-OOS-3")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=1,
+                start_date="2012-01-01",
+                end_date="2023-12-31",
+                result=BacktestResult(success=True, cagr=0.15, sharpe=1.2, max_drawdown=0.12),
+            ),
+        ]
+
+        executor._aggregate_oos_results(wf_result)
+
+        # Should fall back to standard aggregation
+        assert wf_result.aggregate_sharpe == pytest.approx(1.2)
+        assert wf_result.aggregate_cagr == pytest.approx(0.15)
+
+    def test_oos_consistency_uses_all_windows(self, executor):
+        """Test consistency calculation uses all windows, not just OOS."""
+        wf_result = WalkForwardResult(strategy_id="TEST-OOS-4")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=1,
+                start_date="2012-01-01",
+                end_date="2017-12-31",
+                result=BacktestResult(success=True, cagr=-0.05, sharpe=-0.3, max_drawdown=0.25),
+            ),
+            WalkForwardWindow(
+                window_id=2,
+                start_date="2018-01-01",
+                end_date="2023-12-31",
+                result=BacktestResult(success=True, cagr=0.10, sharpe=0.8, max_drawdown=0.15),
+            ),
+        ]
+
+        executor._aggregate_oos_results(wf_result)
+
+        # Consistency = 1/2 = 0.5 (one window negative)
+        assert wf_result.consistency == pytest.approx(0.5)
+
+
+class TestDefaultWindows:
+    """Test that default window configuration is IS/OOS."""
+
+    def test_default_is_two_windows(self, tmp_path):
+        """Executor with num_windows=2 uses IS/OOS windows."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=True, cleanup_on_start=False,
+            num_windows=2,
+        )
+        assert len(executor.windows) == 2
+        assert executor.windows[0] == ("2012-01-01", "2017-12-31")
+        assert executor.windows[1] == ("2018-01-01", "2023-12-31")
+
+    def test_one_window_explicit(self, tmp_path):
+        """Explicit --windows 1 uses single full period."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=True, cleanup_on_start=False,
+            num_windows=1,
+        )
+        assert len(executor.windows) == 1
+        assert executor.windows[0] == ("2012-01-01", "2023-12-31")
+
+    def test_five_windows(self, tmp_path):
+        """--windows 5 uses all rolling windows."""
+        executor = BacktestExecutor(
+            workspace_path=tmp_path, use_local=True, cleanup_on_start=False,
+            num_windows=5,
+        )
+        assert len(executor.windows) == 5
+
+
 class TestReuseProject:
     """Test reusable project mode for avoiding QC 100/day project limit."""
 

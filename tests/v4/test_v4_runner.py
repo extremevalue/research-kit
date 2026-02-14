@@ -488,3 +488,111 @@ class TestForceBlockedRetry:
         assert result.dry_run
         assert result.determination == "PENDING"
         assert (v4_workspace.strategies_path / "pending" / "STRAT-011.yaml").exists()
+
+
+# =============================================================================
+# TEST WINDOW CONSISTENCY GATE
+# =============================================================================
+
+
+class TestWindowConsistencyGate:
+    """Test per-window consistency gate for --windows 5 mode."""
+
+    @pytest.fixture
+    def runner_5_windows(self, v4_workspace):
+        """Create a Runner configured for 5 windows."""
+        return Runner(
+            workspace=v4_workspace,
+            llm_client=None,
+            use_local=True,
+            num_windows=5,
+        )
+
+    def test_window_consistency_all_pass(self, runner_5_windows):
+        """All windows passing gates gives 1.0 pass rate."""
+        wf_result = WalkForwardResult(strategy_id="TEST-WC-1")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=i + 1,
+                start_date=f"201{i*2}-01-01",
+                end_date=f"201{i*2+3}-12-31",
+                result=BacktestResult(success=True, cagr=0.10, sharpe=1.5, max_drawdown=0.15),
+            )
+            for i in range(5)
+        ]
+
+        gate = runner_5_windows._apply_window_consistency_gate(wf_result)
+
+        assert gate is not None
+        assert gate["passed"] is True
+        assert gate["actual"] == pytest.approx(1.0)
+
+    def test_window_consistency_one_fails(self, runner_5_windows):
+        """4/5 windows passing gives 0.8 pass rate (meets 0.8 threshold)."""
+        wf_result = WalkForwardResult(strategy_id="TEST-WC-2")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=i + 1,
+                start_date=f"201{i*2}-01-01",
+                end_date=f"201{i*2+3}-12-31",
+                result=BacktestResult(success=True, cagr=0.10, sharpe=1.5, max_drawdown=0.15),
+            )
+            for i in range(4)
+        ]
+        # Add one failing window (low Sharpe)
+        wf_result.windows.append(WalkForwardWindow(
+            window_id=5,
+            start_date="2020-01-01",
+            end_date="2023-12-31",
+            result=BacktestResult(success=True, cagr=0.02, sharpe=0.1, max_drawdown=0.40),
+        ))
+
+        gate = runner_5_windows._apply_window_consistency_gate(wf_result)
+
+        assert gate is not None
+        assert gate["passed"] is True
+        assert gate["actual"] == pytest.approx(0.8)
+
+    def test_window_consistency_too_many_fail(self, runner_5_windows):
+        """2/5 windows failing gives 0.6 pass rate (below 0.8 threshold)."""
+        wf_result = WalkForwardResult(strategy_id="TEST-WC-3")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=i + 1,
+                start_date=f"201{i*2}-01-01",
+                end_date=f"201{i*2+3}-12-31",
+                result=BacktestResult(success=True, cagr=0.10, sharpe=1.5, max_drawdown=0.15),
+            )
+            for i in range(3)
+        ]
+        # Add two failing windows
+        for j in range(2):
+            wf_result.windows.append(WalkForwardWindow(
+                window_id=4 + j,
+                start_date=f"201{8+j*2}-01-01",
+                end_date=f"202{1+j*2}-12-31",
+                result=BacktestResult(success=True, cagr=-0.05, sharpe=-0.2, max_drawdown=0.45),
+            ))
+
+        gate = runner_5_windows._apply_window_consistency_gate(wf_result)
+
+        assert gate is not None
+        assert gate["passed"] is False
+        assert gate["actual"] == pytest.approx(0.6)
+
+    def test_no_window_consistency_for_single_window(self, runner):
+        """Window consistency gate not applied for --windows 1."""
+        wf_result = WalkForwardResult(strategy_id="TEST-WC-4")
+        wf_result.windows = [
+            WalkForwardWindow(
+                window_id=1,
+                start_date="2012-01-01",
+                end_date="2023-12-31",
+                result=BacktestResult(success=True, cagr=0.10, sharpe=1.5, max_drawdown=0.15),
+            ),
+        ]
+
+        gate = runner._apply_window_consistency_gate(wf_result)
+
+        # Should still return a result (gate exists), but it's not called by runner for windows < 5
+        assert gate is not None
