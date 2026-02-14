@@ -75,6 +75,12 @@ class GatesConfig(BaseModel):
     min_trades: int = Field(
         30, ge=0, description="Minimum number of trades required"
     )
+    min_calmar: float = Field(
+        0.3, ge=0, description="Minimum Calmar ratio (CAGR / MaxDD) required"
+    )
+    min_alpha: float = Field(
+        0.0, description="Minimum alpha (benchmark-relative return) required"
+    )
     min_window_pass_rate: float = Field(
         0.8, ge=0, le=1.0, description="Minimum fraction of windows that must individually pass gates (for --windows 5)"
     )

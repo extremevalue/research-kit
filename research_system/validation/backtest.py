@@ -108,6 +108,8 @@ class WalkForwardResult:
     aggregate_sharpe: float | None = None
     aggregate_cagr: float | None = None
     max_drawdown: float | None = None
+    aggregate_total_trades: int | None = None
+    aggregate_alpha: float | None = None
     consistency: float | None = None  # % of profitable windows
     determination: str = "PENDING"  # VALIDATED, INVALIDATED, BLOCKED, RETRY_LATER
     determination_reason: str = ""
@@ -132,6 +134,8 @@ class WalkForwardResult:
             "aggregate_sharpe": self.aggregate_sharpe,
             "aggregate_cagr": self.aggregate_cagr,
             "max_drawdown": self.max_drawdown,
+            "aggregate_total_trades": self.aggregate_total_trades,
+            "aggregate_alpha": self.aggregate_alpha,
             "consistency": self.consistency,
             "determination": self.determination,
             "determination_reason": self.determination_reason,
@@ -602,6 +606,16 @@ class BacktestExecutor:
         if drawdowns:
             wf_result.max_drawdown = max(drawdowns)
 
+        # Total trades (sum across windows)
+        trades = [w.result.total_trades for w in successful_windows if w.result.total_trades is not None]
+        if trades:
+            wf_result.aggregate_total_trades = sum(trades)
+
+        # Alpha (mean across windows)
+        alphas = [w.result.alpha for w in successful_windows if w.result.alpha is not None]
+        if alphas:
+            wf_result.aggregate_alpha = sum(alphas) / len(alphas)
+
         # Consistency: % of windows with positive CAGR
         profitable = [1 for w in successful_windows if w.result.cagr and w.result.cagr > 0]
         wf_result.consistency = len(profitable) / len(successful_windows) if successful_windows else 0
@@ -626,6 +640,8 @@ class BacktestExecutor:
         wf_result.aggregate_sharpe = oos_window.result.sharpe
         wf_result.aggregate_cagr = oos_window.result.cagr
         wf_result.max_drawdown = oos_window.result.max_drawdown
+        wf_result.aggregate_total_trades = oos_window.result.total_trades
+        wf_result.aggregate_alpha = oos_window.result.alpha
 
         # For mean/median, still use all successful windows for reporting
         successful_windows = [w for w in wf_result.windows if w.result.success]

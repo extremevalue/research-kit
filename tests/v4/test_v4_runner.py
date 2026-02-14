@@ -118,11 +118,13 @@ class TestGateApplication:
             consistency=0.8,  # Above min_consistency=0.6
             max_drawdown=0.15,  # Below max_drawdown=0.25
             aggregate_cagr=0.10,  # Above min_cagr=0.05
+            aggregate_total_trades=50,  # Above min_trades=30
+            aggregate_alpha=0.05,  # Above min_alpha=0.0
         )
 
         gates = runner._apply_gates(wf_result)
 
-        assert len(gates) == 4
+        assert len(gates) == 7  # sharpe, consistency, drawdown, cagr, trades, calmar, alpha
         assert all(g["passed"] for g in gates)
 
     def test_gates_fail_low_sharpe(self, runner):
@@ -596,3 +598,195 @@ class TestWindowConsistencyGate:
 
         # Should still return a result (gate exists), but it's not called by runner for windows < 5
         assert gate is not None
+
+
+# =============================================================================
+# TEST MIN TRADES GATE
+# =============================================================================
+
+
+class TestMinTradesGate:
+    """Test min_trades gate enforcement."""
+
+    def test_min_trades_pass(self, runner):
+        """Test min_trades gate passes with sufficient trades."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-TRADES-1",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.10,
+            aggregate_total_trades=50,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        trades_gate = next(g for g in gates if g["gate"] == "min_trades")
+        assert trades_gate["passed"] is True
+        assert trades_gate["actual"] == 50.0
+        assert trades_gate["threshold"] == 30.0
+
+    def test_min_trades_fail(self, runner):
+        """Test min_trades gate fails with too few trades."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-TRADES-2",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.10,
+            aggregate_total_trades=5,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        trades_gate = next(g for g in gates if g["gate"] == "min_trades")
+        assert trades_gate["passed"] is False
+        assert trades_gate["actual"] == 5.0
+
+    def test_min_trades_skip_when_none(self, runner):
+        """Test min_trades gate is skipped when aggregate_total_trades is None."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-TRADES-3",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.10,
+            aggregate_total_trades=None,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        gate_names = [g["gate"] for g in gates]
+        assert "min_trades" not in gate_names
+
+
+# =============================================================================
+# TEST CALMAR RATIO GATE
+# =============================================================================
+
+
+class TestCalmarGate:
+    """Test Calmar ratio gate (CAGR/MaxDD)."""
+
+    def test_calmar_pass(self, runner):
+        """Test Calmar gate passes with good ratio."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-CALMAR-1",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.20,
+            aggregate_cagr=0.15,  # Calmar = 0.15/0.20 = 0.75
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        calmar_gate = next(g for g in gates if g["gate"] == "min_calmar")
+        assert calmar_gate["passed"] is True
+        assert calmar_gate["actual"] == pytest.approx(0.75)
+        assert calmar_gate["threshold"] == 0.3
+
+    def test_calmar_fail(self, runner):
+        """Test Calmar gate fails with poor ratio."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-CALMAR-2",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.50,
+            aggregate_cagr=0.10,  # Calmar = 0.10/0.50 = 0.20
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        calmar_gate = next(g for g in gates if g["gate"] == "min_calmar")
+        assert calmar_gate["passed"] is False
+        assert calmar_gate["actual"] == pytest.approx(0.20)
+
+    def test_calmar_skip_when_drawdown_zero(self, runner):
+        """Test Calmar gate is skipped when max_drawdown is 0."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-CALMAR-3",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.0,
+            aggregate_cagr=0.10,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        gate_names = [g["gate"] for g in gates]
+        assert "min_calmar" not in gate_names
+
+    def test_calmar_skip_when_cagr_none(self, runner):
+        """Test Calmar gate is skipped when aggregate_cagr is None."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-CALMAR-4",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.20,
+            aggregate_cagr=None,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        gate_names = [g["gate"] for g in gates]
+        assert "min_calmar" not in gate_names
+
+
+# =============================================================================
+# TEST ALPHA GATE
+# =============================================================================
+
+
+class TestAlphaGate:
+    """Test benchmark-relative alpha gate."""
+
+    def test_alpha_pass(self, runner):
+        """Test alpha gate passes with positive alpha."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-ALPHA-1",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.10,
+            aggregate_alpha=0.05,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        alpha_gate = next(g for g in gates if g["gate"] == "min_alpha")
+        assert alpha_gate["passed"] is True
+        assert alpha_gate["actual"] == 0.05
+        assert alpha_gate["threshold"] == 0.0
+
+    def test_alpha_fail(self, runner):
+        """Test alpha gate fails with negative alpha."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-ALPHA-2",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.10,
+            aggregate_alpha=-0.03,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        alpha_gate = next(g for g in gates if g["gate"] == "min_alpha")
+        assert alpha_gate["passed"] is False
+        assert alpha_gate["actual"] == -0.03
+
+    def test_alpha_skip_when_none(self, runner):
+        """Test alpha gate is skipped when aggregate_alpha is None."""
+        wf_result = WalkForwardResult(
+            strategy_id="TEST-ALPHA-3",
+            aggregate_sharpe=1.5,
+            consistency=0.8,
+            max_drawdown=0.15,
+            aggregate_cagr=0.10,
+            aggregate_alpha=None,
+        )
+
+        gates = runner._apply_gates(wf_result)
+
+        gate_names = [g["gate"] for g in gates]
+        assert "min_alpha" not in gate_names

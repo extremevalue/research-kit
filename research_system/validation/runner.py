@@ -474,6 +474,36 @@ class Runner:
                 "passed": wf_result.aggregate_cagr >= config_gates.min_cagr,
             })
 
+        # Min trades gate
+        if wf_result.aggregate_total_trades is not None:
+            gates.append({
+                "gate": "min_trades",
+                "threshold": float(config_gates.min_trades),
+                "actual": float(wf_result.aggregate_total_trades),
+                "passed": wf_result.aggregate_total_trades >= config_gates.min_trades,
+            })
+
+        # Calmar ratio gate (CAGR / MaxDD)
+        if (wf_result.aggregate_cagr is not None
+                and wf_result.max_drawdown is not None
+                and wf_result.max_drawdown > 0):
+            calmar = wf_result.aggregate_cagr / wf_result.max_drawdown
+            gates.append({
+                "gate": "min_calmar",
+                "threshold": config_gates.min_calmar,
+                "actual": calmar,
+                "passed": calmar >= config_gates.min_calmar,
+            })
+
+        # Alpha gate (benchmark-relative)
+        if wf_result.aggregate_alpha is not None:
+            gates.append({
+                "gate": "min_alpha",
+                "threshold": config_gates.min_alpha,
+                "actual": wf_result.aggregate_alpha,
+                "passed": wf_result.aggregate_alpha >= config_gates.min_alpha,
+            })
+
         return gates
 
     def _apply_window_consistency_gate(self, wf_result: WalkForwardResult) -> dict[str, Any] | None:
