@@ -68,6 +68,7 @@ class BacktestResult:
     raw_output: str | None = None
     rate_limited: bool = False
     engine_crash: bool = False
+    equity_curve: dict[str, Any] | None = None  # {"dates": [...], "equity": [...]}
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -84,6 +85,7 @@ class BacktestResult:
             "error": self.error,
             "rate_limited": self.rate_limited,
             "engine_crash": self.engine_crash,
+            "equity_curve": self.equity_curve,
         }
 
 
@@ -831,9 +833,13 @@ class BacktestExecutor:
         # Try to get results from QC API
         project_id, backtest_id = self._extract_backtest_ids(stdout)
         if project_id and backtest_id:
-            stats = self._fetch_backtest_stats(project_id, backtest_id)
-            if stats:
-                return self._parse_stats(stats, stdout)
+            backtest_data = self._fetch_backtest_data(project_id, backtest_id)
+            if backtest_data:
+                stats = backtest_data.get("statistics", {})
+                if stats:
+                    result = self._parse_stats(stats, stdout)
+                    result.equity_curve = self._extract_equity_curve(backtest_data)
+                    return result
 
         # Fallback to table parsing
         return self._parse_lean_output_table(stdout)
@@ -1040,6 +1046,55 @@ class BacktestExecutor:
         if data and data.get("success"):
             return data.get("backtest", {}).get("statistics", {})
         return None
+
+    def _fetch_backtest_data(self, project_id: str, backtest_id: str) -> dict[str, Any] | None:
+        """Fetch full backtest data including equity curve from QC API."""
+        data = self._qc_api_request("backtests/read", {"projectId": project_id, "backtestId": backtest_id})
+        if data and data.get("success"):
+            return data.get("backtest", {})
+        return None
+
+    @staticmethod
+    def _extract_equity_curve(backtest_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Extract monthly equity curve from QC rolling window data.
+
+        The QC API returns a rollingWindow with M1_YYYYMMDD entries containing
+        monthly portfolio statistics including endEquity values.
+        """
+        rolling_window = backtest_data.get("rollingWindow", {})
+        if not rolling_window:
+            return None
+
+        # Extract M1 (1-month) entries which contain month-end equity values
+        monthly_entries = sorted(
+            [(k, v) for k, v in rolling_window.items() if k.startswith("M1_")],
+            key=lambda x: x[0],
+        )
+
+        if not monthly_entries:
+            return None
+
+        dates = []
+        equity = []
+        for key, entry in monthly_entries:
+            # Key format: M1_YYYYMMDD
+            date_str = key[3:]  # Remove "M1_" prefix
+            date_formatted = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+
+            portfolio_stats = entry.get("portfolioStatistics", {})
+            end_equity = portfolio_stats.get("endEquity")
+
+            if end_equity is not None:
+                try:
+                    dates.append(date_formatted)
+                    equity.append(float(end_equity))
+                except (ValueError, TypeError):
+                    continue
+
+        if not dates:
+            return None
+
+        return {"dates": dates, "equity": equity}
 
     def _list_project_backtests(self, project_id: str) -> list[dict[str, Any]]:
         """List all backtests for a project."""

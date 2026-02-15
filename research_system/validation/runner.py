@@ -613,6 +613,17 @@ class Runner:
             }
             backtest_file.write_text(yaml.dump(yaml_data, default_flow_style=False))
 
+            # Save equity curves for each window (for portfolio correlation analysis)
+            for w in result.backtest.windows:
+                if w.result.equity_curve:
+                    curve_file = val_dir / f"equity_curve_w{w.window_id}.json"
+                    curve_file.write_text(json.dumps({
+                        "strategy_id": strategy_id,
+                        "window_id": w.window_id,
+                        "period": f"{w.start_date} to {w.end_date}",
+                        "equity_curve": w.result.equity_curve,
+                    }, indent=2))
+
     def _dry_run(self, strategy_id: str, strategy: dict[str, Any]) -> RunResult:
         """Show what would happen without executing."""
         # V4 schema: tags.hypothesis_type (list), entry.type, hypothesis.summary
