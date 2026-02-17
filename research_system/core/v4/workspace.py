@@ -108,6 +108,7 @@ class Workspace:
         "personas",
         "archive",
         "logs",
+        "research",
     ]
 
     VALID_STATUSES = {"pending", "validated", "invalidated", "blocked"}
@@ -404,6 +405,11 @@ class Workspace:
         return self.path / "logs"
 
     @property
+    def research_path(self) -> Path:
+        """Path to research efforts directory."""
+        return self.path / "research"
+
+    @property
     def state_path(self) -> Path:
         """Path to internal state directory."""
         return self.path / STATE_DIR
@@ -514,6 +520,14 @@ class Workspace:
             if f.is_file() and not f.name.startswith(".")
         ]) if self.inbox_path.exists() else 0
 
+        # Count research efforts (directories containing research.yaml)
+        research_count = 0
+        if self.research_path.exists():
+            research_count = len([
+                d for d in self.research_path.iterdir()
+                if d.is_dir() and (d / "research.yaml").exists()
+            ])
+
         # Get counters
         counters = self._read_counters()
 
@@ -523,6 +537,7 @@ class Workspace:
             "ideas": idea_count,
             "validations": validation_count,
             "inbox_files": inbox_count,
+            "research_efforts": research_count,
             "counters": counters,
         }
 

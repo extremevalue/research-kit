@@ -1344,6 +1344,109 @@ Configuration includes:
     )
     parser.set_defaults(func=cmd_config)
 
+    # explore-init command
+    parser = subparsers.add_parser(
+        "explore-init",
+        help="Initialize a new research effort",
+        description="""
+Create a new research effort directory under research/.
+
+Creates:
+  research/{topic-slug}/
+  ├── research.yaml
+  └── RESEARCH_PLAN.md
+
+Examples:
+  research explore-init "Regime-Conditioned Options" --tags options,regime
+  research explore-init "FX Carry Signal"
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "title",
+        help="Title of the research effort (e.g., 'Regime-Conditioned Options')"
+    )
+    parser.add_argument(
+        "--tags",
+        default="",
+        help="Comma-separated tags (e.g., options,regime)"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to workspace"
+    )
+    parser.set_defaults(func=cmd_explore_init)
+
+    # explore-list command
+    parser = subparsers.add_parser(
+        "explore-list",
+        help="List all research efforts",
+        description="""
+Scan research/ for all directories containing research.yaml and display a table.
+
+Use --index to also write an INDEX.md file for browsing.
+
+Examples:
+  research explore-list
+  research explore-list --index
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--index",
+        action="store_true",
+        help="Also write research/INDEX.md"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to workspace"
+    )
+    parser.set_defaults(func=cmd_explore_list)
+
+    # explore-update command
+    parser = subparsers.add_parser(
+        "explore-update",
+        help="Update a research effort",
+        description="""
+Update fields in an existing research effort's research.yaml.
+
+Examples:
+  research explore-update regime-options --status complete
+  research explore-update fx-signal --strategy STRAT-277
+  research explore-update regime-options --tag volatility
+  research explore-update regime-options --status complete --strategy STRAT-310
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "topic",
+        help="Topic slug of the research effort (e.g., regime-options)"
+    )
+    parser.add_argument(
+        "--status",
+        choices=["active", "paused", "complete", "archived"],
+        help="Set status (active, paused, complete, archived)"
+    )
+    parser.add_argument(
+        "--strategy",
+        help="Append a strategy ID to strategies_produced (e.g., STRAT-306)"
+    )
+    parser.add_argument(
+        "--tag",
+        help="Append a tag"
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        dest="v4_workspace",
+        metavar="PATH",
+        help="Path to workspace"
+    )
+    parser.set_defaults(func=cmd_explore_update)
+
 
 # ============================================================================
 # Command Implementations
@@ -4940,6 +5043,290 @@ def _check_multiple_installations():
     except Exception:
         # Best-effort — never let this break the CLI
         pass
+
+
+# ============================================================================
+# Explore Commands (Research Effort Management)
+# ============================================================================
+
+
+def _slugify(title: str) -> str:
+    """Convert a title to a topic slug (lowercase, hyphenated).
+
+    Examples:
+        "Regime-Conditioned Options" -> "regime-conditioned-options"
+        "FX Carry Signal" -> "fx-carry-signal"
+        "Hello   World!!!" -> "hello-world"
+    """
+    import re
+    slug = title.lower().strip()
+    # Replace any non-alphanumeric characters (except hyphens) with hyphens
+    slug = re.sub(r'[^a-z0-9-]+', '-', slug)
+    # Collapse multiple hyphens
+    slug = re.sub(r'-+', '-', slug)
+    # Strip leading/trailing hyphens
+    slug = slug.strip('-')
+    return slug
+
+
+def _load_research_yaml(path: Path) -> dict:
+    """Load a research.yaml file."""
+    import yaml
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+
+
+def _save_research_yaml(path: Path, data: dict) -> None:
+    """Save a research.yaml file."""
+    import yaml
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def cmd_explore_init(args):
+    """Initialize a new research effort."""
+    import yaml
+
+    workspace = get_workspace_from_args(args)
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init' to initialize a workspace.")
+        return 1
+
+    title = args.title
+    topic = _slugify(title)
+
+    if not topic:
+        print("Error: Title must contain at least one alphanumeric character.")
+        return 1
+
+    tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else []
+
+    research_dir = workspace.research_path / topic
+
+    if research_dir.exists():
+        print(f"Error: Research effort '{topic}' already exists at {research_dir}")
+        return 1
+
+    # Create directory
+    research_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create research.yaml
+    research_data = {
+        "topic": topic,
+        "title": title,
+        "status": "active",
+        "tags": tags,
+        "strategies_produced": [],
+    }
+    _save_research_yaml(research_dir / "research.yaml", research_data)
+
+    # Create RESEARCH_PLAN.md
+    plan_content = f"""# {title}
+
+## Hypothesis
+[What we believe and why]
+
+## Edge Rationale
+[Why this edge might exist, who is the counterparty]
+
+## Risks
+[Why it might not work]
+
+## Data Inventory
+[What we have, what we need]
+
+## Phases
+
+### Phase 1: [Name]
+- **Status:** TODO
+- **Findings:**
+
+## Strategy Implications
+[Links back to STRAT-XXX development]
+"""
+    with open(research_dir / "RESEARCH_PLAN.md", "w") as f:
+        f.write(plan_content)
+
+    print(f"Created research effort: {topic}")
+    print(f"  Directory: {research_dir}")
+    print(f"  research.yaml: {research_dir / 'research.yaml'}")
+    print(f"  RESEARCH_PLAN.md: {research_dir / 'RESEARCH_PLAN.md'}")
+    return 0
+
+
+def _scan_research_efforts(workspace) -> list[dict]:
+    """Scan research/ for all directories containing research.yaml.
+
+    Returns list of research effort data dicts, sorted by topic name.
+    """
+    efforts = []
+    research_dir = workspace.research_path
+
+    if not research_dir.exists():
+        return efforts
+
+    for d in sorted(research_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        yaml_path = d / "research.yaml"
+        if not yaml_path.exists():
+            continue
+        try:
+            data = _load_research_yaml(yaml_path)
+            efforts.append(data)
+        except Exception:
+            # Skip malformed files
+            continue
+
+    return efforts
+
+
+def cmd_explore_list(args):
+    """List all research efforts."""
+    workspace = get_workspace_from_args(args)
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init' to initialize a workspace.")
+        return 1
+
+    efforts = _scan_research_efforts(workspace)
+
+    if not efforts:
+        print("No research efforts found.")
+        print("Use 'research explore-init \"Title\"' to create one.")
+        return 0
+
+    # Print table
+    print("Research Efforts:")
+    # Calculate column widths
+    topic_w = max(len(e.get("topic", "")) for e in efforts)
+    topic_w = max(topic_w, 5)  # minimum width
+    status_w = max(len(e.get("status", "")) for e in efforts)
+    status_w = max(status_w, 6)
+
+    header_topic = "Topic".ljust(topic_w)
+    header_status = "Status".ljust(status_w)
+
+    print(f"  {header_topic}  {header_status}  {'Tags':<24}  Strategies")
+
+    for e in efforts:
+        topic = e.get("topic", "").ljust(topic_w)
+        status = e.get("status", "").ljust(status_w)
+        tags = ", ".join(e.get("tags", []))
+        if len(tags) > 24:
+            tags = tags[:21] + "..."
+        tags = tags.ljust(24)
+        strategies = e.get("strategies_produced", [])
+        if strategies:
+            strat_str = ", ".join(
+                s.replace("STRAT-", "S") if s.startswith("STRAT-") else s
+                for s in strategies
+            )
+        else:
+            strat_str = "\u2014"
+        print(f"  {topic}  {status}  {tags}  {strat_str}")
+
+    # Write INDEX.md if requested
+    write_index = getattr(args, 'index', False)
+    if write_index:
+        _write_research_index(workspace, efforts)
+
+    return 0
+
+
+def _write_research_index(workspace, efforts: list[dict]) -> None:
+    """Write research/INDEX.md."""
+    lines = ["# Research Index", ""]
+    lines.append("| Topic | Title | Status | Tags | Strategies |")
+    lines.append("|-------|-------|--------|------|------------|")
+
+    for e in efforts:
+        topic = e.get("topic", "")
+        title = e.get("title", "")
+        status = e.get("status", "")
+        tags = ", ".join(e.get("tags", []))
+        strategies = e.get("strategies_produced", [])
+        strat_str = ", ".join(strategies) if strategies else "\u2014"
+        plan_link = f"[{topic}]({topic}/RESEARCH_PLAN.md)"
+        lines.append(f"| {plan_link} | {title} | {status} | {tags} | {strat_str} |")
+
+    lines.append("")
+    lines.append("*Auto-generated by `research explore-list --index`*")
+    lines.append("")
+
+    index_path = workspace.research_path / "INDEX.md"
+    with open(index_path, "w") as f:
+        f.write("\n".join(lines))
+
+    print(f"\nWrote {index_path}")
+
+
+def cmd_explore_update(args):
+    """Update a research effort."""
+    workspace = get_workspace_from_args(args)
+
+    try:
+        workspace.require_initialized()
+    except V4WorkspaceError as e:
+        print(f"Error: {e}")
+        print("Run 'research init' to initialize a workspace.")
+        return 1
+
+    topic = args.topic
+    new_status = getattr(args, 'status', None)
+    new_strategy = getattr(args, 'strategy', None)
+    new_tag = getattr(args, 'tag', None)
+
+    if not new_status and not new_strategy and not new_tag:
+        print("Error: At least one update flag required (--status, --strategy, or --tag)")
+        return 1
+
+    yaml_path = workspace.research_path / topic / "research.yaml"
+
+    if not yaml_path.exists():
+        print(f"Error: Research effort '{topic}' not found at {workspace.research_path / topic}")
+        return 1
+
+    data = _load_research_yaml(yaml_path)
+
+    changes = []
+
+    if new_status:
+        data["status"] = new_status
+        changes.append(f"status -> {new_status}")
+
+    if new_strategy:
+        strategies = data.get("strategies_produced", [])
+        if new_strategy not in strategies:
+            strategies.append(new_strategy)
+            data["strategies_produced"] = strategies
+            changes.append(f"added strategy {new_strategy}")
+        else:
+            changes.append(f"strategy {new_strategy} already present")
+
+    if new_tag:
+        tags = data.get("tags", [])
+        if new_tag not in tags:
+            tags.append(new_tag)
+            data["tags"] = tags
+            changes.append(f"added tag '{new_tag}'")
+        else:
+            changes.append(f"tag '{new_tag}' already present")
+
+    _save_research_yaml(yaml_path, data)
+
+    print(f"Updated {topic}:")
+    for change in changes:
+        print(f"  {change}")
+
+    return 0
 
 
 # ============================================================================
