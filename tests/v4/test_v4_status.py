@@ -14,7 +14,7 @@ import yaml
 
 
 @pytest.fixture
-def v4_workspace(tmp_path):
+def workspace(tmp_path):
     """Create an initialized V4 workspace."""
     from research_system.core.v4.workspace import Workspace
 
@@ -24,7 +24,7 @@ def v4_workspace(tmp_path):
 
 
 @pytest.fixture
-def workspace_with_content(v4_workspace):
+def workspace_with_content(workspace):
     """Create workspace with strategies and inbox files."""
     # Create strategies in various states
     strategies = [
@@ -35,22 +35,22 @@ def workspace_with_content(v4_workspace):
 
     # Pending strategies
     for s in strategies[:2]:
-        filepath = v4_workspace.strategies_path / "pending" / f"{s['id']}.yaml"
+        filepath = workspace.strategies_path / "pending" / f"{s['id']}.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(s, f)
 
     # Validated strategy
-    filepath = v4_workspace.strategies_path / "validated" / f"{strategies[2]['id']}.yaml"
+    filepath = workspace.strategies_path / "validated" / f"{strategies[2]['id']}.yaml"
     filepath.parent.mkdir(parents=True, exist_ok=True)
     with open(filepath, "w") as f:
         yaml.dump(strategies[2], f)
 
     # Add inbox files
-    (v4_workspace.inbox_path / "doc1.txt").write_text("Strategy document 1")
-    (v4_workspace.inbox_path / "doc2.txt").write_text("Strategy document 2")
+    (workspace.inbox_path / "doc1.txt").write_text("Strategy document 1")
+    (workspace.inbox_path / "doc2.txt").write_text("Strategy document 2")
 
-    return v4_workspace
+    return workspace
 
 
 # =============================================================================
@@ -61,12 +61,12 @@ def workspace_with_content(v4_workspace):
 class TestV4StatusBasic:
     """Tests for basic status output."""
 
-    def test_status_empty_workspace(self, v4_workspace, capsys):
+    def test_status_empty_workspace(self, workspace, capsys):
         """Shows status for empty workspace."""
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         result = cmd_status(args)
@@ -74,7 +74,7 @@ class TestV4StatusBasic:
 
         captured = capsys.readouterr()
         assert "Research-Kit Workspace Status" in captured.out
-        assert str(v4_workspace.path) in captured.out
+        assert str(workspace.path) in captured.out
         assert "No strategies yet" in captured.out
 
     def test_status_with_content(self, workspace_with_content, capsys):
@@ -82,7 +82,7 @@ class TestV4StatusBasic:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_content.path)
+            workspace=str(workspace_with_content.path)
         )
 
         result = cmd_status(args)
@@ -94,18 +94,18 @@ class TestV4StatusBasic:
         assert "2" in captured.out  # 2 pending
         assert "1" in captured.out  # 1 validated
 
-    def test_status_shows_workspace_path(self, v4_workspace, capsys):
+    def test_status_shows_workspace_path(self, workspace, capsys):
         """Shows workspace path in output."""
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         cmd_status(args)
 
         captured = capsys.readouterr()
-        assert str(v4_workspace.path) in captured.out
+        assert str(workspace.path) in captured.out
 
 
 # =============================================================================
@@ -121,7 +121,7 @@ class TestV4StatusCounts:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_content.path)
+            workspace=str(workspace_with_content.path)
         )
 
         cmd_status(args)
@@ -137,7 +137,7 @@ class TestV4StatusCounts:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_content.path)
+            workspace=str(workspace_with_content.path)
         )
 
         cmd_status(args)
@@ -155,12 +155,12 @@ class TestV4StatusCounts:
 class TestV4StatusInbox:
     """Tests for inbox status."""
 
-    def test_empty_inbox_message(self, v4_workspace, capsys):
+    def test_empty_inbox_message(self, workspace, capsys):
         """Shows empty inbox message."""
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         cmd_status(args)
@@ -173,7 +173,7 @@ class TestV4StatusInbox:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_content.path)
+            workspace=str(workspace_with_content.path)
         )
 
         cmd_status(args)
@@ -190,12 +190,12 @@ class TestV4StatusInbox:
 class TestV4StatusCounters:
     """Tests for ID counter display."""
 
-    def test_shows_next_ids(self, v4_workspace, capsys):
+    def test_shows_next_ids(self, workspace, capsys):
         """Shows next ID numbers."""
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         cmd_status(args)
@@ -204,16 +204,16 @@ class TestV4StatusCounters:
         assert "Next strategy: STRAT-001" in captured.out
         assert "Next idea:" in captured.out
 
-    def test_counter_increments(self, v4_workspace, capsys):
+    def test_counter_increments(self, workspace, capsys):
         """Counter increments are reflected."""
         # Use some IDs
-        v4_workspace.next_strategy_id()
-        v4_workspace.next_strategy_id()
+        workspace.next_strategy_id()
+        workspace.next_strategy_id()
 
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         cmd_status(args)
@@ -230,12 +230,12 @@ class TestV4StatusCounters:
 class TestV4StatusRecent:
     """Tests for recent strategies section."""
 
-    def test_no_recent_when_empty(self, v4_workspace, capsys):
+    def test_no_recent_when_empty(self, workspace, capsys):
         """No recent section when no strategies."""
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         cmd_status(args)
@@ -248,7 +248,7 @@ class TestV4StatusRecent:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_content.path)
+            workspace=str(workspace_with_content.path)
         )
 
         cmd_status(args)
@@ -271,7 +271,7 @@ class TestV4StatusActions:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_content.path)
+            workspace=str(workspace_with_content.path)
         )
 
         cmd_status(args)
@@ -279,12 +279,12 @@ class TestV4StatusActions:
         captured = capsys.readouterr()
         assert "ingest" in captured.out
 
-    def test_suggests_adding_to_inbox_when_empty(self, v4_workspace, capsys):
+    def test_suggests_adding_to_inbox_when_empty(self, workspace, capsys):
         """Suggests adding docs when empty workspace."""
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path)
+            workspace=str(workspace.path)
         )
 
         cmd_status(args)
@@ -306,7 +306,7 @@ class TestV4StatusErrors:
         from research_system.cli.main import cmd_status
 
         args = SimpleNamespace(
-            v4_workspace=str(tmp_path / "nonexistent")
+            workspace=str(tmp_path / "nonexistent")
         )
 
         result = cmd_status(args)

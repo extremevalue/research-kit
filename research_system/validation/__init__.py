@@ -1,4 +1,4 @@
-"""V4 Validation module for strategy verification and walk-forward testing."""
+"""Validation module for strategy verification and walk-forward testing."""
 
 from research_system.validation.verifier import (
     Verifier,

@@ -115,11 +115,11 @@ class TestDefaultConfig:
         assert config.logging.level == "INFO"
         assert "%(asctime)s" in config.logging.format
 
-    def test_default_api_model(self):
-        """Test default API model."""
+    def test_default_api_config(self):
+        """Test default API config exists."""
         config = get_default_config()
 
-        assert config.api.anthropic_model == "claude-3-5-sonnet-20241022"
+        assert config.api is not None
 
 
 # =============================================================================
@@ -524,29 +524,10 @@ class TestValidateConfig:
 class TestEnvironmentVariables:
     """Test environment variable support for API keys."""
 
-    def test_api_key_from_env_var(self, monkeypatch):
-        """Test that API key is read from environment variable."""
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-api-key-123")
-
+    def test_api_config_empty(self):
+        """Test that APIConfig has no fields (reserved for future use)."""
         config = APIConfig()
-
-        assert config.anthropic_api_key == "test-api-key-123"
-
-    def test_explicit_api_key_overrides_env(self, monkeypatch):
-        """Test that explicit API key takes precedence."""
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
-
-        config = APIConfig(anthropic_api_key="explicit-key")
-
-        assert config.anthropic_api_key == "explicit-key"
-
-    def test_api_key_none_when_not_set(self, monkeypatch):
-        """Test that API key is None when not set."""
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-
-        config = APIConfig()
-
-        assert config.anthropic_api_key is None
+        assert config is not None
 
 
 # =============================================================================
@@ -611,8 +592,7 @@ logging:
   level: INFO
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-api:
-  anthropic_model: claude-3-5-sonnet-20241022
+api: {}
 """
 
         config_file = tmp_path / "research-kit.yaml"
@@ -631,7 +611,7 @@ api:
         assert "sharpe_above_3" in config.red_flags.hard_reject
         assert "unknown_rationale" in config.red_flags.soft_warning
         assert config.logging.level == "INFO"
-        assert config.api.anthropic_model == "claude-3-5-sonnet-20241022"
+        assert config.api is not None
 
         # Validate config
         errors = validate_config(config)

@@ -15,7 +15,7 @@ import yaml
 
 
 @pytest.fixture
-def v4_workspace(tmp_path):
+def workspace(tmp_path):
     """Create an initialized V4 workspace."""
     from research_system.core.v4.workspace import Workspace
 
@@ -25,7 +25,7 @@ def v4_workspace(tmp_path):
 
 
 @pytest.fixture
-def workspace_with_strategy(v4_workspace):
+def workspace_with_strategy(workspace):
     """Create workspace with a sample strategy."""
     strategy = {
         "id": "STRAT-001",
@@ -74,12 +74,12 @@ def workspace_with_strategy(v4_workspace):
         },
     }
 
-    filepath = v4_workspace.strategies_path / "pending" / "STRAT-001.yaml"
+    filepath = workspace.strategies_path / "pending" / "STRAT-001.yaml"
     filepath.parent.mkdir(parents=True, exist_ok=True)
     with open(filepath, "w") as f:
         yaml.dump(strategy, f)
 
-    return v4_workspace
+    return workspace
 
 
 # =============================================================================
@@ -96,7 +96,7 @@ class TestV4ShowTextFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="text"
         )
 
@@ -114,7 +114,7 @@ class TestV4ShowTextFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="text"
         )
 
@@ -131,7 +131,7 @@ class TestV4ShowTextFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="text"
         )
 
@@ -148,7 +148,7 @@ class TestV4ShowTextFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="text"
         )
 
@@ -164,7 +164,7 @@ class TestV4ShowTextFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="text"
         )
 
@@ -180,7 +180,7 @@ class TestV4ShowTextFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="text"
         )
 
@@ -205,7 +205,7 @@ class TestV4ShowYamlFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="yaml"
         )
 
@@ -223,7 +223,7 @@ class TestV4ShowYamlFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="yaml"
         )
 
@@ -249,7 +249,7 @@ class TestV4ShowJsonFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="json"
         )
 
@@ -267,7 +267,7 @@ class TestV4ShowJsonFormat:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_with_strategy.path),
+            workspace=str(workspace_with_strategy.path),
             format="json"
         )
 
@@ -287,13 +287,13 @@ class TestV4ShowJsonFormat:
 class TestV4ShowErrors:
     """Tests for error handling."""
 
-    def test_strategy_not_found(self, v4_workspace, capsys):
+    def test_strategy_not_found(self, workspace, capsys):
         """Shows error for non-existent strategy."""
         from research_system.cli.main import cmd_show
 
         args = SimpleNamespace(
             strategy_id="STRAT-999",
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             format="text"
         )
 
@@ -310,7 +310,7 @@ class TestV4ShowErrors:
 
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(tmp_path / "nonexistent"),
+            workspace=str(tmp_path / "nonexistent"),
             format="text"
         )
 
@@ -330,13 +330,13 @@ class TestV4ShowErrors:
 class TestV4ShowEdgeCases:
     """Edge case tests."""
 
-    def test_minimal_strategy(self, v4_workspace, capsys):
+    def test_minimal_strategy(self, workspace, capsys):
         """Shows minimal strategy with only required fields."""
         strategy = {
             "id": "STRAT-002",
             "name": "Minimal Strategy",
         }
-        filepath = v4_workspace.strategies_path / "pending" / "STRAT-002.yaml"
+        filepath = workspace.strategies_path / "pending" / "STRAT-002.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strategy, f)
@@ -345,7 +345,7 @@ class TestV4ShowEdgeCases:
 
         args = SimpleNamespace(
             strategy_id="STRAT-002",
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             format="text"
         )
 
@@ -356,13 +356,13 @@ class TestV4ShowEdgeCases:
         assert "STRAT-002" in captured.out
         assert "Minimal Strategy" in captured.out
 
-    def test_strategy_in_validated(self, v4_workspace, capsys):
+    def test_strategy_in_validated(self, workspace, capsys):
         """Can show strategy from validated directory."""
         strategy = {
             "id": "STRAT-003",
             "name": "Validated Strategy",
         }
-        filepath = v4_workspace.strategies_path / "validated" / "STRAT-003.yaml"
+        filepath = workspace.strategies_path / "validated" / "STRAT-003.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strategy, f)
@@ -371,7 +371,7 @@ class TestV4ShowEdgeCases:
 
         args = SimpleNamespace(
             strategy_id="STRAT-003",
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             format="text"
         )
 
@@ -382,7 +382,7 @@ class TestV4ShowEdgeCases:
         assert "STRAT-003" in captured.out
         assert "validated" in captured.out
 
-    def test_strategy_with_many_symbols(self, v4_workspace, capsys):
+    def test_strategy_with_many_symbols(self, workspace, capsys):
         """Truncates display when many symbols."""
         strategy = {
             "id": "STRAT-004",
@@ -392,7 +392,7 @@ class TestV4ShowEdgeCases:
                 "symbols": [f"SYM{i}" for i in range(20)],
             },
         }
-        filepath = v4_workspace.strategies_path / "pending" / "STRAT-004.yaml"
+        filepath = workspace.strategies_path / "pending" / "STRAT-004.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strategy, f)
@@ -401,7 +401,7 @@ class TestV4ShowEdgeCases:
 
         args = SimpleNamespace(
             strategy_id="STRAT-004",
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             format="text"
         )
 

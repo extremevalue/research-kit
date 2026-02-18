@@ -1,6 +1,6 @@
-"""V4 Logging System.
+"""Logging System.
 
-This module provides logging configuration for the V4 research-kit system.
+This module provides logging configuration for the research-kit system.
 
 Features:
 - Daily rotating log files with TimedRotatingFileHandler

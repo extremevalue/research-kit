@@ -14,7 +14,7 @@ import yaml
 
 
 @pytest.fixture
-def v4_workspace(tmp_path):
+def workspace(tmp_path):
     """Create an initialized V4 workspace."""
     from research_system.core.v4.workspace import Workspace
 
@@ -24,7 +24,7 @@ def v4_workspace(tmp_path):
 
 
 @pytest.fixture
-def workspace_with_strategies(v4_workspace):
+def workspace_with_strategies(workspace):
     """Create workspace with sample strategies."""
     strategies = [
         {
@@ -66,12 +66,12 @@ def workspace_with_strategies(v4_workspace):
 
     for strat in strategies:
         status = strat.pop("status")
-        filepath = v4_workspace.strategies_path / status / f"{strat['id']}.yaml"
+        filepath = workspace.strategies_path / status / f"{strat['id']}.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strat, f)
 
-    return v4_workspace
+    return workspace
 
 
 # =============================================================================
@@ -82,9 +82,9 @@ def workspace_with_strategies(v4_workspace):
 class TestListStrategies:
     """Tests for Workspace.list_strategies()."""
 
-    def test_list_empty_workspace(self, v4_workspace):
+    def test_list_empty_workspace(self, workspace):
         """Empty workspace returns empty list."""
-        result = v4_workspace.list_strategies()
+        result = workspace.list_strategies()
         assert result == []
 
     def test_list_all_strategies(self, workspace_with_strategies):
@@ -189,13 +189,13 @@ class TestGetStrategy:
 class TestV4ListCLI:
     """Tests for the v4-list CLI command."""
 
-    def test_list_empty_workspace(self, v4_workspace, capsys):
+    def test_list_empty_workspace(self, workspace, capsys):
         """Empty workspace shows appropriate message."""
         from research_system.cli.main import cmd_list
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             status=None,
             tags=None,
             format="table"
@@ -213,7 +213,7 @@ class TestV4ListCLI:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_strategies.path),
+            workspace=str(workspace_with_strategies.path),
             status=None,
             tags=None,
             format="table"
@@ -236,7 +236,7 @@ class TestV4ListCLI:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_strategies.path),
+            workspace=str(workspace_with_strategies.path),
             status=None,
             tags=None,
             format="json"
@@ -256,7 +256,7 @@ class TestV4ListCLI:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_strategies.path),
+            workspace=str(workspace_with_strategies.path),
             status="validated",
             tags=None,
             format="table"
@@ -276,7 +276,7 @@ class TestV4ListCLI:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_with_strategies.path),
+            workspace=str(workspace_with_strategies.path),
             status=None,
             tags="volatility",
             format="table"
@@ -299,7 +299,7 @@ class TestV4ListErrorHandling:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(tmp_path / "nonexistent"),
+            workspace=str(tmp_path / "nonexistent"),
             status=None,
             tags=None,
             format="table"
@@ -312,10 +312,10 @@ class TestV4ListErrorHandling:
         assert "Error" in captured.out
         assert "init --v4" in captured.out
 
-    def test_malformed_yaml_graceful(self, v4_workspace, capsys):
+    def test_malformed_yaml_graceful(self, workspace, capsys):
         """Malformed YAML files don't crash the listing."""
         # Create a malformed YAML file
-        malformed = v4_workspace.strategies_path / "pending" / "STRAT-BAD.yaml"
+        malformed = workspace.strategies_path / "pending" / "STRAT-BAD.yaml"
         malformed.parent.mkdir(parents=True, exist_ok=True)
         malformed.write_text("this: is: invalid: yaml: [")
 
@@ -323,7 +323,7 @@ class TestV4ListErrorHandling:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             status=None,
             tags=None,
             format="table"
@@ -344,7 +344,7 @@ class TestV4ListErrorHandling:
 class TestEdgeCases:
     """Edge case tests."""
 
-    def test_tags_as_list(self, v4_workspace):
+    def test_tags_as_list(self, workspace):
         """Strategies with tags as list (not dict) work."""
         strat = {
             "id": "STRAT-010",
@@ -352,38 +352,38 @@ class TestEdgeCases:
             "created": "2024-01-20T10:00:00Z",
             "tags": ["simple", "test"],  # List instead of dict
         }
-        filepath = v4_workspace.strategies_path / "pending" / "STRAT-010.yaml"
+        filepath = workspace.strategies_path / "pending" / "STRAT-010.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strat, f)
 
-        result = v4_workspace.list_strategies()
+        result = workspace.list_strategies()
         assert len(result) == 1
         assert result[0]["tags"] == ["simple", "test"]
 
-    def test_missing_created_field(self, v4_workspace):
+    def test_missing_created_field(self, workspace):
         """Strategies without created field still list."""
         strat = {
             "id": "STRAT-011",
             "name": "No Date Strategy",
         }
-        filepath = v4_workspace.strategies_path / "pending" / "STRAT-011.yaml"
+        filepath = workspace.strategies_path / "pending" / "STRAT-011.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strat, f)
 
-        result = v4_workspace.list_strategies()
+        result = workspace.list_strategies()
         assert len(result) == 1
         assert result[0]["created"] is None
 
-    def test_very_long_name_truncated(self, v4_workspace, capsys):
+    def test_very_long_name_truncated(self, workspace, capsys):
         """Very long names are truncated in table output."""
         strat = {
             "id": "STRAT-012",
             "name": "A" * 100,  # 100 character name
             "created": "2024-01-20T10:00:00Z",
         }
-        filepath = v4_workspace.strategies_path / "pending" / "STRAT-012.yaml"
+        filepath = workspace.strategies_path / "pending" / "STRAT-012.yaml"
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w") as f:
             yaml.dump(strat, f)
@@ -392,7 +392,7 @@ class TestEdgeCases:
         from types import SimpleNamespace
 
         args = SimpleNamespace(
-            v4_workspace=str(v4_workspace.path),
+            workspace=str(workspace.path),
             status=None,
             tags=None,
             format="table"

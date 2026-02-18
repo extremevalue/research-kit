@@ -114,7 +114,7 @@ class ParameterOptimizer:
 
         Args:
             backtest_executor: BacktestExecutor for running backtests
-            code_generator: V4CodeGenerator for generating code
+            code_generator: CodeGenerator for generating code
         """
         self.backtest_executor = backtest_executor
         self.code_generator = code_generator

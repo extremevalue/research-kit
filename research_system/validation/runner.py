@@ -1,7 +1,7 @@
-"""V4 Runner - Orchestrates the complete validation pipeline.
+"""Runner - Orchestrates the complete validation pipeline.
 
 Pipeline steps:
-1. Load V4 strategy YAML
+1. Load strategy YAML
 2. Generate QuantConnect Python code (template or LLM)
 3. Run backtest via LEAN CLI (local or cloud)
 4. Parse results (Sharpe, drawdown, CAGR)
@@ -20,7 +20,7 @@ from typing import Any
 
 import yaml
 
-from research_system.codegen.v4_generator import V4CodeGenerator, V4CodeGenResult
+from research_system.codegen.strategy_generator import CodeGenerator, CodeGenResult
 from research_system.validation.backtest import (
     BacktestExecutor,
     BacktestResult,
@@ -34,12 +34,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RunResult:
-    """Result of a V4 pipeline run."""
+    """Result of a pipeline run."""
 
     strategy_id: str
     success: bool
     determination: str = "PENDING"  # VALIDATED, INVALIDATED, BLOCKED, FAILED
-    code_gen: V4CodeGenResult | None = None
+    code_gen: CodeGenResult | None = None
     backtest: WalkForwardResult | None = None
     gate_results: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
@@ -62,13 +62,13 @@ class RunResult:
 
 
 class Runner:
-    """Orchestrates the complete V4 validation pipeline.
+    """Orchestrates the complete validation pipeline.
 
     The runner handles:
     - Strategy loading from workspace
     - Code generation (template or LLM)
     - Backtest execution (local or cloud)
-    - Gate application from V4Config
+    - Gate application from Config
     - Status updates and file management
     - Result persistence
     """
@@ -81,10 +81,10 @@ class Runner:
         num_windows: int = 1,
         reuse_project: bool = True,
     ):
-        """Initialize the V4 runner.
+        """Initialize the runner.
 
         Args:
-            workspace: V4Workspace instance
+            workspace: Workspace instance
             llm_client: Optional LLM client for code generation
             use_local: Use local Docker instead of QC cloud
             num_windows: Number of walk-forward windows (1, 2, or 5)
@@ -96,7 +96,7 @@ class Runner:
         self.num_windows = num_windows
 
         # Initialize code generator
-        self.code_generator = V4CodeGenerator(llm_client)
+        self.code_generator = CodeGenerator(llm_client)
 
         # Load config for gates
         self._config = workspace.config
@@ -132,7 +132,7 @@ class Runner:
         Returns:
             RunResult with pipeline outcome
         """
-        logger.info(f"Running V4 pipeline for {strategy_id}")
+        logger.info(f"Running pipeline for {strategy_id}")
 
         # Step 1: Load strategy
         strategy = self._load_strategy(strategy_id)
@@ -160,15 +160,15 @@ class Runner:
 
         # Step 1b: Run verification check (unless skipped)
         if not skip_verify and not dry_run:
-            from research_system.validation import V4Verifier, VerificationStatus
+            from research_system.validation import Verifier, VerificationStatus
 
             print(f"  Checking verification status...")
-            verifier = V4Verifier(self.workspace)
+            verifier = Verifier(self.workspace)
             verify_result = verifier.verify(strategy)
 
             if verify_result.overall_status == VerificationStatus.FAIL:
                 print(f"    FAILED - {verify_result.failed} verification failures")
-                print(f"    Run 'research v4-verify {strategy_id}' to see details")
+                print(f"    Run 'research verify {strategy_id}' to see details")
                 return RunResult(
                     strategy_id=strategy_id,
                     success=False,
@@ -189,7 +189,7 @@ class Runner:
             existing_code_path = self.workspace.validations_path / strategy_id / "backtest.py"
             if existing_code_path.exists():
                 existing_code = existing_code_path.read_text()
-                code_result = V4CodeGenResult(
+                code_result = CodeGenResult(
                     success=True,
                     code=existing_code,
                     method="existing",
@@ -418,7 +418,7 @@ class Runner:
         self,
         strategy: dict[str, Any],
         force_llm: bool = False,
-    ) -> V4CodeGenResult:
+    ) -> CodeGenResult:
         """Generate backtest code for strategy."""
         return self.code_generator.generate(strategy, force_llm=force_llm)
 
@@ -626,7 +626,7 @@ class Runner:
 
     def _dry_run(self, strategy_id: str, strategy: dict[str, Any]) -> RunResult:
         """Show what would happen without executing."""
-        # V4 schema: tags.hypothesis_type (list), entry.type, hypothesis.summary
+        # Schema: tags.hypothesis_type (list), entry.type, hypothesis.summary
         tags = strategy.get("tags", {})
         hypothesis_type_list = tags.get("hypothesis_type", [])
         strategy_type = ", ".join(hypothesis_type_list) if hypothesis_type_list else "unknown"
@@ -640,8 +640,8 @@ class Runner:
         print(f"  Description: {description[:80]}...")
 
         # Check if template would match
-        from research_system.codegen.templates.v4 import get_template_for_v4_strategy
-        template = get_template_for_v4_strategy(strategy_type, signal_type)
+        from research_system.codegen.templates.v4 import get_template_for_strategy
+        template = get_template_for_strategy(strategy_type, signal_type)
         print(f"  Code generation: {'Template' if template != 'base.py.j2' else 'LLM'}")
         if template != "base.py.j2":
             print(f"    Template: {template}")

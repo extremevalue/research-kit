@@ -1,11 +1,10 @@
-"""V4 Configuration System.
+"""Configuration System.
 
-This module provides the configuration system for V4 research-kit, including:
+This module provides the configuration system for research-kit, including:
 - Pydantic models for all configuration sections
 - YAML file loading with default fallbacks
 - Partial config merging
 - Validation with clear error messages
-- Environment variable support for sensitive values
 
 Configuration is loaded from research-kit.yaml files. If no file exists,
 sensible defaults are used. Partial configurations are merged with defaults.
@@ -13,7 +12,6 @@ sensible defaults are used. Partial configurations are merged with defaults.
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -240,25 +238,12 @@ class LoggingConfig(BaseModel):
 class APIConfig(BaseModel):
     """API configuration.
 
-    API keys can be specified here or via environment variables.
-    Environment variables take precedence.
+    Reserved for future use. LLM access is handled automatically by the
+    LLM client which prefers Claude CLI, then falls back to the Anthropic
+    API (via ANTHROPIC_API_KEY env var), then offline mode.
     """
 
-    anthropic_model: str = Field(
-        "claude-3-5-sonnet-20241022",
-        description="Anthropic model to use for LLM operations",
-    )
-    anthropic_api_key: str | None = Field(
-        None,
-        description="Anthropic API key (can also be set via ANTHROPIC_API_KEY env var)",
-    )
-
-    @model_validator(mode="after")
-    def resolve_env_vars(self) -> "APIConfig":
-        """Resolve API keys from environment variables if not set."""
-        if self.anthropic_api_key is None:
-            self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
-        return self
+    pass
 
 
 class Config(BaseModel):

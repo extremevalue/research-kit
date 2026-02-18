@@ -1,4 +1,4 @@
-"""V4 Strategy Ideator - Generate new strategy ideas.
+"""Strategy Ideator - Generate new strategy ideas.
 
 This module generates new strategy ideas based on:
 - Existing validated strategies
@@ -106,7 +106,7 @@ class Ideator:
         """Initialize ideator.
 
         Args:
-            workspace: V4Workspace instance
+            workspace: Workspace instance
         """
         self.workspace = workspace
 

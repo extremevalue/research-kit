@@ -1,6 +1,6 @@
-"""V4 Core Module.
+"""Core Module.
 
-This package provides the core components for the V4 research-kit system:
+This package provides the core components for the research-kit system:
 
 - Configuration loading and validation (research-kit.yaml)
 - Workspace management (directories, ID generation)

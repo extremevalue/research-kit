@@ -72,7 +72,6 @@ class TestWorkspaceInit:
         assert env_template.exists()
 
         content = env_template.read_text()
-        assert "ANTHROPIC_API_KEY" in content
         assert "RESEARCH_WORKSPACE" in content
         assert "QC_USER_ID" in content
         assert "QC_API_TOKEN" in content

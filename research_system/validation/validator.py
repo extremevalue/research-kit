@@ -1,4 +1,4 @@
-"""V4 Strategy Validator - Run walk-forward validation on strategies.
+"""Strategy Validator - Run walk-forward validation on strategies.
 
 This module provides walk-forward validation for strategies, including:
 - Pre-validation verification checks
@@ -86,14 +86,14 @@ DEFAULT_GATES = {
 
 
 class Validator:
-    """Validator for V4 strategies."""
+    """Validator for strategies."""
 
     def __init__(self, workspace, verifier=None):
         """Initialize validator.
 
         Args:
-            workspace: V4Workspace instance
-            verifier: Optional V4Verifier instance (created if not provided)
+            workspace: Workspace instance
+            verifier: Optional Verifier instance (created if not provided)
         """
         self.workspace = workspace
         self.verifier = verifier

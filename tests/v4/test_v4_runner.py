@@ -30,7 +30,7 @@ from research_system.validation.runner import Runner, RunResult
 
 
 @pytest.fixture
-def v4_workspace(tmp_path):
+def workspace(tmp_path):
     """Create an initialized V4 workspace."""
     ws = Workspace(tmp_path)
     ws.init()
@@ -38,7 +38,7 @@ def v4_workspace(tmp_path):
 
 
 @pytest.fixture
-def sample_strategy(v4_workspace):
+def sample_strategy(workspace):
     """Create a sample strategy in the workspace."""
     strategy = {
         "id": "STRAT-001",
@@ -56,7 +56,7 @@ def sample_strategy(v4_workspace):
     }
 
     # Save to pending directory
-    pending_path = v4_workspace.strategies_path / "pending"
+    pending_path = workspace.strategies_path / "pending"
     pending_path.mkdir(parents=True, exist_ok=True)
     strategy_file = pending_path / "STRAT-001.yaml"
     strategy_file.write_text(yaml.dump(strategy))
@@ -65,10 +65,10 @@ def sample_strategy(v4_workspace):
 
 
 @pytest.fixture
-def runner(v4_workspace):
+def runner(workspace):
     """Create a Runner with mocked backtest executor."""
     return Runner(
-        workspace=v4_workspace,
+        workspace=workspace,
         llm_client=None,
         use_local=True,
     )
@@ -214,7 +214,7 @@ class TestGateApplication:
 class TestDryRun:
     """Test dry-run mode doesn't modify files."""
 
-    def test_dry_run_doesnt_move_files(self, runner, sample_strategy, v4_workspace):
+    def test_dry_run_doesnt_move_files(self, runner, sample_strategy, workspace):
         """Test dry-run doesn't move strategy files."""
         # Run in dry-run mode
         result = runner.run("STRAT-001", dry_run=True)
@@ -223,9 +223,9 @@ class TestDryRun:
         assert result.determination == "PENDING"
 
         # Strategy should still be in pending
-        assert (v4_workspace.strategies_path / "pending" / "STRAT-001.yaml").exists()
-        assert not (v4_workspace.strategies_path / "validated" / "STRAT-001.yaml").exists()
-        assert not (v4_workspace.strategies_path / "invalidated" / "STRAT-001.yaml").exists()
+        assert (workspace.strategies_path / "pending" / "STRAT-001.yaml").exists()
+        assert not (workspace.strategies_path / "validated" / "STRAT-001.yaml").exists()
+        assert not (workspace.strategies_path / "invalidated" / "STRAT-001.yaml").exists()
 
     def test_dry_run_shows_strategy_info(self, runner, sample_strategy, capsys):
         """Test dry-run prints strategy information."""
@@ -244,16 +244,16 @@ class TestDryRun:
 class TestResultSaving:
     """Test result saving to validations directory."""
 
-    def test_save_code(self, runner, sample_strategy, v4_workspace):
+    def test_save_code(self, runner, sample_strategy, workspace):
         """Test generated code is saved."""
         code = "# Test code\nclass Test: pass"
         runner._save_code("STRAT-001", code)
 
-        code_file = v4_workspace.validations_path / "STRAT-001" / "backtest.py"
+        code_file = workspace.validations_path / "STRAT-001" / "backtest.py"
         assert code_file.exists()
         assert code_file.read_text() == code
 
-    def test_save_result(self, runner, sample_strategy, v4_workspace):
+    def test_save_result(self, runner, sample_strategy, workspace):
         """Test run result is saved as JSON."""
         wf_result = WalkForwardResult(
             strategy_id="STRAT-001",
@@ -276,7 +276,7 @@ class TestResultSaving:
         runner._save_result("STRAT-001", result)
 
         # Check run_result.json exists
-        result_file = v4_workspace.validations_path / "STRAT-001" / "run_result.json"
+        result_file = workspace.validations_path / "STRAT-001" / "run_result.json"
         assert result_file.exists()
 
         data = json.loads(result_file.read_text())
@@ -284,11 +284,11 @@ class TestResultSaving:
         assert data["determination"] == "VALIDATED"
 
         # Check determination.json exists
-        det_file = v4_workspace.validations_path / "STRAT-001" / "determination.json"
+        det_file = workspace.validations_path / "STRAT-001" / "determination.json"
         assert det_file.exists()
 
         # Check backtest_results.yaml exists
-        bt_file = v4_workspace.validations_path / "STRAT-001" / "backtest_results.yaml"
+        bt_file = workspace.validations_path / "STRAT-001" / "backtest_results.yaml"
         assert bt_file.exists()
 
 
@@ -342,21 +342,21 @@ class TestRunResult:
 class TestStatusUpdates:
     """Test strategy status updates."""
 
-    def test_update_status_moves_file(self, runner, sample_strategy, v4_workspace):
+    def test_update_status_moves_file(self, runner, sample_strategy, workspace):
         """Test status update moves strategy file."""
         runner._update_status("STRAT-001", "validated")
 
         # Should be in validated, not pending
-        assert not (v4_workspace.strategies_path / "pending" / "STRAT-001.yaml").exists()
-        assert (v4_workspace.strategies_path / "validated" / "STRAT-001.yaml").exists()
+        assert not (workspace.strategies_path / "pending" / "STRAT-001.yaml").exists()
+        assert (workspace.strategies_path / "validated" / "STRAT-001.yaml").exists()
 
-    def test_update_status_same_status(self, runner, sample_strategy, v4_workspace):
+    def test_update_status_same_status(self, runner, sample_strategy, workspace):
         """Test status update with same status is no-op."""
         # Strategy is already pending
         runner._update_status("STRAT-001", "pending")
 
         # Should still be in pending
-        assert (v4_workspace.strategies_path / "pending" / "STRAT-001.yaml").exists()
+        assert (workspace.strategies_path / "pending" / "STRAT-001.yaml").exists()
 
 
 # =============================================================================
@@ -368,7 +368,7 @@ class TestBatchProcessing:
     """Test batch processing of strategies."""
 
     @pytest.fixture
-    def multiple_strategies(self, v4_workspace):
+    def multiple_strategies(self, workspace):
         """Create multiple strategies in workspace."""
         strategies = []
         for i in range(3):
@@ -378,7 +378,7 @@ class TestBatchProcessing:
                 "strategy_type": "momentum",
                 "parameters": {"lookback_period": 126, "top_n": 3},
             }
-            strategy_file = v4_workspace.strategies_path / "pending" / f"STRAT-00{i + 1}.yaml"
+            strategy_file = workspace.strategies_path / "pending" / f"STRAT-00{i + 1}.yaml"
             strategy_file.write_text(yaml.dump(strategy))
             strategies.append(strategy)
         return strategies
@@ -414,7 +414,7 @@ class TestForceBlockedRetry:
     """Test --force flag re-runs blocked strategies."""
 
     @pytest.fixture
-    def blocked_strategy(self, v4_workspace):
+    def blocked_strategy(self, workspace):
         """Create a strategy in the blocked directory."""
         strategy = {
             "id": "STRAT-010",
@@ -427,7 +427,7 @@ class TestForceBlockedRetry:
             "status": "blocked",
         }
 
-        blocked_path = v4_workspace.strategies_path / "blocked"
+        blocked_path = workspace.strategies_path / "blocked"
         blocked_path.mkdir(parents=True, exist_ok=True)
         strategy_file = blocked_path / "STRAT-010.yaml"
         strategy_file.write_text(yaml.dump(strategy))
@@ -442,7 +442,7 @@ class TestForceBlockedRetry:
         assert result.determination == "BLOCKED"
         assert "--force" in result.error
 
-    def test_force_moves_blocked_to_pending(self, runner, blocked_strategy, v4_workspace):
+    def test_force_moves_blocked_to_pending(self, runner, blocked_strategy, workspace):
         """Test --force moves strategy from blocked/ to pending/."""
         # Run with force + dry_run to avoid needing full backtest infrastructure
         result = runner.run("STRAT-010", force=True, dry_run=True)
@@ -451,14 +451,14 @@ class TestForceBlockedRetry:
         assert result.determination == "PENDING"
 
         # File should now be in pending, not blocked
-        assert (v4_workspace.strategies_path / "pending" / "STRAT-010.yaml").exists()
-        assert not (v4_workspace.strategies_path / "blocked" / "STRAT-010.yaml").exists()
+        assert (workspace.strategies_path / "pending" / "STRAT-010.yaml").exists()
+        assert not (workspace.strategies_path / "blocked" / "STRAT-010.yaml").exists()
 
-    def test_force_resets_yaml_status(self, runner, blocked_strategy, v4_workspace):
+    def test_force_resets_yaml_status(self, runner, blocked_strategy, workspace):
         """Test --force resets the status field in the YAML to 'pending'."""
         runner.run("STRAT-010", force=True, dry_run=True)
 
-        strategy_file = v4_workspace.strategies_path / "pending" / "STRAT-010.yaml"
+        strategy_file = workspace.strategies_path / "pending" / "STRAT-010.yaml"
         data = yaml.safe_load(strategy_file.read_text())
         assert data["status"] == "pending"
 
@@ -472,7 +472,7 @@ class TestForceBlockedRetry:
         assert "blocked" in captured.out
         assert "pending" in captured.out
 
-    def test_force_on_pending_strategy_is_noop(self, runner, v4_workspace):
+    def test_force_on_pending_strategy_is_noop(self, runner, workspace):
         """Test --force on an already-pending strategy proceeds normally."""
         strategy = {
             "id": "STRAT-011",
@@ -481,7 +481,7 @@ class TestForceBlockedRetry:
             "parameters": {"lookback_period": 126},
             "status": "pending",
         }
-        pending_path = v4_workspace.strategies_path / "pending"
+        pending_path = workspace.strategies_path / "pending"
         pending_path.mkdir(parents=True, exist_ok=True)
         (pending_path / "STRAT-011.yaml").write_text(yaml.dump(strategy))
 
@@ -489,7 +489,7 @@ class TestForceBlockedRetry:
 
         assert result.dry_run
         assert result.determination == "PENDING"
-        assert (v4_workspace.strategies_path / "pending" / "STRAT-011.yaml").exists()
+        assert (workspace.strategies_path / "pending" / "STRAT-011.yaml").exists()
 
 
 # =============================================================================
@@ -501,10 +501,10 @@ class TestWindowConsistencyGate:
     """Test per-window consistency gate for --windows 5 mode."""
 
     @pytest.fixture
-    def runner_5_windows(self, v4_workspace):
+    def runner_5_windows(self, workspace):
         """Create a Runner configured for 5 windows."""
         return Runner(
-            workspace=v4_workspace,
+            workspace=workspace,
             llm_client=None,
             use_local=True,
             num_windows=5,

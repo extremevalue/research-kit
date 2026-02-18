@@ -90,8 +90,7 @@ class TestExploreInit:
         args = argparse.Namespace(
             title="Regime-Conditioned Options",
             tags="options,regime",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_init(args)
         assert result == 0
@@ -109,8 +108,7 @@ class TestExploreInit:
         args = argparse.Namespace(
             title="FX Carry Signal",
             tags="fx,carry",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         cmd_explore_init(args)
 
@@ -132,8 +130,7 @@ class TestExploreInit:
         args = argparse.Namespace(
             title="Volatility Surface",
             tags="",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         cmd_explore_init(args)
 
@@ -157,8 +154,7 @@ class TestExploreInit:
         args = argparse.Namespace(
             title="No Tags Research",
             tags="",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_init(args)
         assert result == 0
@@ -176,8 +172,7 @@ class TestExploreInit:
         args = argparse.Namespace(
             title="Duplicate Topic",
             tags="",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         # Create first
         result = cmd_explore_init(args)
@@ -195,8 +190,7 @@ class TestExploreInit:
         args = argparse.Namespace(
             title="!!!",
             tags="",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_init(args)
         assert result == 1
@@ -231,8 +225,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=False,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_list(args)
         assert result == 0
@@ -252,8 +245,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=False,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_list(args)
         assert result == 0
@@ -274,8 +266,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=False,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         cmd_explore_list(args)
 
@@ -292,8 +283,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=False,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         cmd_explore_list(args)
 
@@ -312,8 +302,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=True,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_list(args)
         assert result == 0
@@ -338,8 +327,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=True,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         cmd_explore_list(args)
 
@@ -357,8 +345,7 @@ class TestExploreList:
 
         args = argparse.Namespace(
             index=False,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         cmd_explore_list(args)
 
@@ -402,8 +389,7 @@ class TestExploreUpdate:
             status="complete",
             strategy=None,
             tag=None,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 0
@@ -424,8 +410,7 @@ class TestExploreUpdate:
             status=None,
             strategy="STRAT-200",
             tag=None,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 0
@@ -447,8 +432,7 @@ class TestExploreUpdate:
             status=None,
             strategy="STRAT-100",
             tag=None,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 0
@@ -472,8 +456,7 @@ class TestExploreUpdate:
             status=None,
             strategy=None,
             tag="regime",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 0
@@ -495,8 +478,7 @@ class TestExploreUpdate:
             status=None,
             strategy=None,
             tag="options",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 0
@@ -520,8 +502,7 @@ class TestExploreUpdate:
             status="complete",
             strategy="STRAT-310",
             tag="quality",
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 0
@@ -542,8 +523,7 @@ class TestExploreUpdate:
             status="complete",
             strategy=None,
             tag=None,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 1
@@ -560,8 +540,7 @@ class TestExploreUpdate:
             status=None,
             strategy=None,
             tag=None,
-            v4_workspace=str(workspace.path),
-            workspace=None,
+            workspace=str(workspace.path),
         )
         result = cmd_explore_update(args)
         assert result == 1
