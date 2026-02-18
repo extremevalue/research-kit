@@ -41,22 +41,21 @@ from research_system.core.workspace import (
 from research_system.core.catalog import Catalog
 from research_system.core.data_registry import DataRegistry
 
-# V4 imports
 from research_system.core.v4 import (
-    V4Workspace,
-    get_v4_workspace,
-    V4WorkspaceError,
+    Workspace,
+    get_workspace,
+    WorkspaceError,
     load_config,
     get_default_config,
     validate_config,
 )
 
 
-def get_workspace_from_args(args) -> V4Workspace:
-    """Get V4 workspace from args, checking both global and subparser workspace flags."""
+def get_workspace_from_args(args) -> Workspace:
+    """Get workspace from args, checking both global and subparser workspace flags."""
     # Check subparser-specific flag first, then global flag
-    path = getattr(args, 'v4_workspace', None) or getattr(args, 'workspace', None)
-    return get_v4_workspace(path)
+    path = getattr(args, 'workspace', None)
+    return get_workspace(path)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -117,7 +116,7 @@ For more information, visit: https://github.com/your-repo/research-system
     # _add_synthesize_parser(subparsers)  # Conflicts with new 'synthesize'
     _add_migrate_parser(subparsers)
 
-    # Add main commands (formerly V4)
+    # Add main commands
     _add_commands(subparsers)
 
     # Add update command
@@ -779,14 +778,14 @@ def _add_migrate_parser(subparsers):
 
 
 # ============================================================================
-# V4 Command Parsers
+# Command Parsers
 # ============================================================================
 
 
 def _add_commands(subparsers):
-    """Add V4-related subcommands.
+    """Add research workflow subcommands.
 
-    V4 commands support the new research workflow:
+    Commands support the research workflow:
     - init: Initialize workspace
     - ingest: Ingest files from inbox with quality scoring
     - verify: Run verification tests (bias detection)
@@ -818,7 +817,7 @@ Strategies meeting minimum thresholds are created in strategies/pending/.
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace (default: RESEARCH_WORKSPACE or ~/.research-workspace)"
     )
@@ -858,7 +857,7 @@ Tests include:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -895,7 +894,7 @@ strategy robustness across different market regimes.
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -944,7 +943,7 @@ Analyzes validation results to identify:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -982,7 +981,7 @@ Use --quick for fast template-based ideation (no LLM required).
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1023,7 +1022,7 @@ Director:    synthesis-director (integrates all perspectives)
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1104,7 +1103,7 @@ Examples:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1139,7 +1138,7 @@ Examples:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1214,7 +1213,7 @@ Examples:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1237,7 +1236,7 @@ Displays a summary of the workspace including:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1276,7 +1275,7 @@ Statuses:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1310,7 +1309,7 @@ Shows all strategy metadata including:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1338,7 +1337,7 @@ Configuration includes:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1373,7 +1372,7 @@ Examples:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1401,7 +1400,7 @@ Examples:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1441,7 +1440,7 @@ Examples:
     )
     parser.add_argument(
         "--workspace", "-w",
-        dest="v4_workspace",
+        dest="workspace",
         metavar="PATH",
         help="Path to workspace"
     )
@@ -1455,13 +1454,13 @@ Examples:
 def cmd_init(args):
     """Initialize a new workspace."""
     # Always use workspace format
-    return cmd_init_v4(args)
+    return cmd_init_workspace(args)
 
 
-def cmd_init_v4(args):
+def cmd_init_workspace(args):
     """Initialize a new workspace."""
     path = Path(args.path) if args.path else None
-    workspace = get_v4_workspace(path)
+    workspace = get_workspace(path)
 
     if workspace.exists and not args.force:
         print(f"workspace already exists at {workspace.path}")
@@ -1504,7 +1503,7 @@ def cmd_init_v4(args):
 
 
 # ============================================================================
-# V4 Command Implementations
+# Command Implementations
 # ============================================================================
 
 
@@ -1514,13 +1513,13 @@ def cmd_ingest(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
 
     # Import processor and LLM client
-    from research_system.ingest.v4_processor import V4IngestProcessor
+    from research_system.ingest.strategy_processor import IngestProcessor
     from research_system.llm.client import get_client as get_llm_client
     from research_system.schemas.v4 import IngestionDecision
 
@@ -1532,7 +1531,7 @@ def cmd_ingest(args):
         llm_client = None
 
     # Initialize processor
-    processor = V4IngestProcessor(workspace, config, llm_client)
+    processor = IngestProcessor(workspace, config, llm_client)
 
     # Check options
     dry_run = getattr(args, 'dry_run', False)
@@ -1653,7 +1652,7 @@ def cmd_ingest(args):
 
 def _cmd_verify_all(workspace, args):
     """Verify all pending strategies."""
-    from research_system.validation import V4Verifier, VerificationStatus
+    from research_system.validation import Verifier, VerificationStatus
 
     dry_run = getattr(args, 'dry_run', False)
 
@@ -1666,7 +1665,7 @@ def _cmd_verify_all(workspace, args):
     print(f"\nVerifying {len(strategies)} pending strategy(ies)...")
     print("=" * 50)
 
-    verifier = V4Verifier(workspace)
+    verifier = Verifier(workspace)
     results = {'passed': 0, 'warnings': 0, 'failed': 0}
 
     for i, strat_info in enumerate(strategies, 1):
@@ -1712,7 +1711,7 @@ def _cmd_verify_all(workspace, args):
 
 def _cmd_validate_all(workspace, args):
     """Validate all strategies that have verification results."""
-    from research_system.validation import V4Verifier, V4Validator, VerificationStatus, GateStatus
+    from research_system.validation import Verifier, Validator, VerificationStatus, GateStatus
 
     dry_run = getattr(args, 'dry_run', False)
     results_file = getattr(args, 'results', None)
@@ -1755,8 +1754,8 @@ def _cmd_validate_all(workspace, args):
     print(f"\nValidating {len(strategy_ids)} verified strategy(ies)...")
     print("=" * 50)
 
-    verifier = V4Verifier(workspace)
-    validator = V4Validator(workspace, verifier)
+    verifier = Verifier(workspace)
+    validator = Validator(workspace, verifier)
     results = {'passed': 0, 'failed': 0, 'skipped': 0}
 
     for i, strategy_id in enumerate(sorted(strategy_ids), 1):
@@ -1805,7 +1804,7 @@ def _cmd_validate_all(workspace, args):
 
 def _cmd_learn_all(workspace, args):
     """Extract learnings from all strategies with validation results."""
-    from research_system.validation import V4Learner
+    from research_system.validation import Learner
 
     dry_run = getattr(args, 'dry_run', False)
 
@@ -1831,7 +1830,7 @@ def _cmd_learn_all(workspace, args):
     print(f"\nExtracting learnings from {len(strategy_ids)} strategy(ies)...")
     print("=" * 50)
 
-    learner = V4Learner(workspace)
+    learner = Learner(workspace)
     results = {'extracted': 0, 'skipped': 0}
 
     for i, strategy_id in enumerate(sorted(strategy_ids), 1):
@@ -1875,13 +1874,13 @@ def _cmd_learn_all(workspace, args):
 
 def cmd_verify(args):
     """Run verification tests on a strategy ."""
-    from research_system.validation import V4Verifier, VerificationStatus
+    from research_system.validation import Verifier, VerificationStatus
 
     workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -1911,7 +1910,7 @@ def cmd_verify(args):
     print(f"\nVerifying strategy: {strategy_id}")
     print("=" * 50)
 
-    verifier = V4Verifier(workspace)
+    verifier = Verifier(workspace)
     result = verifier.verify(strategy)
 
     # Display results
@@ -1956,8 +1955,8 @@ def cmd_validate(args):
     import json
     import yaml
     from research_system.validation import (
-        V4Verifier,
-        V4Validator,
+        Verifier,
+        Validator,
         VerificationStatus,
         GateStatus,
     )
@@ -1966,7 +1965,7 @@ def cmd_validate(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -1999,7 +1998,7 @@ def cmd_validate(args):
 
     # Step 1: Run verification first
     print("\n[Step 1] Running verification...")
-    verifier = V4Verifier(workspace)
+    verifier = Verifier(workspace)
     verify_result = verifier.verify(strategy)
 
     if verify_result.overall_status == VerificationStatus.FAIL:
@@ -2013,7 +2012,7 @@ def cmd_validate(args):
         print("  PASSED")
 
     # Step 2: Initialize validator
-    validator = V4Validator(workspace, verifier)
+    validator = Validator(workspace, verifier)
 
     # Step 3: Generate backtest config if requested
     if generate_config:
@@ -2106,13 +2105,13 @@ def cmd_validate(args):
 
 def cmd_learn(args):
     """Extract learnings from validation results ."""
-    from research_system.validation import V4Learner
+    from research_system.validation import Learner
 
     workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2142,7 +2141,7 @@ def cmd_learn(args):
     print("=" * 50)
 
     # Initialize learner and load results
-    learner = V4Learner(workspace)
+    learner = Learner(workspace)
     verification_results, validation_results = learner.load_results(strategy_id)
 
     print(f"\nFound {len(verification_results)} verification result(s)")
@@ -2207,7 +2206,7 @@ def cmd_ideate(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2347,7 +2346,7 @@ def cmd_synthesize(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2364,7 +2363,7 @@ def cmd_synthesize(args):
         print(f"LLM backend: {llm_client.backend.value}")
     except Exception as e:
         print(f"Error: Could not initialize LLM client: {e}")
-        print("Synthesis requires an LLM backend. Set ANTHROPIC_API_KEY or install Claude CLI.")
+        print("Synthesis requires an LLM backend. Install Claude CLI or set ANTHROPIC_API_KEY.")
         return 1
 
     runner = SynthesisRunner(workspace, llm_client)
@@ -2372,7 +2371,7 @@ def cmd_synthesize(args):
 
     if result.offline:
         print("\nNo LLM backend available.")
-        print("Set ANTHROPIC_API_KEY or install Claude CLI.")
+        print("Install Claude CLI or set ANTHROPIC_API_KEY.")
         return 1
 
     if result.errors:
@@ -2406,13 +2405,13 @@ def cmd_synthesize(args):
 
 def cmd_run(args):
     """Run full validation pipeline ."""
-    from research_system.validation.v4_runner import V4Runner
+    from research_system.validation import Runner
 
     workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2450,7 +2449,7 @@ def cmd_run(args):
         print(f"Note: LLM client not available ({e}). Using templates only.")
 
     # Initialize runner
-    runner = V4Runner(
+    runner = Runner(
         workspace=workspace,
         llm_client=llm_client,
         use_local=use_local,
@@ -2496,7 +2495,7 @@ def cmd_cleanup(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2554,13 +2553,13 @@ def cmd_walkforward(args):
         format_parameter_evolution,
     )
     from research_system.validation.backtest import BacktestExecutor
-    from research_system.codegen.v4_generator import V4CodeGenerator
+    from research_system.codegen import CodeGenerator
 
     workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2615,7 +2614,7 @@ def cmd_walkforward(args):
         use_local=False,
         timeout=workspace.config.backtest.timeout,
     )
-    code_generator = V4CodeGenerator()
+    code_generator = CodeGenerator()
 
     # Create runner
     runner = WalkForwardRunner(
@@ -2650,7 +2649,7 @@ def cmd_status(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2745,7 +2744,7 @@ def cmd_list(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2814,7 +2813,7 @@ def cmd_show(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -2871,7 +2870,7 @@ def _print_strategy_details(strategy: dict) -> None:
             created = created.strftime('%Y-%m-%d %H:%M:%S')
         print(f"Created: {created}")
 
-    # Source (supports both simple and V4 schema formats)
+    # Source (supports both simple and full schema formats)
     source = strategy.get('source', {})
     if source:
         print(f"\n--- Source ---")
@@ -2880,14 +2879,14 @@ def _print_strategy_details(strategy: dict) -> None:
             print(f"Type:      {source['type']}")
         if source.get('author'):
             print(f"Author:    {source['author']}")
-        # V4 format: source.reference, source.credibility
+        # Full format: source.reference, source.credibility
         if source.get('reference'):
             print(f"Reference: {source['reference']}")
         if source.get('url'):
             print(f"URL:       {source['url']}")
         if source.get('track_record'):
             print(f"Track Record: {source['track_record']}")
-        # V4 credibility info (nested)
+        # Credibility info (nested)
         cred = source.get('credibility', {})
         if cred:
             if cred.get('type') and not source.get('type'):
@@ -2903,7 +2902,7 @@ def _print_strategy_details(strategy: dict) -> None:
                 excerpt = excerpt[:200] + "..."
             print(f"Excerpt:   {excerpt}")
 
-    # Hypothesis (supports both simple and V4 schema formats)
+    # Hypothesis (supports both simple and full schema formats)
     hypothesis = strategy.get('hypothesis', {})
     if hypothesis:
         print(f"\n--- Hypothesis ---")
@@ -2920,7 +2919,7 @@ def _print_strategy_details(strategy: dict) -> None:
                 print(f"Expected Sharpe: {exp.get('min', '?')} - {exp.get('max', '?')}")
             else:
                 print(f"Expected Sharpe: {exp}")
-        # V4 format: summary, detail
+        # Full format: summary, detail
         if hypothesis.get('summary') and not hypothesis.get('thesis'):
             print(f"Summary: {hypothesis['summary']}")
         if hypothesis.get('detail'):
@@ -2958,7 +2957,7 @@ def _print_strategy_details(strategy: dict) -> None:
                 else:
                     print(f"Symbols: {', '.join(symbols[:5])} ... (+{len(symbols)-5} more)")
 
-    # Entry (supports both simple and V4 schema formats)
+    # Entry (supports both simple and full schema formats)
     entry = strategy.get('entry', {})
     if entry:
         print(f"\n--- Entry ---")
@@ -2971,7 +2970,7 @@ def _print_strategy_details(strategy: dict) -> None:
                 print(f"Signal {i}: {sig.get('name', 'unnamed')} - {sig.get('condition', '')}")
         if len(signals) > 3:
             print(f"  ... and {len(signals)-3} more signals")
-        # V4 format: technical config
+        # Full format: technical config
         tech = entry.get('technical', {})
         if tech and not signals:
             if tech.get('indicator'):
@@ -2984,7 +2983,7 @@ def _print_strategy_details(strategy: dict) -> None:
             if fund.get('metric'):
                 print(f"Metric: {fund['metric']}")
 
-    # Position (V4 schema)
+    # Position
     position = strategy.get('position', {})
     if position:
         print(f"\n--- Position ---")
@@ -3001,7 +3000,7 @@ def _print_strategy_details(strategy: dict) -> None:
         if sizing and sizing.get('method'):
             print(f"Sizing: {sizing['method']}")
 
-    # Exit (V4 schema: paths, priority)
+    # Exit (paths, priority)
     exit_info = strategy.get('exit', {})
     if exit_info:
         print(f"\n--- Exit ---")
@@ -3042,12 +3041,12 @@ def _print_strategy_details(strategy: dict) -> None:
 
 
 def cmd_config(args):
-    """Show/validate V4 configuration."""
+    """Show/validate configuration."""
     workspace = get_workspace_from_args(args)
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -3133,7 +3132,7 @@ def cmd_ingest_process(args):
         from research_system.llm.client import LLMClient, Backend
         llm_client = LLMClient()
         if llm_client.is_offline:
-            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI). Extraction will be limited.")
+            print("Note: Running in offline mode (no Claude CLI or ANTHROPIC_API_KEY). Extraction will be limited.")
         elif llm_client.backend == Backend.CLI:
             print("Using Claude CLI backend.")
         elif llm_client.backend == Backend.API:
@@ -4345,7 +4344,7 @@ def cmd_analyze_run(args):
         from research_system.llm.client import LLMClient, Backend
         llm_client = LLMClient()
         if llm_client.is_offline:
-            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI)")
+            print("Note: Running in offline mode (no Claude CLI or ANTHROPIC_API_KEY)")
             print("Persona analysis will return prompts only.")
             print()
         elif llm_client.backend == Backend.CLI:
@@ -4548,7 +4547,7 @@ def cmd_ideate_catalog(args):
         from research_system.llm.client import LLMClient, Backend
         llm_client = LLMClient()
         if llm_client.is_offline:
-            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI)")
+            print("Note: Running in offline mode (no Claude CLI or ANTHROPIC_API_KEY)")
             print("Ideation will return prompts only, no actual ideas generated.")
             print()
         elif llm_client.backend == Backend.CLI:
@@ -4669,7 +4668,7 @@ def cmd_synthesize_catalog(args):
         from research_system.llm.client import LLMClient, Backend
         llm_client = LLMClient()
         if llm_client.is_offline:
-            print("Note: Running in offline mode (no ANTHROPIC_API_KEY or claude CLI)")
+            print("Note: Running in offline mode (no Claude CLI or ANTHROPIC_API_KEY)")
             print("Synthesis will return prompts only, no actual analysis.")
             print()
         elif llm_client.backend == Backend.CLI:
@@ -5091,7 +5090,7 @@ def cmd_explore_init(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -5191,7 +5190,7 @@ def cmd_explore_list(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -5274,7 +5273,7 @@ def cmd_explore_update(args):
 
     try:
         workspace.require_initialized()
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}")
         print("Run 'research init' to initialize a workspace.")
         return 1
@@ -5355,7 +5354,7 @@ def main():
     except WorkspaceError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    except V4WorkspaceError as e:
+    except WorkspaceError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

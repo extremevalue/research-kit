@@ -102,7 +102,7 @@ class SynthesisRunner:
         # Check LLM availability
         if self.llm_client is None or self.llm_client.is_offline:
             result.offline = True
-            result.errors.append("No LLM backend available. Set ANTHROPIC_API_KEY or install Claude CLI.")
+            result.errors.append("No LLM backend available. Install Claude CLI or set ANTHROPIC_API_KEY.")
             logger.warning("Ideation skipped: no LLM backend available")
             return result
 
@@ -167,7 +167,7 @@ class SynthesisRunner:
         # Check LLM availability
         if self.llm_client is None or self.llm_client.is_offline:
             result.offline = True
-            result.errors.append("No LLM backend available. Set ANTHROPIC_API_KEY or install Claude CLI.")
+            result.errors.append("No LLM backend available. Install Claude CLI or set ANTHROPIC_API_KEY.")
             return result
 
         # Aggregate workspace context

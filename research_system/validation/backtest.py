@@ -1,11 +1,9 @@
-"""Backtest execution infrastructure for V4 validation.
+"""Backtest execution infrastructure for validation.
 
 This module provides backtest execution capabilities:
 - BacktestResult: Results from a backtest run
 - BacktestExecutor: Execute backtests via LEAN CLI (local or cloud)
 - WalkForwardResult: Aggregated results from walk-forward validation
-
-Extracted from scripts/validate/full_pipeline.py for V4 integration.
 """
 
 from __future__ import annotations
@@ -189,7 +187,7 @@ class BacktestExecutor:
         """Initialize backtest executor.
 
         Args:
-            workspace_path: Path to the V4 workspace
+            workspace_path: Path to the workspace
             use_local: If True, use local Docker; if False, use QC cloud
             cleanup_on_start: If True, clean up stuck backtests on init
             num_windows: Number of walk-forward windows (1, 2, or 5)
@@ -427,7 +425,7 @@ class BacktestExecutor:
             end_date: End date (YYYY-MM-DD)
             strategy_id: Strategy ID for file naming
             strategy: Original strategy document (for correction context)
-            code_generator: V4CodeGenerator instance with LLM client
+            code_generator: CodeGenerator instance with LLM client
             max_attempts: Maximum number of attempts (including original)
 
         Returns:
@@ -496,7 +494,7 @@ class BacktestExecutor:
             code: Python algorithm code
             strategy_id: Strategy ID
             strategy: Original strategy document
-            code_generator: V4CodeGenerator instance with LLM client
+            code_generator: CodeGenerator instance with LLM client
             windows: List of (start_date, end_date) tuples, or None for defaults
             max_correction_attempts: Maximum correction attempts for first window
 

@@ -1,4 +1,4 @@
-"""V4 Strategy Verifier - Run verification tests on strategies.
+"""Strategy Verifier - Run verification tests on strategies.
 
 This module provides verification tests to check strategies for common issues
 before running backtests, including:
@@ -82,7 +82,7 @@ class VerificationResult:
 
 
 class Verifier:
-    """Verifier for V4 strategies."""
+    """Verifier for strategies."""
 
     # Keywords that suggest look-ahead bias
     LOOK_AHEAD_KEYWORDS = [
@@ -100,7 +100,7 @@ class Verifier:
         """Initialize verifier with workspace.
 
         Args:
-            workspace: V4Workspace instance
+            workspace: Workspace instance
         """
         self.workspace = workspace
 

@@ -1,6 +1,6 @@
-"""V4 Workspace Management.
+"""Workspace Management.
 
-This module provides workspace management for the V4 research-kit system.
+This module provides workspace management for the research-kit system.
 A workspace contains all user data separate from the application code:
 
 - inbox/: Files to ingest
@@ -30,7 +30,7 @@ from typing import Any
 
 import yaml
 
-from research_system.core.v4.config import V4Config, get_default_config
+from research_system.core.v4.config import Config, get_default_config
 
 
 # =============================================================================
@@ -56,11 +56,8 @@ COUNTERS_FILE = "counters.json"
 LOCK_FILE = "lock"
 
 # .env template content
-ENV_TEMPLATE = """# Research-Kit V4 Environment Variables
+ENV_TEMPLATE = """# Research-Kit Environment Variables
 # Copy to .env and fill in values
-
-# Anthropic API Key (for LLM calls)
-ANTHROPIC_API_KEY=
 
 # Optional: Override workspace path
 # RESEARCH_WORKSPACE=
@@ -77,7 +74,7 @@ ANTHROPIC_API_KEY=
 
 
 class WorkspaceError(Exception):
-    """Raised when V4 workspace operations fail."""
+    """Raised when workspace operations fail."""
 
     pass
 
@@ -120,7 +117,7 @@ class Workspace:
             path: Workspace path. If None, uses environment variable or default.
         """
         self.path = self._resolve_path(path)
-        self._config: V4Config | None = None
+        self._config: Config | None = None
 
     @staticmethod
     def _resolve_path(path: Path | str | None) -> Path:
@@ -155,11 +152,11 @@ class Workspace:
         return (self.path / CONFIG_FILENAME).exists()
 
     @property
-    def config(self) -> V4Config:
+    def config(self) -> Config:
         """Load workspace configuration.
 
         Returns:
-            V4Config loaded from research-kit.yaml, or defaults if not found.
+            Config loaded from research-kit.yaml, or defaults if not found.
 
         Raises:
             WorkspaceError: If workspace not initialized.
@@ -168,11 +165,11 @@ class Workspace:
             self._config = self._load_config()
         return self._config
 
-    def _load_config(self) -> V4Config:
+    def _load_config(self) -> Config:
         """Load configuration from workspace.
 
         Returns:
-            V4Config loaded and validated.
+            Config loaded and validated.
 
         Raises:
             WorkspaceError: If workspace not initialized.
@@ -193,7 +190,7 @@ class Workspace:
         default_dict = get_default_config().model_dump()
         merged = self._deep_merge(default_dict, data)
 
-        return V4Config(**merged)
+        return Config(**merged)
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -214,11 +211,11 @@ class Workspace:
                 result[key] = value
         return result
 
-    def _save_config(self, config: V4Config) -> None:
+    def _save_config(self, config: Config) -> None:
         """Save configuration to workspace.
 
         Args:
-            config: V4Config to save.
+            config: Config to save.
         """
         config_file = self.path / CONFIG_FILENAME
         # Use mode='json' to ensure enums and other types are serialized properly

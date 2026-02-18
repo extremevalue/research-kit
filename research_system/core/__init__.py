@@ -24,15 +24,15 @@ from .data_registry import (
     DataAvailability,
 )
 
-# V4 system re-exports (for clean access without .v4 subpath)
+# Re-exports from core.v4 (for clean access without .v4 subpath)
 # NOTE: Workspace, WorkspaceError, get_workspace, require_workspace,
 # DEFAULT_WORKSPACE, and WORKSPACE_ENV_VAR are NOT re-exported here under
-# their short names because the legacy workspace already claims those names.
-# Use the V4-prefixed aliases instead, or import from core.v4 directly.
+# their short names because the legacy workspace module already claims those names.
+# Import from core.v4 directly for the current workspace implementation.
 from research_system.core.v4 import (
-    # Config models (no collision)
+    # Config models
     Config,
-    V4Config,
+    V4Config,  # backward-compat alias
     GatesConfig,
     IngestionConfig,
     VerificationConfig,
@@ -41,17 +41,17 @@ from research_system.core.v4 import (
     BacktestConfig as V4BacktestConfig,
     LoggingConfig,
     APIConfig,
-    # Config functions (no collision)
+    # Config functions
     load_config,
     get_default_config,
     validate_config,
     ConfigurationError,
-    # Logging (no collision)
+    # Logging
     setup_logging,
     get_logger,
     LogManager,
-    V4LogManager,
-    # V4-prefixed workspace aliases (safe, no collision with legacy names)
+    V4LogManager,  # backward-compat alias
+    # Workspace (prefixed to avoid collision with legacy workspace module)
     V4Workspace,
     V4WorkspaceError,
     get_v4_workspace,
@@ -59,7 +59,7 @@ from research_system.core.v4 import (
     DEFAULT_V4_WORKSPACE,
 )
 
-# Alias for the V4 workspace env var (avoids collision with legacy WORKSPACE_ENV_VAR)
+# Alias (avoids collision with legacy WORKSPACE_ENV_VAR)
 from research_system.core.v4 import WORKSPACE_ENV_VAR as V4_WORKSPACE_ENV_VAR
 
 __all__ = [
@@ -81,7 +81,7 @@ __all__ = [
     "DataRegistry",
     "DataSource",
     "DataAvailability",
-    # V4 Config
+    # Config
     "Config",
     "V4Config",
     "GatesConfig",
@@ -96,12 +96,12 @@ __all__ = [
     "get_default_config",
     "validate_config",
     "ConfigurationError",
-    # V4 Logging
+    # Logging
     "setup_logging",
     "get_logger",
     "LogManager",
     "V4LogManager",
-    # V4 Workspace (prefixed aliases to avoid legacy collision)
+    # Workspace (prefixed aliases to avoid legacy collision)
     "V4Workspace",
     "V4WorkspaceError",
     "get_v4_workspace",

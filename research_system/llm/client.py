@@ -65,8 +65,8 @@ class LLMClient:
         Args:
             api_key: Anthropic API key. If not provided, uses ANTHROPIC_API_KEY env var.
             backend: Which backend to use. If None, auto-detects with priority:
-                     1. API (if ANTHROPIC_API_KEY is set)
-                     2. CLI (if claude command is available)
+                     1. CLI (if claude command is available)
+                     2. API (if ANTHROPIC_API_KEY is set)
                      3. Offline (fallback)
         """
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
@@ -102,8 +102,13 @@ class LLMClient:
         return Backend.OFFLINE
 
     def _auto_detect_backend(self) -> Backend:
-        """Auto-detect available backend with priority: API > CLI > Offline."""
-        # Try API first
+        """Auto-detect available backend with priority: CLI > API > Offline."""
+        # Try CLI first (preferred — no API key needed)
+        self._cli_path = shutil.which("claude")
+        if self._cli_path:
+            return Backend.CLI
+
+        # Try API
         if self.api_key:
             try:
                 import anthropic
@@ -111,11 +116,6 @@ class LLMClient:
                 return Backend.API
             except ImportError:
                 pass
-
-        # Try CLI
-        self._cli_path = shutil.which("claude")
-        if self._cli_path:
-            return Backend.CLI
 
         # Fallback to offline
         return Backend.OFFLINE

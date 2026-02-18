@@ -200,7 +200,7 @@ class TestV4Integration:
         transcript_file.write_text(sample_transcript)
 
         # 3. Check status shows inbox file
-        args = SimpleNamespace(v4_workspace=str(workspace_path))
+        args = SimpleNamespace(workspace=str(workspace_path))
         cmd_status(args)
         captured = capsys.readouterr()
         assert "1 file(s) ready to ingest" in captured.out
@@ -219,7 +219,7 @@ class TestV4Integration:
 
         # 5. List strategies
         args = SimpleNamespace(
-            v4_workspace=str(workspace_path),
+            workspace=str(workspace_path),
             status=None,
             tags=None,
             format="table"
@@ -232,7 +232,7 @@ class TestV4Integration:
         # 6. Show strategy
         args = SimpleNamespace(
             strategy_id="STRAT-001",
-            v4_workspace=str(workspace_path),
+            workspace=str(workspace_path),
             format="text"
         )
         cmd_show(args)
@@ -273,7 +273,7 @@ class TestV4IntegrationErrors:
 
         args = SimpleNamespace(
             strategy_id="STRAT-999",
-            v4_workspace=str(workspace_path),
+            workspace=str(workspace_path),
             format="text"
         )
 
@@ -292,7 +292,7 @@ class TestV4IntegrationErrors:
         ws.init()
 
         args = SimpleNamespace(
-            v4_workspace=str(workspace_path),
+            workspace=str(workspace_path),
             status=None,
             tags=None,
             format="table"

@@ -1,4 +1,4 @@
-"""V4 Strategy Learner - Extract learnings from validation results.
+"""Strategy Learner - Extract learnings from validation results.
 
 This module extracts insights and learnings from validation results
 to help inform future strategy development.
@@ -59,13 +59,13 @@ class LearningsDocument:
 
 
 class Learner:
-    """Learner for extracting insights from V4 validation results."""
+    """Learner for extracting insights from validation results."""
 
     def __init__(self, workspace):
         """Initialize learner.
 
         Args:
-            workspace: V4Workspace instance
+            workspace: Workspace instance
         """
         self.workspace = workspace
 
@@ -214,7 +214,7 @@ class Learner:
         # Check hypothesis quality
         hypothesis = strategy.get("hypothesis", {})
         if hypothesis:
-            # Look for V4 format (summary) or simple format (thesis)
+            # Look for summary format or simple format (thesis)
             thesis = hypothesis.get("summary") or hypothesis.get("thesis")
             if thesis and len(thesis) > 50:
                 doc.learnings.append(Learning(

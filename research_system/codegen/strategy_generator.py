@@ -1,6 +1,6 @@
-"""V4 Code Generator - Generate QuantConnect code from V4 strategy documents.
+"""Code Generator - Generate QuantConnect code from strategy documents.
 
-This module provides code generation capabilities for V4 strategies:
+This module provides code generation capabilities for strategies:
 - Template-based generation for common strategy types
 - LLM-based generation for complex/novel strategies
 - Post-processing to fix common QC API issues
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CodeGenResult:
-    """Result of V4 code generation."""
+    """Result of code generation."""
 
     success: bool
     code: str | None = None
@@ -74,7 +74,7 @@ class CodeCorrectionResult:
 
 
 class CodeGenerator:
-    """Generate QuantConnect Python code for V4 strategies.
+    """Generate QuantConnect Python code for strategies.
 
     Uses a template-first approach:
     1. Check if strategy matches a known template
@@ -749,7 +749,7 @@ def generate_code(
     llm_client=None,
     force_llm: bool = False,
 ) -> CodeGenResult:
-    """Convenience function to generate V4 code.
+    """Convenience function to generate code.
 
     Args:
         strategy: Strategy document
