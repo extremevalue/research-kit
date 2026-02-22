@@ -80,6 +80,7 @@ class Runner:
         use_local: bool = False,
         num_windows: int = 1,
         reuse_project: bool = True,
+        custom_windows: list[tuple[str, str]] | None = None,
     ):
         """Initialize the runner.
 
@@ -89,6 +90,7 @@ class Runner:
             use_local: Use local Docker instead of QC cloud
             num_windows: Number of walk-forward windows (1, 2, or 5)
             reuse_project: Reuse a single QC cloud project (avoids 100/day limit)
+            custom_windows: Optional list of (start_date, end_date) tuples to override presets
         """
         self.workspace = workspace
         self.llm_client = llm_client
@@ -109,6 +111,7 @@ class Runner:
             num_windows=num_windows,
             timeout=self._config.backtest.timeout,
             reuse_project=reuse_project,
+            custom_windows=custom_windows,
         )
 
     def run(

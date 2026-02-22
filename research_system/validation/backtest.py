@@ -183,6 +183,7 @@ class BacktestExecutor:
         num_windows: int = 1,
         timeout: int = 600,
         reuse_project: bool = True,
+        custom_windows: list[tuple[str, str]] | None = None,
     ):
         """Initialize backtest executor.
 
@@ -194,6 +195,8 @@ class BacktestExecutor:
             timeout: Backtest execution timeout in seconds (default: 600)
             reuse_project: If True, reuse a single QC cloud project to avoid
                 100/day project creation limit. Only applies to cloud mode.
+            custom_windows: Optional list of (start_date, end_date) tuples
+                that override preset window selection. Use with --start-date/--end-date CLI args.
         """
         self.workspace_path = Path(workspace_path)
         self.validations_path = self.workspace_path / "validations"
@@ -205,8 +208,10 @@ class BacktestExecutor:
         # Fixed project directory for reuse mode
         self._runner_project_dir = self.validations_path / "_runner"
 
-        # Select windows based on num_windows
-        if num_windows >= 5:
+        # Select windows: custom overrides presets
+        if custom_windows:
+            self.windows = custom_windows
+        elif num_windows >= 5:
             self.windows = self.ALL_WINDOWS
         elif num_windows == 1:
             self.windows = self.ONE_WINDOW
@@ -743,33 +748,45 @@ class BacktestExecutor:
         return self._parse_lean_output(result.stdout, result.stderr, result.returncode)
 
     def _inject_dates(self, code: str, start_date: str, end_date: str) -> str:
-        """Inject start/end dates into algorithm code."""
+        """Inject start/end dates into algorithm code.
+
+        First tries to replace existing set_start_date/set_end_date calls.
+        If none exist, inserts them at the top of initialize().
+        """
         start_parts = start_date.split("-")
         end_parts = end_date.split("-")
 
-        # Replace PascalCase
-        code = re.sub(
-            r"self\.SetStartDate\([^)]+\)",
-            f"self.SetStartDate({start_parts[0]}, {int(start_parts[1])}, {int(start_parts[2])})",
-            code,
-        )
-        code = re.sub(
-            r"self\.SetEndDate\([^)]+\)",
-            f"self.SetEndDate({end_parts[0]}, {int(end_parts[1])}, {int(end_parts[2])})",
-            code,
-        )
+        start_call = f"self.set_start_date({start_parts[0]}, {int(start_parts[1])}, {int(start_parts[2])})"
+        end_call = f"self.set_end_date({end_parts[0]}, {int(end_parts[1])}, {int(end_parts[2])})"
 
-        # Replace snake_case
-        code = re.sub(
-            r"self\.set_start_date\([^)]+\)",
-            f"self.set_start_date({start_parts[0]}, {int(start_parts[1])}, {int(start_parts[2])})",
-            code,
-        )
-        code = re.sub(
-            r"self\.set_end_date\([^)]+\)",
-            f"self.set_end_date({end_parts[0]}, {int(end_parts[1])}, {int(end_parts[2])})",
-            code,
-        )
+        has_start = bool(re.search(r"self\.[Ss]et_?[Ss]tart_?[Dd]ate\(", code))
+        has_end = bool(re.search(r"self\.[Ss]et_?[Ee]nd_?[Dd]ate\(", code))
+
+        if has_start:
+            # Replace existing PascalCase or snake_case start date calls
+            code = re.sub(r"self\.SetStartDate\([^)]+\)", start_call, code)
+            code = re.sub(r"self\.set_start_date\([^)]+\)", start_call, code)
+
+        if has_end:
+            # Replace existing PascalCase or snake_case end date calls
+            code = re.sub(r"self\.SetEndDate\([^)]+\)", end_call, code)
+            code = re.sub(r"self\.set_end_date\([^)]+\)", end_call, code)
+
+        if not has_start or not has_end:
+            # Insert missing date calls at the top of initialize()
+            inject_lines = ""
+            if not has_start:
+                inject_lines += f"        {start_call}\n"
+            if not has_end:
+                inject_lines += f"        {end_call}\n"
+
+            # Match "def initialize(self):" or "def Initialize(self):" and insert after it
+            pattern = r"(def [Ii]nitialize\(self\):[ \t]*\n)"
+            match = re.search(pattern, code)
+            if match:
+                code = code[:match.end()] + inject_lines + code[match.end():]
+            else:
+                logger.warning("Could not find initialize() method to inject dates")
 
         return code
 
