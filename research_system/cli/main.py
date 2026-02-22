@@ -1097,6 +1097,18 @@ Examples:
         help="Number of walk-forward windows: 1 (single period), 2 (IS/OOS, default), or 5 (thorough). Default: 2"
     )
     parser.add_argument(
+        "--start-date",
+        type=str,
+        default=None,
+        help="Custom start date (YYYY-MM-DD). Overrides --windows with a single custom window. Requires --end-date."
+    )
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        default=None,
+        help="Custom end date (YYYY-MM-DD). Overrides --windows with a single custom window. Requires --start-date."
+    )
+    parser.add_argument(
         "--no-reuse-project",
         action="store_true",
         help="Create a new QC cloud project per backtest (legacy mode). Default reuses a single project to avoid 100/day limit."
@@ -2427,6 +2439,24 @@ def cmd_run(args):
     num_windows = getattr(args, 'windows', 1)
     no_reuse = getattr(args, 'no_reuse_project', False)
     reuse_project = not no_reuse
+    start_date = getattr(args, 'start_date', None)
+    end_date = getattr(args, 'end_date', None)
+
+    # Validate custom date range
+    custom_windows = None
+    if start_date or end_date:
+        if not (start_date and end_date):
+            print("Error: --start-date and --end-date must both be provided")
+            return 1
+        import re as _re
+        date_pattern = r"^\d{4}-\d{2}-\d{2}$"
+        if not _re.match(date_pattern, start_date) or not _re.match(date_pattern, end_date):
+            print("Error: Dates must be in YYYY-MM-DD format")
+            return 1
+        if start_date >= end_date:
+            print("Error: --start-date must be before --end-date")
+            return 1
+        custom_windows = [(start_date, end_date)]
 
     if not strategy_id and not run_all:
         print("Error: Strategy ID required or use --all")
@@ -2455,6 +2485,7 @@ def cmd_run(args):
         use_local=use_local,
         num_windows=num_windows,
         reuse_project=reuse_project,
+        custom_windows=custom_windows,
     )
 
     print("\n" + "=" * 60)
@@ -2463,7 +2494,10 @@ def cmd_run(args):
     print(f"\nBacktest mode: {'Local Docker' if use_local else 'QC Cloud'}")
     if not use_local:
         print(f"Project mode: {'reuse single project' if reuse_project else 'new project per backtest'}")
-    print(f"Walk-forward windows: {num_windows}")
+    if custom_windows:
+        print(f"Custom window: {custom_windows[0][0]} to {custom_windows[0][1]}")
+    else:
+        print(f"Walk-forward windows: {num_windows}")
     if dry_run:
         print("[DRY RUN] No backtests will be executed")
     print()
